@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Force on a Current-Carrying Conductor</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../../index.html">← Back to Main Menu</a>
+      <p class="eyebrow">SACE Stage 2 Physics — Electricity & Magnetism 2.4</p>
+      <h1>Force on a Current-Carrying Conductor</h1>
+      <p class="intro">
+        A current-carrying wire placed in a magnetic field experiences a force
+        <em>F = BIℓ&nbsp;sin&nbsp;θ</em>, perpendicular to both the current and the field.
+        Drag to orbit the scene; tilt the wire to see how the force vanishes when
+        it lies parallel to <em>B</em>.
+      </p>
+    </div>
+  </section>
+
+  <section class="layout">
+    <aside class="panel controls">
+
+      <div class="control-group">
+        <label>Current direction</label>
+        <div class="seg-control cols-2" id="seg-dir">
+          <button class="seg-btn active" data-val="fwd"  type="button">Forward</button>
+          <button class="seg-btn"        data-val="rev"  type="button">Reverse</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Current <span class="muted">I</span></label>
+        <div class="slider-row">
+          <input type="range" id="slider-current" min="0.5" max="10" step="0.1" value="2.0">
+          <span class="slider-val" id="val-current">2.0</span><span class="slider-unit">A</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Field strength <span class="muted">B</span></label>
+        <div class="slider-row">
+          <input type="range" id="slider-field" min="0.05" max="1.0" step="0.01" value="0.30">
+          <span class="slider-val" id="val-field">0.30</span><span class="slider-unit">T</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Wire length <span class="muted">ℓ</span></label>
+        <div class="slider-row">
+          <input type="range" id="slider-length" min="0.3" max="2.0" step="0.05" value="1.0">
+          <span class="slider-val" id="val-length">1.00</span><span class="slider-unit">m</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Wire angle <span class="muted">θ</span></label>
+        <div class="slider-row">
+          <input type="range" id="slider-theta" min="0" max="360" step="1" value="60">
+          <span class="slider-val" id="val-theta">60</span><span class="slider-unit">°</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Show / hide</label>
+        <div class="vector-toggles">
+          <button class="vec-btn active" id="btn-field" type="button">
+            <span class="vec-dot" style="background:#2563eb"></span>Field arrows
+          </button>
+          <button class="vec-btn active" id="btn-force" type="button">
+            <span class="vec-dot" style="background:#15803d"></span>Force&nbsp;F
+          </button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Labels</label>
+        <div class="seg-control cols-4" id="seg-labels">
+          <button class="seg-btn active" data-key="I"     type="button">I</button>
+          <button class="seg-btn active" data-key="B"     type="button">B</button>
+          <button class="seg-btn active" data-key="F"     type="button">F</button>
+          <button class="seg-btn active" data-key="theta" type="button">θ</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Camera view</label>
+        <div class="seg-control cols-3" id="seg-cam">
+          <button class="seg-btn active" data-val="iso"  type="button">Iso</button>
+          <button class="seg-btn"        data-val="top"  type="button">Top</button>
+          <button class="seg-btn"        data-val="side" type="button">Side</button>
+        </div>
+      </div>
+
+      <div class="explain-card" id="readout">
+        <div class="readout-hd">F = BIℓ&nbsp;sin&nbsp;θ</div>
+        <div class="readout-row"><span>sin θ</span><span id="rd-sin">—</span></div>
+        <div class="readout-row"><span>|F|</span><span id="rd-mag">—</span></div>
+        <div class="readout-row"><span>F direction</span><span id="rd-dir">—</span></div>
+      </div>
+
+    </aside>
+
+    <section class="panel visual-panel">
+      <div class="canvas-wrap">
+        <div id="three-root" class="three-root" aria-label="3D force on a current-carrying conductor"></div>
+        <div class="scene-note">Drag to orbit · scroll to zoom · right-hand rule: fingers from I to B, thumb gives F</div>
+      </div>
+    </section>
+  </section>
+</main>
+
+<script src="../../../vendor/three/three.min.js"></script>
+<script src="script.js"></script>
+</body>
+</html>

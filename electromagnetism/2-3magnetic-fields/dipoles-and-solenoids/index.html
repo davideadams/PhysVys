@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Magnetic Field Lines — Dipoles & Solenoids</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <div>
+        <a class="hero-link" href="../../../index.html">Back to Main Menu</a>
+        <p class="eyebrow">SACE Stage 2 Physics — Topic 2: Electromagnetism</p>
+        <h1>Magnetic Field Lines</h1>
+        <p class="intro">
+          Compare the field around a permanent bar magnet (a magnetic dipole) with the field
+          produced by a current-carrying solenoid. Toggle the interior lines to see how the
+          field forms closed loops in both cases.
+        </p>
+      </div>
+      <div class="hero-actions">
+        <button id="btn-mode-bar" class="toggle-button active" type="button" aria-pressed="true">
+          Bar Magnet
+        </button>
+        <button id="btn-mode-solenoid" class="toggle-button" type="button" aria-pressed="false">
+          Solenoid
+        </button>
+      </div>
+    </section>
+
+    <section class="layout">
+      <aside class="panel controls">
+        <h2>Controls</h2>
+
+        <div class="control-group">
+          <label>Display</label>
+          <div class="seg-control cols-3" id="seg-display">
+            <button class="seg-btn active" data-val="lines"  type="button">Field Lines</button>
+            <button class="seg-btn"        data-val="arrows" type="button">Arrow Grid</button>
+            <button class="seg-btn"        data-val="both"   type="button">Both</button>
+          </div>
+        </div>
+
+        <!-- ── Bar magnet controls ── -->
+        <div id="bar-controls">
+          <div class="control-group">
+            <label>Pole strength <span class="muted">m</span></label>
+            <div class="slider-row">
+              <input type="range" id="slider-pole" min="1" max="10" step="1" value="6">
+              <span class="slider-val" id="val-pole">6</span>
+            </div>
+          </div>
+
+          <div class="control-group">
+            <label>Magnet length</label>
+            <div class="slider-row">
+              <input type="range" id="slider-mlen" min="120" max="320" step="10" value="220">
+              <span class="slider-val" id="val-mlen">220</span><span class="slider-unit">px</span>
+            </div>
+          </div>
+
+          <div class="control-group">
+            <label>Polarity</label>
+            <div class="seg-control cols-2" id="seg-polarity">
+              <button class="seg-btn active" data-val="ns" type="button">N&nbsp;left&nbsp;/&nbsp;S&nbsp;right</button>
+              <button class="seg-btn"        data-val="sn" type="button">S&nbsp;left&nbsp;/&nbsp;N&nbsp;right</button>
+            </div>
+          </div>
+
+          <div class="control-group">
+            <label>Interior field</label>
+            <button id="btn-bar-interior" class="vec-btn active" type="button">
+              <span class="vec-dot" style="background:#0d9488"></span>Show interior lines
+            </button>
+          </div>
+        </div>
+
+        <!-- ── Solenoid controls ── -->
+        <div id="solenoid-controls" class="is-hidden">
+          <div class="control-group">
+            <label>Current <span class="muted">I</span></label>
+            <div class="slider-row">
+              <input type="range" id="slider-current" min="0.5" max="10" step="0.5" value="3">
+              <span class="slider-val" id="val-current">3.0</span><span class="slider-unit">A</span>
+            </div>
+          </div>
+
+          <div class="control-group">
+            <label>Number of turns <span class="muted">N</span></label>
+            <div class="slider-row">
+              <input type="range" id="slider-turns" min="4" max="24" step="1" value="12">
+              <span class="slider-val" id="val-turns">12</span>
+            </div>
+          </div>
+
+          <div class="control-group">
+            <label>Solenoid length</label>
+            <div class="slider-row">
+              <input type="range" id="slider-slen" min="160" max="380" step="10" value="280">
+              <span class="slider-val" id="val-slen">280</span><span class="slider-unit">px</span>
+            </div>
+          </div>
+
+          <div class="control-group">
+            <label>Current direction</label>
+            <div class="seg-control cols-2" id="seg-current-dir">
+              <button class="seg-btn active" data-val="left"  type="button">N&nbsp;left</button>
+              <button class="seg-btn"        data-val="right" type="button">N&nbsp;right</button>
+            </div>
+          </div>
+
+          <div class="control-group">
+            <label>Interior field</label>
+            <button id="btn-sol-interior" class="vec-btn active" type="button">
+              <span class="vec-dot" style="background:#0d9488"></span>Show interior lines
+            </button>
+          </div>
+        </div>
+
+        <div class="readout-grid">
+          <div class="readout-card" id="readout-bar">
+            <span class="readout-label">Bar magnet model</span>
+            <span class="readout-value">
+              Two opposite magnetic poles at the ends. Outside, the field runs N&nbsp;→&nbsp;S.
+              Inside the magnet, the field runs S&nbsp;→&nbsp;N to close each loop.
+            </span>
+          </div>
+          <div class="readout-card is-hidden" id="readout-sol">
+            <span class="readout-label">Solenoid model</span>
+            <span class="readout-value">
+              A stack of current loops. Inside, the contributions add to give a near-uniform
+              field along the axis; outside, the field looks just like a bar magnet's.
+            </span>
+          </div>
+        </div>
+      </aside>
+
+      <section class="panel visual-panel">
+        <div class="canvas-wrap" id="canvas-wrap">
+          <canvas id="simulation-canvas" width="960" height="560" aria-label="Magnetic field canvas"></canvas>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
