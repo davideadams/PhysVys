@@ -303,7 +303,7 @@ function drawLineArrowhead(points) {
   const prev = points[idx - 1];
   const curr = points[idx];
   const angle = Math.atan2(curr.y - prev.y, curr.x - prev.x);
-  const size = 7;
+  const size = 11;
 
   ctx.save();
   ctx.fillStyle = 'rgba(21, 48, 77, 0.7)';
@@ -352,7 +352,9 @@ function drawPlatesFieldLines() {
 
   for (let i = 0; i < numSeeds; i++) {
     const sx = xMin + (i / (numSeeds - 1)) * (xMax - xMin);
-    drawTracedLine(traceFieldLine(sx, seedY, direction));
+    const pts = traceFieldLine(sx, seedY, direction);
+    if (direction === -1) pts.reverse();
+    drawTracedLine(pts);
   }
 }
 
@@ -377,7 +379,9 @@ function drawFieldLines() {
       const angle = (2 * Math.PI * i) / numLines;
       const sx = charge.x + seedRadius * Math.cos(angle);
       const sy = charge.y + seedRadius * Math.sin(angle);
-      drawTracedLine(traceFieldLine(sx, sy, direction));
+      const pts = traceFieldLine(sx, sy, direction);
+      if (direction === -1) pts.reverse();
+      drawTracedLine(pts);
     }
   }
 }
