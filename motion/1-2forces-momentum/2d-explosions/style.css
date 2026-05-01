@@ -396,3 +396,12 @@ canvas {
   opacity: 0.4;
   pointer-events: none;
 }
+
+/* Derived fragment: speed/angle rows are read-only */
+.particle-group.derived-frag input[type="range"]:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.particle-group.derived-frag .particle-label::after {
+  content: '';
+}

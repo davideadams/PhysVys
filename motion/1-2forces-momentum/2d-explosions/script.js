@@ -48,39 +48,44 @@ const PRESETS = [
   },
   {
     label: '3 fragments — unequal mass',
-    note: 'Unequal masses. Fragment directions are chosen so momentum sums to zero. The triangle is scalene.',
+    note: 'Unequal masses. Fragment C is whatever direction and speed makes the momenta sum to zero — the triangle is scalene.',
     numFragments: 3,
-    // Solve: m1*v1 + m2*v2 + m3*v3 = 0
-    // masses 1, 2, 3: choose v1 along 0°, v2 along 150°, v3 such that sum=0
-    // v1=(200,0), m1=1 → p1=(200,0)
-    // v2=200*(cos150,sin150)=(-173,100), m2=2 → p2=(-346,200)
-    // p3 = -(p1+p2) = (146,-200), m3=3 → v3=(48.7,-66.7)
     fragments: [
-      { mass: 1, angle:   0,   speed: 200 },
-      { mass: 2, angle: 150,   speed: 200 },
-      { mass: 3, angle: null,  speed: null, px: 146, py: -200 },  // derived
+      { mass: 1, angle:   0, speed: 200 },
+      { mass: 2, angle: 150, speed: 200 },
+      { mass: 3, angle:   0, speed: 0 },   // last fragment is always derived
     ],
   },
 ];
 
-/* ── Derive fragment velocities from momenta ─────────────────── */
+/* ── Derive fragment momentum from angle + speed ─────────────── */
 function resolveFragment(frag) {
-  // If angle/speed given, compute px/py; otherwise use px/py to get angle/speed.
-  if (frag.angle !== null && frag.speed !== null) {
-    const rad = frag.angle * Math.PI / 180;
-    frag.px = frag.mass * frag.speed * Math.cos(rad);
-    frag.py = -frag.mass * frag.speed * Math.sin(rad);  // canvas y-flip
-    frag.vx = frag.px / frag.mass;
-    frag.vy = frag.py / frag.mass;
-  } else {
-    frag.vx = frag.px / frag.mass;
-    frag.vy = frag.py / frag.mass;
-    frag.speed = Math.hypot(frag.vx, frag.vy);
-    frag.angle = Math.atan2(-frag.vy, frag.vx) * 180 / Math.PI;
-  }
+  const rad = frag.angle * Math.PI / 180;
+  frag.px = frag.mass * frag.speed * Math.cos(rad);
+  frag.py = -frag.mass * frag.speed * Math.sin(rad);  // canvas y-flip
+  frag.vx = frag.px / frag.mass;
+  frag.vy = frag.py / frag.mass;
 }
 
-PRESETS.forEach(p => p.fragments.forEach(resolveFragment));
+/* ── Derive the last fragment from momentum conservation ─────── */
+function recomputeDerivedFragment(presetIdx) {
+  const frags = PRESETS[presetIdx].fragments;
+  const n     = frags.length;
+  let sx = 0, sy = 0;
+  for (let i = 0; i < n - 1; i++) { sx += frags[i].px; sy += frags[i].py; }
+  const last = frags[n - 1];
+  last.px    = -sx;
+  last.py    = -sy;
+  last.vx    = last.px / last.mass;
+  last.vy    = last.py / last.mass;
+  last.speed = Math.hypot(last.vx, last.vy);
+  last.angle = Math.atan2(-last.vy, last.vx) * 180 / Math.PI;
+}
+
+PRESETS.forEach((p, idx) => {
+  for (let i = 0; i < p.fragments.length - 1; i++) resolveFragment(p.fragments[i]);
+  recomputeDerivedFragment(idx);
+});
 
 /* ── Simulation state ────────────────────────────────────────── */
 let cfg = {
@@ -494,6 +499,7 @@ function applyPreset() {
   });
 
   showFragmentControls(p.numFragments);
+  markDerivedFragment(p.numFragments);
   document.getElementById('note-card').textContent = p.note;
 
   applyAutoStrobeInterval();
@@ -510,6 +516,23 @@ function showFragmentControls(n) {
   [0, 1, 2].forEach(i => {
     const el = document.getElementById(`group-f${i}`);
     if (el) el.style.display = i < n ? '' : 'none';
+  });
+}
+
+/* Disable speed/angle on the last fragment and tag it "(derived)". */
+function markDerivedFragment(n) {
+  const labels = ['Fragment A', 'Fragment B', 'Fragment C'];
+  [0, 1, 2].forEach(i => {
+    const group = document.getElementById(`group-f${i}`);
+    if (!group) return;
+    const labelEl = group.querySelector('.particle-label');
+    const isDerived = i === n - 1;
+    if (labelEl) labelEl.textContent = labels[i] + (isDerived ? ' (derived)' : '');
+    const sp = document.getElementById(`speed-${i}`);
+    const an = document.getElementById(`angle-${i}`);
+    if (sp) sp.disabled = isDerived;
+    if (an) an.disabled = isDerived;
+    group.classList.toggle('derived-frag', isDerived);
   });
 }
 
@@ -566,41 +589,46 @@ document.getElementById('slider-strobe').addEventListener('input', function () {
 });
 
 /* ── Fragment sliders ────────────────────────────────────────── */
+// Rule: fragments 0..n-2 are freely specified; the last fragment is derived
+// from momentum conservation. Its mass slider stays active (rescales its
+// velocity), but speed/angle are read-only displays.
 [0, 1, 2].forEach(i => {
   const massEl  = document.getElementById(`mass-${i}`);
   const speedEl = document.getElementById(`speed-${i}`);
   const angleEl = document.getElementById(`angle-${i}`);
 
   function onChange() {
-    const f = PRESETS[cfg.presetIdx].fragments[i];
+    const preset = PRESETS[cfg.presetIdx];
+    const n      = preset.numFragments;
+    const f      = preset.fragments[i];
+    const isDerived = i === n - 1;
+
     if (massEl)  f.mass  = parseInt(massEl.value);
-    if (speedEl) f.speed = parseInt(speedEl.value);
-    if (angleEl) f.angle = parseInt(angleEl.value);
-
-    // For the 3rd fragment of preset 3, leave it derived
-    if (!(cfg.presetIdx === 3 && i === 2)) resolveFragment(f);
-
-    // For 2-fragment presets: enforce momentum conservation on fragment B
-    if (PRESETS[cfg.presetIdx].numFragments === 2 && i === 0) {
-      const f0 = PRESETS[cfg.presetIdx].fragments[0];
-      const f1 = PRESETS[cfg.presetIdx].fragments[1];
-      // Reverse direction, match magnitude so |p0| = |p1|
-      f1.px = -f0.px; f1.py = -f0.py;
-      resolveFragment(f1);
-      const sp1 = document.getElementById(`speed-1`);
-      const va1 = document.getElementById(`val-speed-1`);
-      const an1 = document.getElementById(`angle-1`);
-      const va1a = document.getElementById(`val-angle-1`);
-      if (sp1) { sp1.value = Math.round(f1.speed); va1.textContent = Math.round(f1.speed); }
-      if (an1) { an1.value = Math.round(f1.angle); va1a.textContent = Math.round(f1.angle) + '°'; }
+    if (!isDerived) {
+      if (speedEl) f.speed = parseInt(speedEl.value);
+      if (angleEl) f.angle = parseInt(angleEl.value);
+      resolveFragment(f);
     }
+    recomputeDerivedFragment(cfg.presetIdx);
 
-    document.getElementById(`val-mass-${i}`).textContent  = massEl  ? massEl.value  : '';
-    document.getElementById(`val-speed-${i}`).textContent = speedEl ? Math.round(speedEl.value) : '';
-    document.getElementById(`val-angle-${i}`).textContent = angleEl ? parseInt(angleEl.value) + '°' : '';
+    // Refresh display values for every fragment (derived one changes when others move)
+    preset.fragments.forEach((ff, j) => {
+      const vm = document.getElementById(`val-mass-${j}`);
+      const vs = document.getElementById(`val-speed-${j}`);
+      const va = document.getElementById(`val-angle-${j}`);
+      if (vm) vm.textContent = ff.mass;
+      if (vs) vs.textContent = Math.round(ff.speed);
+      if (va) va.textContent = Math.round(ff.angle) + '°';
+    });
 
     applyAutoStrobeInterval();
     if (cfg.mode === 'strobe') generateStrobe(); else reset();
+
+    // Keep the triangle editor in sync if it happens to be open
+    if (!document.getElementById('tri-modal').hidden) {
+      buildTriVertices(preset.fragments);
+      drawTriangleEditor();
+    }
   }
 
   if (massEl)  massEl.addEventListener('input',  onChange);
