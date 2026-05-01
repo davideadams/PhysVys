@@ -1,0 +1,193 @@
+:root {
+  --bg-top: #f4f1ea;
+  --bg-bottom: #e8e0d0;
+  --paper: rgba(255, 255, 255, 0.85);
+  --rule: rgba(70, 50, 30, 0.12);
+  --ink: #3d2f1f;
+  --muted: #7a6851;
+  --accent: #8b5a3c;
+  --accent-strong: #a6704a;
+  --shadow: 0 24px 60px rgba(60, 40, 20, 0.18);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Trebuchet MS", "Gill Sans", "Segoe UI", sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at top left, rgba(255,255,255,0.85), transparent 30%),
+    linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+}
+
+.page {
+  width: min(900px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 1.5rem 0 2rem;
+}
+
+/* ── Hero ──────────────────────────────────────────────── */
+
+.hero { margin-bottom: 1rem; }
+.hero-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+  padding: 0.45rem 0.8rem;
+  border-radius: 999px;
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--ink);
+  background: rgba(255,255,255,0.9);
+  border: 1px solid var(--rule);
+}
+.hero-link:hover { background: white; }
+.eyebrow {
+  margin: 0 0 0.35rem;
+  color: var(--accent-strong);
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+h1 {
+  margin: 0;
+  font-size: clamp(1.8rem, 4vw, 2.8rem);
+  line-height: 0.95;
+  color: var(--ink);
+}
+.intro {
+  max-width: 68ch;
+  margin: 0.6rem 0 0;
+  color: var(--muted);
+  font-size: 1rem;
+}
+
+/* ── Panels ────────────────────────────────────────────── */
+
+.panel {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  padding: 1.1rem 1.25rem;
+  margin-bottom: 1rem;
+  box-shadow: var(--shadow);
+}
+.panel-title {
+  margin: 0 0 0.5rem;
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+}
+.panel-subtitle {
+  margin: 0 0 0.9rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+/* ── Summary grid ──────────────────────────────────────── */
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.35rem;
+}
+.summary-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 1rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.55);
+}
+.summary-row .k { color: var(--muted); font-size: 0.85rem; }
+.summary-row .v { color: var(--ink); font-weight: 700; font-size: 0.95rem; font-variant-numeric: tabular-nums; }
+
+/* ── Aliquot cards ─────────────────────────────────────── */
+
+.aliquot-cards {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.7rem;
+}
+.aliquot-card {
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  background: rgba(255,255,255,0.6);
+}
+.aliquot-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.7rem;
+  margin-bottom: 0.6rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px dashed var(--rule);
+}
+.aliquot-card-head .id {
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--accent-strong);
+}
+.aliquot-card-head .meta {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+.calc-line {
+  display: grid;
+  grid-template-columns: 7em 1fr auto;
+  gap: 0.6rem;
+  align-items: baseline;
+  padding: 0.25rem 0;
+  font-size: 0.92rem;
+  font-variant-numeric: tabular-nums;
+}
+.calc-line .label  { color: var(--muted); }
+.calc-line .work   { color: var(--ink); font-family: "Cambria Math", "Latin Modern Math", "Georgia", serif; }
+.calc-line .result { color: var(--ink); font-weight: 700; }
+.calc-line.headline .result { color: var(--accent-strong); }
+
+/* ── Truth panel ───────────────────────────────────────── */
+
+.truth-panel { background: rgba(255, 248, 230, 0.85); }
+.truth-hint  {
+  margin: 0.7rem 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+/* ── Empty state ───────────────────────────────────────── */
+
+.empty-state {
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.95rem;
+  background: rgba(255,255,255,0.55);
+  border-radius: 8px;
+  border: 1px dashed var(--rule);
+}
+.empty-state code {
+  background: rgba(0,0,0,0.06);
+  padding: 0.05em 0.4em;
+  border-radius: 4px;
+  font-size: 0.85em;
+}
+.hidden { display: none !important; }
+
+/* ── Responsive ────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .calc-line { grid-template-columns: 1fr; gap: 0.1rem; }
+  .calc-line .label { font-size: 0.78rem; }
+}

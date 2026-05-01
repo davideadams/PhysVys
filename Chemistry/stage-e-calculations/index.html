@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stage E — Check Your Calculations</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../index.html">← Back to Main Menu</a>
+      <p class="eyebrow">Chemistry — Stage E</p>
+      <h1>Check Your Calculations</h1>
+      <p class="intro">
+        For each aliquot you delivered in Stage B, here's the chain of working
+        you should have on paper. Compare each line to your own — the expected
+        titre, the moles, and the unknown concentration.
+      </p>
+    </div>
+  </section>
+
+  <section class="panel summary-panel" id="summary-panel">
+    <p class="panel-title">Reaction summary</p>
+    <div class="summary-grid">
+      <div class="summary-row"><span class="k">Standard reagent</span><span class="v" id="sum-reagent">—</span></div>
+      <div class="summary-row"><span class="k">Standard formula</span><span class="v" id="sum-formula">—</span></div>
+      <div class="summary-row"><span class="k">Standard role</span><span class="v" id="sum-role">—</span></div>
+      <div class="summary-row"><span class="k">Standard concentration</span><span class="v" id="sum-stdconc">—</span></div>
+      <div class="summary-row"><span class="k">Aliquot volume (nominal)</span><span class="v">25.00 mL</span></div>
+      <div class="summary-row"><span class="k">Mole ratio (titrant : standard)</span><span class="v" id="sum-ratio">—</span></div>
+    </div>
+  </section>
+
+  <section class="panel" id="aliquots-panel">
+    <p class="panel-title">Per-aliquot working</p>
+    <p class="panel-subtitle">
+      Each row uses the textbook chain a student would write on paper, with the
+      titre that an ideal titration of <i>that specific aliquot</i> would
+      produce. Differences between aliquots reflect pipette / cone technique.
+    </p>
+    <div id="aliquot-cards" class="aliquot-cards"></div>
+    <div id="empty-state" class="empty-state hidden">
+      <p>
+        No aliquots in <code>chem.stageB.result</code>. Run Stage B and click
+        <b>Done</b> to record at least one aliquot before checking here.
+      </p>
+    </div>
+  </section>
+
+  <section class="panel truth-panel" id="truth-panel">
+    <p class="panel-title">Truth (don't peek before you've done the working)</p>
+    <div class="summary-grid">
+      <div class="summary-row"><span class="k">True c(titrant)</span><span class="v" id="truth-titrant">—</span></div>
+      <div class="summary-row"><span class="k">Mean c(titrant) from your aliquots</span><span class="v" id="truth-mean">—</span></div>
+      <div class="summary-row"><span class="k">% difference (mean vs. truth)</span><span class="v" id="truth-pct">—</span></div>
+    </div>
+    <p class="truth-hint">
+      A perfect titrator would compute the true c(titrant) from every aliquot.
+      Spread across rows = technique error in Stage B (pipette priming, cone
+      rinsing, etc.). Your job in Stage C is to read the burette accurately.
+    </p>
+  </section>
+
+</main>
+
+<script src="../shared/atomic-masses.js"></script>
+<script src="../shared/reagents.js"></script>
+<script src="script.js"></script>
+</body>
+</html>

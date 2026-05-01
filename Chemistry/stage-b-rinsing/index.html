@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stage B — Rinsing & Pipetting</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../index.html">← Back to Main Menu</a>
+      <p class="eyebrow">Chemistry — Stage B</p>
+      <h1>Rinsing &amp; Pipetting</h1>
+      <p class="intro">
+        Rinse each piece of glassware appropriately, pipette aliquots of your standard
+        into the conical flask, and prepare the burette with titrant. Choose which
+        aliquot to carry forward to the titration.
+      </p>
+    </div>
+  </section>
+
+  <section class="layout">
+
+    <!-- ── Drawer ─────────────────────────────────────────── -->
+    <aside class="panel drawer">
+      <p class="drawer-title">Drawer</p>
+
+      <p class="drawer-subheading">Tools</p>
+      <ul class="drawer-list" id="tool-list">
+        <li class="drawer-item" data-tool="pipette">
+          <span class="item-glyph">│</span>
+          <span class="item-label">25.00 mL pipette</span>
+        </li>
+        <li class="drawer-item" data-tool="filler">
+          <span class="item-glyph">◯</span>
+          <span class="item-label">Pipette filler</span>
+        </li>
+        <li class="drawer-item" data-tool="washbottle">
+          <span class="item-glyph">⌀</span>
+          <span class="item-label">Wash bottle (DI water)</span>
+        </li>
+      </ul>
+
+      <p class="drawer-subheading">Solutions</p>
+      <ul class="drawer-list" id="bottle-list">
+        <li class="drawer-item" data-bottle="standard">
+          <span class="item-glyph">▣</span>
+          <span class="item-label">Beaker — your standard</span>
+        </li>
+        <li class="drawer-item" data-bottle="titrant">
+          <span class="item-glyph">▣</span>
+          <span class="item-label">Beaker — titrant (unknown)</span>
+        </li>
+      </ul>
+
+      <p class="drawer-subheading">Indicators</p>
+      <ul class="drawer-list" id="indicator-list">
+        <li class="drawer-item" data-indicator="phenolphthalein">
+          <span class="item-swatch" style="background:#e8a8c8"></span>
+          <span class="item-label">Phenolphthalein</span>
+        </li>
+        <li class="drawer-item" data-indicator="methyl-orange">
+          <span class="item-swatch" style="background:#e89456"></span>
+          <span class="item-label">Methyl orange</span>
+        </li>
+      </ul>
+
+      <p class="drawer-hint">
+        Click a tool or beaker to pick it up, then click target glassware on the
+        bench to pour or use it. Click an empty drawer slot to put it back.
+      </p>
+    </aside>
+
+    <!-- ── Bench ──────────────────────────────────────────── -->
+    <div class="game-panel panel">
+      <div class="scene-wrap">
+        <svg id="scene" viewBox="0 0 600 380" xmlns="http://www.w3.org/2000/svg"
+             aria-label="Laboratory bench">
+
+          <defs>
+            <clipPath id="burette-interior">
+              <rect x="76" y="36" width="14" height="244"/>
+            </clipPath>
+            <clipPath id="cone-interior">
+              <path d="M 219 165 L 241 165 L 241 215 L 280 330 L 180 330 L 219 215 Z"/>
+            </clipPath>
+            <clipPath id="pipette-interior">
+              <rect x="0" y="0" width="0" height="0"/> <!-- replaced by JS each render -->
+            </clipPath>
+            <clipPath id="beaker-standard-interior">
+              <path d="M 325 240 L 395 240 L 395 322 Q 395 332 385 332 L 335 332 Q 325 332 325 322 Z"/>
+            </clipPath>
+            <clipPath id="beaker-titrant-interior">
+              <path d="M 415 240 L 485 240 L 485 322 Q 485 332 475 332 L 425 332 Q 415 332 415 322 Z"/>
+            </clipPath>
+            <clipPath id="waste-interior">
+              <path d="M 505 240 L 575 240 L 575 322 Q 575 332 565 332 L 515 332 Q 505 332 505 322 Z"/>
+            </clipPath>
+          </defs>
+
+          <!-- Bench surface -->
+          <rect x="0" y="350" width="600" height="30" fill="#c9b28c" opacity="0.35"/>
+          <line x1="0" y1="350" x2="600" y2="350" stroke="#8a7555" stroke-width="1.2"/>
+
+          <!-- ── Retort stand + burette ─────────────────── -->
+          <g id="burette-group">
+            <!-- Stand base + rod -->
+            <rect x="40" y="346" width="90" height="6" fill="#5a4a3a"/>
+            <rect x="80" y="20" width="6" height="328" fill="#5a4a3a"/>
+            <!-- Burette clamp -->
+            <rect x="60" y="100" width="60" height="10" fill="#8a7555"/>
+            <!-- Burette body -->
+            <rect x="76" y="36" width="14" height="244" fill="rgba(230,240,250,0.25)"
+                  stroke="#6a829a" stroke-width="1.2"/>
+            <!-- Liquid -->
+            <rect id="burette-liquid" x="76" y="280" width="14" height="0"
+                  fill="rgba(180, 80, 80, 0.45)" clip-path="url(#burette-interior)"/>
+            <!-- Tap -->
+            <circle cx="83" cy="290" r="6" fill="#8a7555" stroke="#5a4a3a"/>
+            <line x1="83" y1="296" x2="83" y2="305" stroke="#6a829a" stroke-width="1.2"/>
+            <!-- 0 mL mark -->
+            <line x1="72" y1="50" x2="92" y2="50" stroke="#3d2f1f" stroke-width="1"/>
+            <text x="96" y="54" fill="#3d2f1f" font-size="9"
+                  font-family="Trebuchet MS, sans-serif">0</text>
+            <line x1="72" y1="270" x2="92" y2="270" stroke="#3d2f1f" stroke-width="1"/>
+            <text x="96" y="274" fill="#3d2f1f" font-size="9"
+                  font-family="Trebuchet MS, sans-serif">50</text>
+            <!-- Hit -->
+            <rect id="burette-hit" x="60" y="36" width="60" height="244"
+                  fill="transparent"/>
+            <!-- Fill button (commits held pourable as the fill, not a rinse) -->
+            <g id="burette-fill-btn" style="cursor:pointer">
+              <rect x="55" y="312" width="70" height="20" fill="#7a6851" rx="4"/>
+              <text x="90" y="326" text-anchor="middle" fill="white"
+                    font-size="11" font-family="Trebuchet MS, sans-serif"
+                    font-weight="700">FILL</text>
+            </g>
+          </g>
+
+          <!-- ── Conical flask (250 mL Erlenmeyer proportions) ── -->
+          <g id="cone-group">
+            <!-- Liquid (clipped) -->
+            <rect id="cone-liquid" x="180" y="330" width="100" height="0"
+                  fill="rgba(160, 200, 230, 0.4)" clip-path="url(#cone-interior)"/>
+            <!-- Body outline: rim → neck → shoulder → body → base -->
+            <path d="M 219 165 L 219 215 L 180 330 L 280 330 L 241 215 L 241 165 Z"
+                  fill="rgba(230,240,250,0.18)" stroke="#6a829a" stroke-width="1.4"
+                  stroke-linejoin="round"/>
+            <!-- Neck rim -->
+            <ellipse cx="230" cy="165" rx="11" ry="3" fill="none"
+                     stroke="#6a829a" stroke-width="1.2"/>
+            <!-- Hit -->
+            <rect id="cone-hit" x="170" y="160" width="120" height="180"
+                  fill="transparent"/>
+            <text x="230" y="348" text-anchor="middle" fill="#7a6851"
+                  font-size="10" font-family="Trebuchet MS, sans-serif"
+                  font-weight="700">conical flask</text>
+          </g>
+
+          <!-- ── Beakers (placed; act as drag-source via drawer) ── -->
+          <g id="beaker-standard-group">
+            <!-- Body + integrated pour spout (smooth lip on top-left) -->
+            <path d="M 395 240 L 335 240 Q 326 240 322 246 Q 326 250 325 252
+                     L 325 322 Q 325 332 335 332 L 385 332 Q 395 332 395 322 Z"
+                  fill="rgba(200,220,235,0.25)" stroke="#6a829a" stroke-width="1.3"
+                  stroke-linejoin="round"/>
+            <rect id="beaker-standard-liquid" x="325" y="265" width="70" height="67"
+                  fill="rgba(180, 200, 230, 0.55)"
+                  clip-path="url(#beaker-standard-interior)"/>
+            <rect x="330" y="252" width="60" height="12" fill="#fafafa"
+                  stroke="#999" stroke-width="0.5" rx="1"/>
+            <text x="360" y="261" text-anchor="middle" fill="#3d2f1f"
+                  font-size="8" font-family="Trebuchet MS, sans-serif"
+                  font-weight="700">STANDARD</text>
+            <text x="360" y="348" text-anchor="middle" fill="#7a6851"
+                  font-size="9" font-family="Trebuchet MS, sans-serif">your Stage A soln</text>
+          </g>
+
+          <g id="beaker-titrant-group">
+            <path d="M 485 240 L 425 240 Q 416 240 412 246 Q 416 250 415 252
+                     L 415 322 Q 415 332 425 332 L 475 332 Q 485 332 485 322 Z"
+                  fill="rgba(200,220,235,0.25)" stroke="#6a829a" stroke-width="1.3"
+                  stroke-linejoin="round"/>
+            <rect id="beaker-titrant-liquid" x="415" y="265" width="70" height="67"
+                  fill="rgba(180, 80, 80, 0.45)"
+                  clip-path="url(#beaker-titrant-interior)"/>
+            <rect x="420" y="252" width="60" height="12" fill="#fafafa"
+                  stroke="#999" stroke-width="0.5" rx="1"/>
+            <text x="450" y="261" text-anchor="middle" fill="#3d2f1f"
+                  font-size="8" font-family="Trebuchet MS, sans-serif"
+                  font-weight="700">TITRANT</text>
+            <text x="450" y="348" text-anchor="middle" fill="#7a6851"
+                  font-size="9" font-family="Trebuchet MS, sans-serif">unknown conc.</text>
+          </g>
+
+          <!-- ── Waste beaker (matches stock beaker proportions) ── -->
+          <g id="waste-group">
+            <path d="M 575 240 L 515 240 Q 506 240 502 246 Q 506 250 505 252
+                     L 505 322 Q 505 332 515 332 L 565 332 Q 575 332 575 322 Z"
+                  fill="rgba(200,220,235,0.22)" stroke="#6a829a" stroke-width="1.3"
+                  stroke-linejoin="round"/>
+            <rect id="waste-liquid" x="505" y="290" width="70" height="42"
+                  fill="rgba(170, 150, 130, 0.45)"
+                  clip-path="url(#waste-interior)"/>
+            <rect x="510" y="252" width="60" height="12" fill="#fafafa"
+                  stroke="#999" stroke-width="0.5" rx="1"/>
+            <text x="540" y="261" text-anchor="middle" fill="#3d2f1f"
+                  font-size="8" font-family="Trebuchet MS, sans-serif"
+                  font-weight="700">WASTE</text>
+            <text x="540" y="348" text-anchor="middle" fill="#7a6851"
+                  font-size="9" font-family="Trebuchet MS, sans-serif">discard rinses here</text>
+            <rect id="waste-hit" x="500" y="234" width="80" height="102"
+                  fill="transparent"/>
+          </g>
+
+          <!-- ── Placed pipette + filler (rendered when tip is positioned) ── -->
+          <g id="pipette-placed-group" style="display:none"></g>
+
+          <!-- ── Held-item preview ─────────────────────── -->
+          <g id="held-preview" style="display:none; pointer-events:none"></g>
+
+          <!-- ── Pour/stream layer ─────────────────────── -->
+          <g id="stream-layer"></g>
+
+        </svg>
+      </div>
+      <div class="message-bar" id="message-bar">
+        Pick up the wash bottle or a beaker, then click the glassware you want to rinse.
+      </div>
+    </div>
+
+    <!-- ── Notebook ───────────────────────────────────────── -->
+    <aside class="panel notebook">
+      <p class="drawer-title">Notebook</p>
+
+      <div class="nb-section">
+        <p class="nb-sub">Pipette state</p>
+        <p class="nb-hint" id="pipette-status">Pipette is in the drawer.</p>
+      </div>
+
+      <div class="nb-section">
+        <p class="nb-sub">Burette state</p>
+        <p class="nb-hint" id="burette-status">Empty. Rinse, then fill near the 0 mL mark.</p>
+      </div>
+
+      <div class="nb-section">
+        <p class="nb-sub">Aliquots delivered (max 10)</p>
+        <ul class="aliquot-list" id="aliquot-list">
+          <li class="aliquot-empty">No aliquots yet.</li>
+        </ul>
+      </div>
+
+      <button class="action-btn" id="btn-done" type="button">
+        Done — record this run
+      </button>
+      <button class="action-btn action-btn--secondary" id="btn-reveal" type="button">
+        Reveal technique log
+      </button>
+
+      <div class="reveal-panel hidden" id="reveal-panel">
+        <p class="readings-title">Selected aliquot</p>
+        <div class="readout-row">
+          <span class="readout-label">Aliquot # selected</span>
+          <span class="readout-val" id="rv-aliquot-id">—</span>
+        </div>
+        <div class="readout-row">
+          <span class="readout-label">Nominal volume</span>
+          <span class="readout-val">25.00 mL</span>
+        </div>
+        <div class="readout-row">
+          <span class="readout-label">True moles analyte</span>
+          <span class="readout-val" id="rv-moles">—</span>
+        </div>
+        <div class="readout-row readout-row--split">
+          <span class="readout-label">Burette ready</span>
+          <span class="readout-val" id="rv-burette">—</span>
+        </div>
+        <p class="readings-title" style="margin-top:0.5rem">Technique events</p>
+        <ul class="event-list" id="rv-events">
+          <li>—</li>
+        </ul>
+      </div>
+
+      <div class="nb-section">
+        <p class="nb-sub">Hint</p>
+        <p class="nb-hint">
+          Pipette procedure: tip into beaker → press A (release air) → press S (siphon
+          to mark) → move tip over cone → press E (dispense). Rinse the pipette by
+          drawing into it then emptying to waste before the real aliquot.
+        </p>
+      </div>
+
+    </aside>
+
+  </section>
+
+  <!-- ── Siphon modal (opens when S is pressed with tip in a beaker) ── -->
+  <div id="siphon-modal" class="siphon-modal hidden">
+    <div class="siphon-card">
+      <div class="siphon-graphic">
+        <svg viewBox="0 0 120 480" preserveAspectRatio="xMidYMid meet">
+          <defs>
+            <!-- Pipette interior: upper stem (long, thin) → bulb (low, fat) → lower stem → tip -->
+            <clipPath id="siphon-pipette-interior">
+              <path d="M 60 472
+                       L 56 446
+                       L 56 360
+                       Q 38 320 56 280
+                       L 56 50
+                       Q 60 42 64 50
+                       L 64 280
+                       Q 82 320 64 360
+                       L 64 446 Z"/>
+            </clipPath>
+          </defs>
+          <!-- Pipette body outline -->
+          <path d="M 60 472
+                   L 56 446
+                   L 56 360
+                   Q 38 320 56 280
+                   L 56 50
+                   Q 60 42 64 50
+                   L 64 280
+                   Q 82 320 64 360
+                   L 64 446 Z"
+                fill="rgba(230,240,250,0.35)" stroke="#6a829a" stroke-width="1.4"
+                stroke-linejoin="round"/>
+          <!-- Liquid body (rect, clipped to interior) -->
+          <rect id="siphon-liquid-body" x="20" y="472" width="80" height="0"
+                fill="rgba(180,200,230,0.65)"
+                clip-path="url(#siphon-pipette-interior)"/>
+          <!-- Curved meniscus (drawn as a path on top of the liquid, also clipped) -->
+          <path id="siphon-meniscus" d="" fill="rgba(180,200,230,0.65)"
+                clip-path="url(#siphon-pipette-interior)"/>
+          <!-- 25.00 mL graduation line, near the top of the upper stem -->
+          <line x1="40" y1="210" x2="80" y2="210" stroke="#3d2f1f" stroke-width="1.4"/>
+          <text x="86" y="214" font-size="11" font-family="Trebuchet MS, sans-serif"
+                fill="#3d2f1f" font-weight="700">25.00 mL</text>
+        </svg>
+      </div>
+      <div class="siphon-controls">
+        <p class="siphon-title">Filling pipette</p>
+        <p class="siphon-hint">
+          Click <b>S</b> to draw liquid up. Overfill past the line, then click <b>E</b>
+          to drip the meniscus down to the line.
+        </p>
+        <div class="siphon-btn-row">
+          <button id="siphon-btn-s" class="siphon-btn siphon-btn-s">S — siphon up</button>
+          <button id="siphon-btn-e" class="siphon-btn siphon-btn-e">E — drip down</button>
+        </div>
+        <div class="siphon-btn-row">
+          <button id="siphon-btn-done" class="siphon-btn siphon-btn-done">Done</button>
+          <button id="siphon-btn-cancel" class="siphon-btn siphon-btn-cancel">Cancel (return to beaker)</button>
+        </div>
+        <p id="siphon-status" class="siphon-status"></p>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script src="../shared/atomic-masses.js"></script>
+<script src="../shared/reagents.js"></script>
+<script src="script.js"></script>
+</body>
+</html>

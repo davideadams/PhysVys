@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Titration — Stage C POC</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../index.html">← Back to Main Menu</a>
+      <p class="eyebrow">Chemistry — Titration POC (Stage C)</p>
+      <h1>Acid–Base Titration</h1>
+      <p class="intro">
+        A 25.00 mL sample of dilute HCl of unknown concentration is in the conical flask
+        with phenolphthalein indicator. The burette holds 0.1000 M NaOH. Find the endpoint.
+      </p>
+    </div>
+  </section>
+
+  <section class="layout">
+
+    <!-- ── Controls sidebar ─────────────────────────────── -->
+    <aside class="panel controls">
+
+      <div class="control-group">
+        <label class="toggle-label">
+          <input type="checkbox" id="stirrer-toggle" checked>
+          <span>Magnetic stirrer</span>
+        </label>
+        <p class="hint">With the stirrer off, drops mix only slowly.</p>
+      </div>
+
+      <div class="control-group">
+        <label>
+          Flow rate
+          <span class="label-value"><span id="flow-readout">0.20</span> mL/s</span>
+        </label>
+        <input class="slider" id="flow-slider" type="range"
+               min="0" max="100" step="1" value="50">
+        <p class="hint">Hold <kbd>Space</kbd> or the tap to dispense.</p>
+      </div>
+
+      <div class="readings-panel">
+        <p class="readings-title">Your burette readings</p>
+        <div class="reading-row">
+          <label for="initial-reading">Initial</label>
+          <input class="num-input wide" id="initial-reading" type="text"
+                 inputmode="decimal" placeholder="— mL">
+        </div>
+        <div class="reading-row">
+          <label for="final-reading">Final</label>
+          <input class="num-input wide" id="final-reading" type="text"
+                 inputmode="decimal" placeholder="— mL">
+        </div>
+        <div class="titre-row">
+          <span>Titre</span>
+          <span id="titre-val">—</span>
+        </div>
+      </div>
+
+      <button class="action-btn action-btn--secondary" id="btn-swap" type="button">
+        ⇄ Swap to waste beaker
+      </button>
+      <button class="action-btn" id="btn-reveal" type="button">
+        Reveal true values
+      </button>
+      <button class="action-btn action-btn--secondary" id="btn-reset" type="button">
+        New titration
+      </button>
+
+      <div class="reveal-panel hidden" id="reveal-panel">
+        <p class="readings-title">Truth</p>
+        <div class="readout-row">
+          <span class="readout-label">True initial</span>
+          <span class="readout-val" id="true-initial">—</span>
+        </div>
+        <div class="readout-row">
+          <span class="readout-label">True final</span>
+          <span class="readout-val" id="true-final">—</span>
+        </div>
+        <div class="readout-row">
+          <span class="readout-label">True titre</span>
+          <span class="readout-val" id="true-titre">—</span>
+        </div>
+        <div class="readout-row">
+          <span class="readout-label">True [HCl]</span>
+          <span class="readout-val" id="true-conc">—</span>
+        </div>
+        <div class="readout-row readout-row--split">
+          <span class="readout-label">Your [HCl]</span>
+          <span class="readout-val" id="your-conc">—</span>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- ── Scene ────────────────────────────────────────── -->
+    <div class="game-panel panel">
+      <div class="scene-wrap">
+        <svg id="scene" viewBox="0 0 600 720" xmlns="http://www.w3.org/2000/svg" aria-label="Titration apparatus">
+
+          <!-- Clamp stand -->
+          <rect x="520" y="40" width="14" height="640" fill="#3a3a3a" rx="2"/>
+          <rect x="420" y="660" width="160" height="20" fill="#2a2a2a" rx="3"/>
+          <!-- Burette clamp arms (extend left from stand to hold burette over flask) -->
+          <rect x="300" y="90" width="234" height="12" fill="#5a5a5a" rx="2"/>
+          <rect x="300" y="300" width="234" height="12" fill="#5a5a5a" rx="2"/>
+
+          <!-- Burette -->
+          <g id="burette-group" style="cursor:zoom-in">
+            <!-- Outer glass -->
+            <rect x="302" y="60" width="36" height="420" fill="rgba(230,240,250,0.35)"
+                  stroke="#9fb4c7" stroke-width="1.2" rx="3"/>
+            <!-- Liquid fill (updated by JS) -->
+            <rect id="burette-liquid" x="304" y="80" width="32" height="360"
+                  fill="rgba(230, 90, 160, 0.0)"/>
+            <!-- Meniscus fill + stroke (updated by JS; fill is closed shape, stroke is curve only) -->
+            <path id="burette-meniscus-fill" d="" fill="rgba(230,240,250,0.6)" stroke="none"/>
+            <path id="burette-meniscus-curve" d="" fill="none" stroke="#6a829a" stroke-width="1"/>
+            <!-- Scale container (ticks drawn by JS) -->
+            <g id="burette-scale"></g>
+            <!-- Highlight -->
+            <rect x="306" y="62" width="4" height="416" fill="rgba(255,255,255,0.5)" rx="2"/>
+            <!-- Stopcock body -->
+            <rect x="296" y="480" width="48" height="24" fill="#d4d4d4" stroke="#6a6a6a" rx="3"/>
+            <g id="stopcock-handle" transform="rotate(0 320 492)">
+              <rect x="302" y="488" width="36" height="8" fill="#9a6a3a" rx="2"/>
+            </g>
+            <!-- Tip -->
+            <path d="M 314 504 L 326 504 L 322 540 L 318 540 Z"
+                  fill="rgba(230,240,250,0.4)" stroke="#6a829a" stroke-width="1"/>
+          </g>
+
+          <!-- Drops/stream layer -->
+          <g id="drops-layer"></g>
+
+          <!-- Magnetic stirrer base -->
+          <rect x="220" y="650" width="200" height="30" fill="#2a2a2a" rx="4"/>
+          <rect x="220" y="650" width="200" height="6" fill="#1a1a1a"/>
+          <circle cx="320" cy="668" r="4" fill="#ff6b6b" id="stirrer-led"/>
+
+          <!-- Waste beaker (alternative to flask) -->
+          <g id="waste-group" style="display:none">
+            <defs>
+              <clipPath id="waste-clip">
+                <rect x="262" y="572" width="116" height="76"/>
+              </clipPath>
+            </defs>
+            <!-- Body -->
+            <path d="M 260 570 L 260 648 Q 260 652 264 652 L 376 652 Q 380 652 380 648 L 380 570"
+                  fill="rgba(230,240,250,0.3)" stroke="#6a829a" stroke-width="1.8"
+                  stroke-linejoin="round"/>
+            <!-- Spout (top-left pour lip) -->
+            <path d="M 260 572 Q 254 570 252 574 Q 256 574 260 578" fill="none"
+                  stroke="#6a829a" stroke-width="1.5"/>
+            <!-- Rim -->
+            <line x1="260" y1="572" x2="380" y2="572" stroke="#6a829a" stroke-width="1.5"/>
+            <!-- Waste liquid (JS-updated) -->
+            <rect id="waste-liquid" x="262" y="648" width="116" height="0"
+                  fill="rgba(220, 230, 240, 0.55)" clip-path="url(#waste-clip)"/>
+            <!-- Label -->
+            <text x="320" y="680" text-anchor="middle" fill="#55708d"
+                  font-size="11" font-family="Trebuchet MS, sans-serif">waste beaker</text>
+          </g>
+
+          <!-- Flask -->
+          <g id="flask-group">
+            <defs>
+              <!-- Full body interior (for colour wash of the whole flask body) -->
+              <clipPath id="flask-body-clip">
+                <path d="M 306 558 L 265 645 Q 263 650 267 650 L 373 650 Q 377 650 375 645 L 334 558 Z"/>
+              </clipPath>
+              <!-- Only the liquid region: below surface, inside body -->
+              <clipPath id="flask-liquid-clip">
+                <path d="M 284 605 L 265 645 Q 263 650 267 650 L 373 650 Q 377 650 375 645 L 356 605 Z"/>
+              </clipPath>
+            </defs>
+
+            <!-- Rim at top of neck -->
+            <rect x="304" y="515" width="32" height="6" fill="rgba(230,240,250,0.5)"
+                  stroke="#6a829a" stroke-width="1.5" rx="1"/>
+            <!-- Neck + body outline (single continuous path) -->
+            <path d="M 306 520 L 306 558 L 265 645 Q 263 650 267 650 L 373 650 Q 377 650 375 645 L 334 558 L 334 520"
+                  fill="rgba(230,240,250,0.3)" stroke="#6a829a" stroke-width="1.8"
+                  stroke-linejoin="round"/>
+
+            <!-- Bulk liquid (clipped to liquid region so it cannot leak past walls or surface) -->
+            <rect id="flask-bulk" x="260" y="604" width="120" height="48"
+                  fill="rgba(230, 90, 160, 0.0)" clip-path="url(#flask-liquid-clip)"/>
+            <!-- Liquid surface line (matches flask walls at y=605) -->
+            <line id="flask-surface" x1="284" y1="605" x2="356" y2="605"
+                  stroke="#6a829a" stroke-width="0.8" opacity="0.6"/>
+
+            <!-- Plume layer — clipped to liquid region (never extends above surface) -->
+            <g id="plume-layer" clip-path="url(#flask-liquid-clip)"></g>
+
+            <!-- Stirrer bar (spins about vertical axis; appears to squash/stretch from the side) -->
+            <g id="stirrer-bar" transform="translate(320 645) scale(1 1)">
+              <ellipse cx="0" cy="0" rx="14" ry="3" fill="#e8e8e8" stroke="#888" stroke-width="0.8"/>
+            </g>
+
+            <!-- Label -->
+            <text x="320" y="680" text-anchor="middle" fill="#55708d"
+                  font-size="11" font-family="Trebuchet MS, sans-serif">conical flask</text>
+          </g>
+
+          <!-- Hint overlay when tap is held -->
+          <g id="tap-hint" opacity="0">
+            <rect x="360" y="484" width="90" height="20" fill="rgba(15,118,110,0.9)" rx="10"/>
+            <text x="405" y="498" text-anchor="middle" fill="white"
+                  font-size="11" font-weight="700" font-family="Trebuchet MS, sans-serif">dispensing…</text>
+          </g>
+
+        </svg>
+      </div>
+      <div class="message-bar" id="message-bar">Click the burette to zoom in and read the level.</div>
+    </div>
+
+  </section>
+
+</main>
+
+<!-- ── Zoom modal ─────────────────────────────────────────── -->
+<div class="modal-backdrop hidden" id="zoom-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Burette — read the meniscus</h2>
+      <button class="modal-close" id="zoom-close" aria-label="Close">×</button>
+    </div>
+    <svg id="zoom-svg" viewBox="0 0 320 500" xmlns="http://www.w3.org/2000/svg">
+      <!-- Drawn by JS -->
+    </svg>
+    <p class="modal-hint">
+      Read the <em>bottom</em> of the meniscus. Graduations are every 0.1 mL; estimate to the nearest 0.01 mL.
+    </p>
+    <div class="modal-footer">
+      <button class="action-btn" id="zoom-done">Done</button>
+    </div>
+  </div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stage A — Making a Standard Solution</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../index.html">← Back to Main Menu</a>
+      <p class="eyebrow">Chemistry — Stage A</p>
+      <h1>Making a Standard Solution</h1>
+      <p class="intro">
+        Weigh out a primary standard, transfer it quantitatively to a 250.0 mL volumetric
+        flask, dissolve, and make up to the mark. Record what you did in the notebook.
+      </p>
+    </div>
+  </section>
+
+  <section class="layout">
+
+    <!-- ── Drawer (equipment + reagents) ─────────────────── -->
+    <aside class="panel drawer">
+      <p class="drawer-title">Drawer</p>
+
+      <p class="drawer-subheading">Equipment</p>
+      <ul class="drawer-list" id="equip-list">
+        <li class="drawer-item" data-equip="balance">
+          <span class="item-glyph">⚖</span>
+          <span class="item-label">Analytical balance</span>
+        </li>
+        <li class="drawer-item" data-equip="boat">
+          <span class="item-glyph">⌒</span>
+          <span class="item-label">Weighing boat</span>
+        </li>
+        <li class="drawer-item" data-equip="spatula">
+          <span class="item-glyph">┃</span>
+          <span class="item-label">Spatula</span>
+        </li>
+        <li class="drawer-item" data-equip="volflask">
+          <span class="item-glyph">⏷</span>
+          <span class="item-label">250.0 mL volumetric flask</span>
+        </li>
+        <li class="drawer-item" data-equip="funnel">
+          <span class="item-glyph">▽</span>
+          <span class="item-label">Funnel</span>
+        </li>
+        <li class="drawer-item" data-equip="washbottle">
+          <span class="item-glyph">⌀</span>
+          <span class="item-label">Wash bottle (deionised water)</span>
+        </li>
+      </ul>
+
+      <p class="drawer-subheading">Reagents</p>
+      <ul class="drawer-list" id="reagent-list">
+        <!-- Filled by JS from window.REAGENTS -->
+      </ul>
+
+      <p class="drawer-hint" id="drawer-hint">
+        Click an item to pick it up, then click on the bench to place it.
+      </p>
+    </aside>
+
+    <!-- ── Bench ────────────────────────────────────────── -->
+    <div class="game-panel panel">
+      <div class="scene-wrap">
+        <svg id="scene" viewBox="0 0 600 380" xmlns="http://www.w3.org/2000/svg"
+             aria-label="Laboratory bench">
+
+          <defs>
+            <!-- Flask interior — same path as the outline, so liquid is guaranteed
+                 to render exactly inside the visible glass. -->
+            <clipPath id="flask-interior">
+              <path d="M 446 50 L 446 235 Q 446 255 434 262 A 55 45 0 1 0 486 262 Q 474 255 474 235 L 474 50 Z"/>
+            </clipPath>
+          </defs>
+
+          <!-- Bench surface -->
+          <rect x="0" y="350" width="600" height="30" fill="#c9b28c" opacity="0.35"/>
+          <line x1="0" y1="350" x2="600" y2="350" stroke="#8a7555" stroke-width="1.2"/>
+
+          <!-- ── Balance placement target (empty state) ─── -->
+          <g id="balance-slot" class="slot" style="display:none">
+            <rect x="20" y="240" width="220" height="110" fill="none"
+                  stroke="#8b5a3c" stroke-width="1.5" stroke-dasharray="6 4" rx="10"/>
+            <text x="130" y="298" text-anchor="middle" fill="#8b5a3c"
+                  font-size="13" font-family="Trebuchet MS, sans-serif"
+                  font-weight="700">Place balance here</text>
+          </g>
+
+          <!-- ── Balance (placed) ──────────────────────── -->
+          <g id="balance-group" style="display:none">
+            <rect x="20" y="260" width="220" height="90" fill="#d9d1c4"
+                  stroke="#5a4a3a" stroke-width="1.5" rx="6"/>
+            <rect id="balance-pan" x="55" y="240" width="150" height="10"
+                  fill="#bfb5a3" stroke="#5a4a3a" stroke-width="1" rx="2"/>
+            <rect x="40" y="285" width="180" height="32" fill="#2a2a2a" rx="4"/>
+            <text id="balance-readout" x="210" y="309" text-anchor="end"
+                  fill="#9aff9a" font-size="20"
+                  font-family="Courier New, monospace" font-weight="700">0.000 g</text>
+            <g id="btn-tare" style="cursor:pointer">
+              <rect x="50" y="325" width="60" height="18" fill="#7a6851" rx="3"/>
+              <text x="80" y="338" text-anchor="middle" fill="white"
+                    font-size="11" font-family="Trebuchet MS, sans-serif"
+                    font-weight="700">TARE</text>
+            </g>
+            <g id="btn-balance-reset" style="cursor:pointer">
+              <rect x="150" y="325" width="70" height="18" fill="#7a6851" rx="3"/>
+              <text x="185" y="338" text-anchor="middle" fill="white"
+                    font-size="11" font-family="Trebuchet MS, sans-serif"
+                    font-weight="700">CLEAR PAN</text>
+            </g>
+          </g>
+
+          <!-- ── Boat (placed on pan) ──────────────────── -->
+          <g id="boat-group" style="display:none; cursor:crosshair">
+            <path id="boat-shape" d="M 80 232 L 90 245 L 170 245 L 180 232 Z"
+                  fill="#e6ddc8" stroke="#8a7555" stroke-width="1"/>
+            <path id="boat-pile" d="" fill="#f5f3ee" opacity="0.95"/>
+          </g>
+
+          <!-- ── Volumetric flask placement target ─────── -->
+          <g id="volflask-slot" class="slot" style="display:none">
+            <rect x="395" y="30" width="130" height="320" fill="none"
+                  stroke="#8b5a3c" stroke-width="1.5" stroke-dasharray="6 4" rx="14"/>
+            <text x="460" y="170" text-anchor="middle" fill="#8b5a3c"
+                  font-size="13" font-family="Trebuchet MS, sans-serif"
+                  font-weight="700">Place vol. flask</text>
+          </g>
+
+          <!-- ── Volumetric flask (placed) ─────────────── -->
+          <g id="volflask-group" style="display:none">
+            <!-- Liquid (clipped to interior); rect is updated by JS -->
+            <rect id="flask-liquid" x="395" y="318" width="130" height="0"
+                  fill="rgba(160, 200, 230, 0.5)" clip-path="url(#flask-interior)"/>
+
+            <!-- Meniscus crescent + curve (only drawn when liquid is up in the neck) -->
+            <path id="flask-meniscus-fill" d="" fill="rgba(230,240,250,0.55)"
+                  clip-path="url(#flask-interior)"/>
+            <path id="flask-meniscus-curve" d="" fill="none"
+                  stroke="#6a829a" stroke-width="0.9"
+                  clip-path="url(#flask-interior)"/>
+
+            <!-- Undissolved pile (clipped to interior) -->
+            <path id="flask-pile" d="" fill="#f5f3ee" opacity="0.9"
+                  clip-path="url(#flask-interior)"/>
+
+            <!-- Outline (rounded ellipse-bulb, raised to sit on bench) -->
+            <path id="flask-outline" d="M 446 50 L 446 235 Q 446 255 434 262 A 55 45 0 1 0 486 262 Q 474 255 474 235 L 474 50"
+                  fill="rgba(230,240,250,0.18)" stroke="#6a829a" stroke-width="1.6"
+                  stroke-linejoin="round" stroke-linecap="round"/>
+
+            <!-- Stopper (visible only when funnel not in neck) -->
+            <g id="stopper-group">
+              <rect x="446" y="38" width="28" height="12" fill="#9a6a3a"
+                    stroke="#5a3a1a" stroke-width="0.8" rx="2"/>
+              <rect x="446" y="48" width="28" height="2" fill="#5a3a1a"/>
+            </g>
+
+            <!-- Graduation mark -->
+            <line id="flask-mark" x1="441" y1="140" x2="479" y2="140"
+                  stroke="#3d2f1f" stroke-width="1.4"/>
+            <text x="496" y="144" fill="#3d2f1f"
+                  font-size="11" font-family="Trebuchet MS, sans-serif"
+                  font-weight="700">250 mL</text>
+
+            <!-- Click target for zoom (over neck around mark) -->
+            <rect id="flask-zoom-hit" x="436" y="110" width="48" height="80"
+                  fill="transparent" style="cursor:zoom-in"/>
+
+            <!-- Click target for swirl (bulb) -->
+            <ellipse id="flask-swirl-hit" cx="460" cy="280" rx="60" ry="38"
+                     fill="transparent" style="cursor:grab"/>
+          </g>
+
+          <!-- ── Funnel placement target ───────────────── -->
+          <g id="funnel-slot" class="slot" style="display:none">
+            <rect x="408" y="0" width="104" height="56" fill="none"
+                  stroke="#8b5a3c" stroke-width="1.5" stroke-dasharray="5 3" rx="8"/>
+            <text x="460" y="30" text-anchor="middle" fill="#8b5a3c"
+                  font-size="11" font-family="Trebuchet MS, sans-serif"
+                  font-weight="700">Place funnel</text>
+          </g>
+
+          <!-- ── Funnel (placed in flask neck) ─────────── -->
+          <g id="funnel-group" style="display:none">
+            <!-- Cone -->
+            <path d="M 415 2 L 505 2 L 470 50 L 450 50 Z"
+                  fill="rgba(230,240,250,0.3)" stroke="#6a829a"
+                  stroke-width="1.4" stroke-linejoin="round"/>
+            <!-- Tube fill (no stroke — sides only, so it blends into the neck) -->
+            <rect x="450" y="50" width="20" height="24"
+                  fill="rgba(230,240,250,0.3)" stroke="none"/>
+            <line x1="450" y1="50" x2="450" y2="74"
+                  stroke="#6a829a" stroke-width="1.2"/>
+            <line x1="470" y1="50" x2="470" y2="74"
+                  stroke="#6a829a" stroke-width="1.2"/>
+            <!-- Click hit for rinsing the funnel -->
+            <rect id="funnel-hit" x="408" y="0" width="104" height="74"
+                  fill="transparent"/>
+          </g>
+
+          <!-- ── Particle / pour layer (boat-pour, transfer, splash) ── -->
+          <g id="pour-layer"></g>
+
+          <!-- ── Wash bottle stream layer ──────────────── -->
+          <g id="stream-layer"></g>
+
+          <!-- ── Held-item preview ─────────────────────── -->
+          <g id="held-preview" style="display:none; pointer-events:none"></g>
+
+        </svg>
+      </div>
+      <div class="message-bar" id="message-bar">
+        Open the drawer to your left and place the balance on the bench to begin.
+      </div>
+    </div>
+
+    <!-- ── Notebook ─────────────────────────────────────── -->
+    <aside class="panel notebook">
+      <p class="drawer-title">Notebook</p>
+
+      <div class="nb-section">
+        <label for="nb-reagent">Primary standard used</label>
+        <select id="nb-reagent">
+          <option value="">— choose —</option>
+        </select>
+      </div>
+
+      <div class="nb-section">
+        <label for="nb-mass">Recorded mass (g)</label>
+        <input id="nb-mass" type="text" inputmode="decimal"
+               placeholder="— g" class="num-input wide">
+      </div>
+
+      <div class="nb-section">
+        <label for="nb-volume">Recorded volume (mL)</label>
+        <input id="nb-volume" type="text" inputmode="decimal"
+               placeholder="— mL" class="num-input wide">
+      </div>
+
+      <button class="action-btn" id="btn-done" type="button">
+        Done — record this standard
+      </button>
+      <button class="action-btn action-btn--secondary" id="btn-reveal" type="button">
+        Reveal true values
+      </button>
+
+      <div class="reveal-panel hidden" id="reveal-panel">
+        <p class="readings-title">Truth</p>
+        <div class="readout-row">
+          <span class="readout-label">True mass in flask</span>
+          <span class="readout-val" id="true-mass">—</span>
+        </div>
+        <div class="readout-row">
+          <span class="readout-label">True volume</span>
+          <span class="readout-val" id="true-volume">—</span>
+        </div>
+        <div class="readout-row">
+          <span class="readout-label">True molar mass</span>
+          <span class="readout-val" id="true-mm">—</span>
+        </div>
+        <div class="readout-row">
+          <span class="readout-label">True conc.</span>
+          <span class="readout-val" id="true-conc">—</span>
+        </div>
+        <div class="readout-row readout-row--split">
+          <span class="readout-label">Your conc.</span>
+          <span class="readout-val" id="your-conc">—</span>
+        </div>
+      </div>
+
+      <div class="nb-section">
+        <p class="nb-sub">Atomic masses (g mol⁻¹)</p>
+        <div class="atomic-grid" id="atomic-grid">
+          <!-- Filled by JS -->
+        </div>
+      </div>
+
+      <div class="nb-section">
+        <p class="nb-sub">Hint</p>
+        <p class="nb-hint">
+          Calculate the molar mass yourself from the atomic masses above. Quantitative
+          transfer matters: rinse the boat and funnel into the flask before making up
+          to the mark.
+        </p>
+      </div>
+
+    </aside>
+
+  </section>
+
+</main>
+
+<!-- ── Zoom modal: meniscus at the graduation mark ─────────── -->
+<div class="modal-backdrop hidden" id="zoom-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Volumetric flask — read the meniscus</h2>
+      <button class="modal-close" id="zoom-close" aria-label="Close">×</button>
+    </div>
+    <svg id="zoom-svg" viewBox="0 0 320 400" xmlns="http://www.w3.org/2000/svg">
+      <!-- Drawn by JS -->
+    </svg>
+    <p class="modal-hint">
+      The mark indicates 250.0 mL when the bottom of the meniscus sits exactly on the line.
+    </p>
+    <div class="modal-footer">
+      <button class="action-btn" id="zoom-done">Done</button>
+    </div>
+  </div>
+</div>
+
+<script src="../shared/atomic-masses.js"></script>
+<script src="../shared/reagents.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
