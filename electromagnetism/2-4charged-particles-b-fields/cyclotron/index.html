@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cyclotron</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../../index.html">← Back to Main Menu</a>
+      <p class="eyebrow">SACE Stage 2 Physics — Electricity & Magnetism 2.4</p>
+      <h1>Cyclotron</h1>
+      <p class="intro">
+        Two D-shaped electrodes ("dees") sit in a uniform magnetic field. An alternating
+        voltage across the gap accelerates the particle on every crossing — but only if the
+        oscillator matches the cyclotron frequency
+        <em>f<sub>c</sub> = qB / 2π m</em>.
+        In <strong>Demo</strong> the frequency is locked on; in <strong>Game</strong> you tune it yourself.
+      </p>
+    </div>
+    <div class="hero-actions">
+      <button id="btn-play"  class="toggle-button" type="button">Start</button>
+      <button id="btn-reset" class="toggle-button" type="button">Reset</button>
+    </div>
+  </section>
+
+  <section class="layout">
+    <aside class="panel controls">
+
+      <div class="control-group">
+        <label>Mode</label>
+        <div class="seg-control cols-2" id="seg-mode">
+          <button class="seg-btn active" data-val="demo" type="button">Demo</button>
+          <button class="seg-btn"        data-val="game" type="button">Game</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Particle</label>
+        <div class="seg-control cols-2" id="seg-particle">
+          <button class="seg-btn active" data-val="proton" type="button">Proton (p⁺)</button>
+          <button class="seg-btn"        data-val="alpha"  type="button">Alpha (α)</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Magnetic field <span class="muted">B</span></label>
+        <div class="slider-row">
+          <input type="range" id="slider-B" min="0.3" max="1.2" step="0.05" value="0.5">
+          <span class="slider-val" id="val-B">0.50</span><span class="slider-unit">T</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Gap voltage <span class="muted">V</span></label>
+        <div class="slider-row">
+          <input type="range" id="slider-V" min="5" max="40" step="1" value="15">
+          <span class="slider-val" id="val-V">15</span><span class="slider-unit">kV</span>
+        </div>
+      </div>
+
+      <div class="control-group" id="game-only">
+        <label>Oscillator frequency <span class="muted">f</span></label>
+        <div class="slider-row">
+          <input type="range" id="slider-f" min="0.5" max="50" step="0.1" value="10.0">
+          <span class="slider-val" id="val-f">10.0</span><span class="slider-unit">MHz</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Field direction</label>
+        <div class="seg-control cols-2" id="seg-field">
+          <button class="seg-btn active" data-val="in"  type="button">Into page (⊗)</button>
+          <button class="seg-btn"        data-val="out" type="button">Out of page (⊙)</button>
+        </div>
+      </div>
+
+      <div class="readout-grid">
+        <div class="readout-card">
+          <span class="readout-label">Cyclotron frequency&nbsp;&nbsp;<em>f<sub>c</sub> = qB / 2πm</em></span>
+          <span id="rd-fc" class="readout-value">—</span>
+        </div>
+        <div class="readout-card" id="rd-detune-card">
+          <span class="readout-label">Detune <em>(f − f<sub>c</sub>) / f<sub>c</sub></em></span>
+          <span id="rd-detune" class="readout-value">—</span>
+        </div>
+        <div class="readout-card">
+          <span class="readout-label">Kinetic energy</span>
+          <span id="rd-ke" class="readout-value">—</span>
+        </div>
+        <div class="readout-card">
+          <span class="readout-label">Orbit radius</span>
+          <span id="rd-r" class="readout-value">—</span>
+        </div>
+        <div class="readout-card" id="rd-streak-card">
+          <span class="readout-label">In-phase streak</span>
+          <span id="rd-streak" class="readout-value">—</span>
+        </div>
+      </div>
+
+    </aside>
+
+    <section class="panel visual-panel">
+      <div class="canvas-wrap">
+        <canvas id="sim-canvas" width="900" height="560" aria-label="Cyclotron"></canvas>
+      </div>
+    </section>
+  </section>
+</main>
+
+<script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Charged Particle in a Uniform B Field</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../../index.html">← Back to Main Menu</a>
+      <p class="eyebrow">SACE Stage 2 Physics — Electricity & Magnetism 2.4</p>
+      <h1>Charged Particle in a Uniform B Field</h1>
+      <p class="intro">
+        A charged particle entering a region of uniform magnetic field follows a circular arc of radius
+        <em>r = mv / |q|B</em>. The Lorentz force <em>F = qv × B</em> always acts perpendicular to the
+        velocity, so the speed is constant — only the direction changes.
+      </p>
+    </div>
+    <div class="hero-actions">
+      <button id="btn-play"  class="toggle-button" type="button">Start</button>
+      <button id="btn-reset" class="toggle-button" type="button">Reset</button>
+    </div>
+  </section>
+
+  <section class="layout">
+    <aside class="panel controls">
+
+      <div class="control-group">
+        <label>Units</label>
+        <div class="seg-control cols-2" id="seg-units">
+          <button class="seg-btn active" data-val="abstract" type="button">Abstract</button>
+          <button class="seg-btn"        data-val="real"     type="button">Real (SI)</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Start mode</label>
+        <div class="seg-control cols-2" id="seg-mode">
+          <button class="seg-btn active" data-val="centre" type="button">Centre orbit</button>
+          <button class="seg-btn"        data-val="left"   type="button">Enter from left</button>
+        </div>
+      </div>
+
+      <!-- ── Abstract-units controls ── -->
+      <div id="abstract-controls">
+        <div class="control-group">
+          <label>Charge sign</label>
+          <div class="seg-control cols-2" id="seg-charge">
+            <button class="seg-btn"        data-val="pos" type="button">Positive (+)</button>
+            <button class="seg-btn active" data-val="neg" type="button">Negative (−)</button>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label>Mass <span class="muted">m</span></label>
+          <div class="slider-row">
+            <input type="range" id="slider-m" min="0.5" max="5" step="0.1" value="1.0">
+            <span class="slider-val" id="val-m">1.0</span>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label>Speed <span class="muted">v</span></label>
+          <div class="slider-row">
+            <input type="range" id="slider-v" min="1" max="8" step="0.1" value="4.0">
+            <span class="slider-val" id="val-v">4.0</span>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label>Field strength <span class="muted">B</span></label>
+          <div class="slider-row">
+            <input type="range" id="slider-B" min="0.3" max="5" step="0.1" value="3.0">
+            <span class="slider-val" id="val-B">3.0</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Real-units controls ── -->
+      <div id="real-controls" class="is-hidden">
+        <div class="control-group">
+          <label>Particle</label>
+          <div class="seg-control cols-3" id="seg-particle">
+            <button class="seg-btn active" data-val="electron" type="button">e⁻</button>
+            <button class="seg-btn"        data-val="proton"   type="button">p⁺</button>
+            <button class="seg-btn"        data-val="alpha"    type="button">α</button>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label>Speed <span class="muted">v</span></label>
+          <div class="slider-row">
+            <input type="range" id="slider-v-real" min="0.1" max="15" step="0.1" value="5">
+            <span class="slider-val" id="val-v-real">5.0</span><span class="slider-unit">× 10⁶ m/s</span>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label>Field strength <span class="muted">B</span></label>
+          <div class="slider-row">
+            <input type="range" id="slider-B-real" min="0.1" max="30" step="0.1" value="2">
+            <span class="slider-val" id="val-B-real">2.0</span><span class="slider-unit" id="unit-B-real">mT</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Field direction</label>
+        <div class="seg-control cols-2" id="seg-field">
+          <button class="seg-btn active" data-val="out" type="button">Out of page (⊙)</button>
+          <button class="seg-btn"        data-val="in"  type="button">Into page (⊗)</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Show / hide</label>
+        <div class="vector-toggles">
+          <button class="vec-btn active" id="btn-field-glyphs" type="button">
+            <span class="vec-dot" style="background:#2563eb"></span>B field glyphs
+          </button>
+          <button class="vec-btn active" id="btn-trail" type="button">
+            <span class="vec-dot" style="background:#0d9488"></span>Trail
+          </button>
+          <button class="vec-btn active" id="btn-vectors" type="button">
+            <span class="vec-dot" style="background:#15803d"></span>v &amp; F vectors
+          </button>
+        </div>
+      </div>
+
+      <div class="readout-grid">
+        <div class="readout-card">
+          <span class="readout-label">Radius&nbsp;&nbsp;<em>r = mv / |q|B</em></span>
+          <span id="rd-radius" class="readout-value">—</span>
+        </div>
+        <div class="readout-card">
+          <span class="readout-label">Period&nbsp;&nbsp;<em>T = 2π m / |q|B</em></span>
+          <span id="rd-period" class="readout-value">—</span>
+        </div>
+        <div class="readout-card">
+          <span class="readout-label">|F| = |q|vB</span>
+          <span id="rd-force" class="readout-value">—</span>
+        </div>
+      </div>
+
+    </aside>
+
+    <section class="panel visual-panel">
+      <div class="canvas-wrap" id="canvas-wrap">
+        <canvas id="sim-canvas" width="900" height="540" aria-label="Charged particle in uniform magnetic field"></canvas>
+      </div>
+    </section>
+  </section>
+</main>
+
+<script src="script.js"></script>
+</body>
+</html>
