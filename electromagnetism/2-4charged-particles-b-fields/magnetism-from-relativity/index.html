@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Magnetism from Relativity</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../../index.html">← Back to Main Menu</a>
+      <p class="eyebrow">SACE Stage 2 Physics — Electricity &amp; Magnetism 2.4</p>
+      <h1>Magnetism from Relativity</h1>
+      <p class="intro">
+        A current-carrying wire is electrically neutral in the lab — yet a test charge
+        moving alongside it feels a force. Hop into the test charge's frame: the moving
+        ion lattice contracts, the now-stationary electrons spread out, and the wire
+        picks up a net charge. The magnetic force in the lab is just an electric force
+        in disguise.
+        <em>Drift speeds here are exaggerated so length contraction is visible.</em>
+      </p>
+    </div>
+    <div class="hero-actions">
+      <button id="btn-play"  class="toggle-button secondary-button" type="button">Pause</button>
+      <button id="btn-reset" class="toggle-button secondary-button" type="button">Reset</button>
+    </div>
+  </section>
+
+  <section class="layout">
+    <aside class="panel controls">
+      <h2>Controls</h2>
+
+      <div class="control-group">
+        <label>Reference frame</label>
+        <div class="seg-control cols-2" id="seg-frame">
+          <button class="seg-btn active" data-val="lab"   type="button">Lab frame</button>
+          <button class="seg-btn"        data-val="drift" type="button">Drift frame</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Drift speed <span class="muted">β = v/c</span></label>
+        <div class="slider-row">
+          <input type="range" id="slider-beta" min="0.1" max="0.9" step="0.01" value="0.6">
+          <span class="slider-val" id="val-beta">0.60</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Test charge</label>
+        <div class="seg-control cols-2" id="seg-q">
+          <button class="seg-btn active" data-val="neg" type="button">Negative (−e)</button>
+          <button class="seg-btn"        data-val="pos" type="button">Positive (+e)</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Show / hide</label>
+        <div class="vector-toggles">
+          <button class="vec-btn active" id="btn-vels" type="button">
+            <span class="vec-dot" style="background:#0d9488"></span>Velocity arrows
+          </button>
+          <button class="vec-btn active" id="btn-force" type="button">
+            <span class="vec-dot" style="background:#15803d"></span>Force on test charge
+          </button>
+          <button class="vec-btn active" id="btn-field" type="button">
+            <span class="vec-dot" style="background:#9333ea"></span>Field at test charge
+          </button>
+        </div>
+      </div>
+
+      <div class="readout-grid">
+        <div class="readout-card">
+          <span class="readout-label">Lorentz factor γ</span>
+          <span class="readout-value" id="ro-gamma">—</span>
+        </div>
+        <div class="readout-card density-card">
+          <span class="readout-label">Linear charge density</span>
+          <div class="density-row"><span class="dot pos">+</span>ions<span class="density-val" id="ro-lp">—</span></div>
+          <div class="density-row"><span class="dot neg">−</span>electrons<span class="density-val" id="ro-ln">—</span></div>
+          <div class="density-row net"><span>net</span><span class="density-val" id="ro-lnet">—</span></div>
+        </div>
+        <div class="readout-card">
+          <span class="readout-label" id="ro-fkind-label">Force on test charge</span>
+          <span class="readout-value" id="ro-fkind">—</span>
+        </div>
+      </div>
+
+      <div class="why-card" id="why-card">
+        <strong>Lab frame:</strong> ions and electrons have equal and opposite line densities,
+        so the wire is neutral. The drifting electrons make a current, which produces a magnetic
+        field. The test charge moves through that field and feels <em>F = qv×B</em>.
+      </div>
+    </aside>
+
+    <section class="panel visual-panel">
+      <div class="canvas-wrap">
+        <canvas id="sim-canvas" width="960" height="560"
+                aria-label="Magnetism from relativity simulation"></canvas>
+      </div>
+    </section>
+  </section>
+</main>
+
+<script src="script.js"></script>
+</body>
+</html>
