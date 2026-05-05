@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Transformer</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../../index.html">← Back to Main Menu</a>
+      <p class="eyebrow">SACE Stage 2 Physics — Electricity & Magnetism 2.5</p>
+      <h1>Transformer</h1>
+      <p class="intro">
+        Two coils share a soft-iron core. An alternating voltage on the input coil drives an alternating
+        flux through the core, and that changing flux induces an EMF in every output turn.
+        Because each turn sees the same <em>dΦ/dt</em>, the voltages are simply in the ratio of the
+        turn counts: <em>V<sub>output</sub> / V<sub>input</sub> = N<sub>output</sub> / N<sub>input</sub></em>.
+        Drag the sliders to step the voltage up or down.
+      </p>
+    </div>
+  </section>
+
+  <section class="layout">
+    <aside class="panel controls">
+
+      <div class="control-group">
+        <label>Input voltage <span class="muted">V<sub>input</sub> (RMS)</span></label>
+        <div class="slider-row">
+          <input type="range" id="slider-vin" min="1" max="240" step="1" value="120">
+          <span class="slider-val" id="val-vin">120</span><span class="slider-unit">V</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Input turns <span class="muted">N<sub>input</sub></span></label>
+        <div class="slider-row">
+          <input type="range" id="slider-nin" min="4" max="40" step="1" value="20">
+          <span class="slider-val" id="val-nin">20</span><span class="slider-unit">turns</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Output turns <span class="muted">N<sub>output</sub></span></label>
+        <div class="slider-row">
+          <input type="range" id="slider-nout" min="4" max="40" step="1" value="10">
+          <span class="slider-val" id="val-nout">10</span><span class="slider-unit">turns</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Quick presets</label>
+        <div class="seg-control cols-3" id="seg-preset">
+          <button class="seg-btn" data-val="up"   type="button">Step up</button>
+          <button class="seg-btn" data-val="even" type="button">1 : 1</button>
+          <button class="seg-btn" data-val="down" type="button">Step down</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Drive</label>
+        <div class="auto-row">
+          <button id="btn-play" class="play-btn playing" type="button">■ Pause</button>
+        </div>
+      </div>
+
+      <div class="explain-card">
+        <div class="readout-hd">V<sub>output</sub> / V<sub>input</sub> = N<sub>output</sub> / N<sub>input</sub></div>
+        <div class="readout-row"><span>Turns ratio N<sub>output</sub>/N<sub>input</sub></span><span id="rd-ratio">—</span></div>
+        <div class="readout-row"><span>Input V<sub>input</sub></span><span id="rd-vin">—</span></div>
+        <div class="readout-row"><span>Output V<sub>output</sub></span><span id="rd-vout">—</span></div>
+        <div class="readout-row"><span>Mode</span><span id="rd-mode">—</span></div>
+      </div>
+
+      <p class="ideal-note">
+        <strong>Ideal transformer assumed:</strong> all input flux links the output coil, and there are
+        no winding-resistance, hysteresis or eddy-current losses, so
+        V<sub>input</sub>I<sub>input</sub> = V<sub>output</sub>I<sub>output</sub>.
+      </p>
+
+    </aside>
+
+    <section class="panel visual-panel">
+      <div class="canvas-wrap">
+        <canvas id="schematic" aria-label="Transformer schematic with input and output coils on a shared iron core"></canvas>
+        <div class="scene-note">Soft-iron core couples the coils — the same alternating flux passes through every turn.</div>
+      </div>
+    </section>
+  </section>
+</main>
+
+<script src="script.js"></script>
+</body>
+</html>
