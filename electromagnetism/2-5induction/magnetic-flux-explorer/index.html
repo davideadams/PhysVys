@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Magnetic Flux Explorer</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../../index.html">← Back to Main Menu</a>
+      <p class="eyebrow">SACE Stage 2 Physics — Electricity & Magnetism 2.5</p>
+      <h1>Magnetic Flux Explorer</h1>
+      <p class="intro">
+        The magnetic flux through a loop depends on the field strength, the loop's area
+        and how it is oriented relative to the field:
+        <em>Φ = BA&nbsp;cos&nbsp;θ</em>,
+        where <em>θ</em> is the angle between the loop's normal and <em>B</em>.
+        Tilt the loop, change its size or shape, and watch how each one shifts the flux.
+      </p>
+    </div>
+  </section>
+
+  <section class="layout">
+    <aside class="panel controls">
+
+      <div class="control-group">
+        <label>Loop shape</label>
+        <div class="seg-control cols-2" id="seg-shape">
+          <button class="seg-btn active" data-val="rect"   type="button">Rectangle</button>
+          <button class="seg-btn"        data-val="circle" type="button">Circle</button>
+        </div>
+      </div>
+
+      <div class="control-group" id="grp-rect">
+        <label>Width <span class="muted">w</span></label>
+        <div class="slider-row">
+          <input type="range" id="slider-width" min="0.2" max="2.0" step="0.05" value="1.20">
+          <span class="slider-val" id="val-width">1.20</span><span class="slider-unit">m</span>
+        </div>
+        <label style="margin-top:0.5rem">Height <span class="muted">h</span></label>
+        <div class="slider-row">
+          <input type="range" id="slider-height" min="0.2" max="2.0" step="0.05" value="0.80">
+          <span class="slider-val" id="val-height">0.80</span><span class="slider-unit">m</span>
+        </div>
+      </div>
+
+      <div class="control-group" id="grp-circle" style="display:none">
+        <label>Radius <span class="muted">r</span></label>
+        <div class="slider-row">
+          <input type="range" id="slider-radius" min="0.15" max="1.1" step="0.01" value="0.55">
+          <span class="slider-val" id="val-radius">0.55</span><span class="slider-unit">m</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Field strength <span class="muted">B</span></label>
+        <div class="slider-row">
+          <input type="range" id="slider-field" min="0.05" max="1.0" step="0.01" value="0.40">
+          <span class="slider-val" id="val-field">0.40</span><span class="slider-unit">T</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Tilt angle <span class="muted">θ</span></label>
+        <div class="slider-row">
+          <input type="range" id="slider-theta" min="0" max="360" step="1" value="35">
+          <span class="slider-val" id="val-theta">35</span><span class="slider-unit">°</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Show / hide</label>
+        <div class="vector-toggles">
+          <button class="vec-btn active" id="btn-field" type="button">
+            <span class="vec-dot" style="background:#2563eb"></span>Field arrows
+          </button>
+          <button class="vec-btn active" id="btn-patch" type="button">
+            <span class="vec-dot" style="background:#0d9488"></span>Flux patch
+          </button>
+          <button class="vec-btn active" id="btn-normal" type="button">
+            <span class="vec-dot" style="background:#7c3aed"></span>Area&nbsp;vector&nbsp;<em>A</em><sub>⊥</sub>
+          </button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Camera view</label>
+        <div class="seg-control cols-4" id="seg-cam">
+          <button class="seg-btn active" data-val="iso"   type="button">Iso</button>
+          <button class="seg-btn"        data-val="top"   type="button">Top</button>
+          <button class="seg-btn"        data-val="front" type="button">Front</button>
+          <button class="seg-btn"        data-val="side"  type="button">Side</button>
+        </div>
+      </div>
+
+      <div class="explain-card" id="readout">
+        <div class="readout-hd">Φ = BA&nbsp;cos&nbsp;θ</div>
+        <div class="readout-row"><span>Area A</span><span id="rd-area">—</span></div>
+        <div class="readout-row"><span>cos θ</span><span id="rd-cos">—</span></div>
+        <div class="readout-row"><span>Flux Φ</span><span id="rd-phi">—</span></div>
+      </div>
+
+      <div class="control-group">
+        <label>Φ vs θ</label>
+        <canvas id="phi-graph" width="320" height="150" class="phi-graph"></canvas>
+      </div>
+
+    </aside>
+
+    <section class="panel visual-panel">
+      <div class="canvas-wrap">
+        <div id="three-root" class="three-root" aria-label="3D loop in a uniform magnetic field"></div>
+        <div class="scene-note">Drag to orbit · scroll to zoom · θ is the angle between <em>A</em><sub>⊥</sub> and <em>B</em></div>
+      </div>
+    </section>
+  </section>
+</main>
+
+<script src="../../../vendor/three/three.min.js"></script>
+<script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Faraday &amp; Lenz</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../../index.html">← Back to Main Menu</a>
+      <p class="eyebrow">SACE Stage 2 Physics — Electricity & Magnetism 2.5</p>
+      <h1>Faraday &amp; Lenz</h1>
+      <p class="intro">
+        A bar magnet sliding through a coil changes the flux through every turn.
+        Faraday's law gives the size of the induced EMF
+        — <em>ε = −N·dΦ/dt</em> — and Lenz's law gives the sign:
+        the induced current opposes the change in flux. Drag the magnet (or auto-sweep)
+        to see Φ and ε track in real time.
+      </p>
+    </div>
+  </section>
+
+  <section class="layout">
+    <aside class="panel controls">
+
+      <div class="control-group">
+        <label>Mode</label>
+        <div class="seg-control cols-2" id="seg-mode">
+          <button class="seg-btn active" data-val="faraday" type="button">Faraday only</button>
+          <button class="seg-btn"        data-val="lenz"    type="button">Faraday + Lenz</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Magnet polarity</label>
+        <div class="seg-control cols-2" id="seg-pol">
+          <button class="seg-btn active" data-val="ns" type="button">N&nbsp;→&nbsp;coil</button>
+          <button class="seg-btn"        data-val="sn" type="button">S&nbsp;→&nbsp;coil</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Magnet strength <span class="muted">m</span></label>
+        <div class="slider-row">
+          <input type="range" id="slider-strength" min="0.5" max="5.0" step="0.05" value="2.00">
+          <span class="slider-val" id="val-strength">2.00</span><span class="slider-unit">A·m²</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Coil turns <span class="muted">N</span></label>
+        <div class="slider-row">
+          <input type="range" id="slider-turns" min="1" max="40" step="1" value="20">
+          <span class="slider-val" id="val-turns">20</span><span class="slider-unit">turns</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Show / hide</label>
+        <div class="vector-toggles">
+          <button class="vec-btn" id="btn-flines" type="button">
+            <span class="vec-dot" style="background:#6366f1"></span>Field lines
+          </button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Auto-sweep</label>
+        <div class="auto-row">
+          <button id="btn-play" class="play-btn" type="button">▶ Start</button>
+          <button id="btn-reset" class="play-btn ghost" type="button">⟲ Reset</button>
+        </div>
+        <div class="slider-row" style="margin-top:0.5rem">
+          <input type="range" id="slider-speed" min="0.05" max="1.2" step="0.01" value="0.4">
+          <span class="slider-val" id="val-speed">0.40</span><span class="slider-unit">m/s</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Galvanometer</label>
+        <canvas id="galvo" width="320" height="160" class="galvo"></canvas>
+      </div>
+
+      <div class="control-group">
+        <label>Φ&nbsp;(t)&nbsp;<span class="muted">— flux per turn</span></label>
+        <canvas id="phi-graph" width="320" height="110" class="phi-graph"></canvas>
+      </div>
+
+      <div class="control-group">
+        <label>ε&nbsp;(t)&nbsp;<span class="muted">— induced EMF</span></label>
+        <canvas id="emf-graph" width="320" height="110" class="phi-graph"></canvas>
+      </div>
+
+      <div class="explain-card" id="readout">
+        <div class="readout-hd">Live values</div>
+        <div class="readout-row"><span>Magnet x</span><span id="rd-x">—</span></div>
+        <div class="readout-row"><span>Φ per turn</span><span id="rd-phi">—</span></div>
+        <div class="readout-row"><span>ε</span><span id="rd-emf">—</span></div>
+      </div>
+
+    </aside>
+
+    <section class="panel visual-panel">
+      <div class="canvas-wrap">
+        <div id="three-root" class="three-root" aria-label="Bar magnet sliding through a coil"></div>
+        <div class="scene-note">Drag the <strong>magnet</strong> along the axis · drag empty space to orbit · scroll to zoom</div>
+      </div>
+    </section>
+  </section>
+</main>
+
+<script src="../../../vendor/three/three.min.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
