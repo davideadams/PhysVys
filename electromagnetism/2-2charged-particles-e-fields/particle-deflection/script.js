@@ -71,6 +71,10 @@ const state = {
   mode:            'deflection',
   particle:        'electron',
   customSign:      +1,
+  customMantissa:  9.11,   // 1.00 – 9.99
+  customExp:       -31,    // integer −31 to −25
+  customQMantissa: 1.60,   // 1.00 – 9.99
+  customQExp:      -19,    // integer −20 to −15
   V:               0,      // Volts
   d:               0.10,   // metres
   v0f:             5,      // × 10⁷ m/s
@@ -81,11 +85,14 @@ const state = {
 
 function v0() { return state.v0f * 1e7; }
 
+function customMass()   { return state.customMantissa  * Math.pow(10, state.customExp);  }
+function customCharge() { return state.customQMantissa * Math.pow(10, state.customQExp); }
+
 function getParticle() {
   switch (state.particle) {
     case 'electron': return { q: -E_CHARGE, m: M_ELECTRON };
     case 'proton':   return { q: +E_CHARGE, m: M_PROTON };
-    default:         return { q: state.customSign * E_CHARGE, m: M_ELECTRON };
+    default:         return { q: state.customSign * customCharge(), m: customMass() };
   }
 }
 
@@ -97,26 +104,32 @@ function calcPhysics() {
 
   const Efield  = V / d;                // V m⁻¹
   const F       = Math.abs(q) * Efield; // N
-  const a       = F / m;               // m s⁻²
-  const L       = plateLenM();         // m (plate length)
-  const tCross  = L / V0;              // s (time to traverse plates)
-  const yCross  = 0.5 * a * tCross * tCross; // m (deflection if no collision)
+  const a       = F / m;                // m s⁻²
+  const L       = plateLenM();          // m (plate length)
+  const halfD   = d / 2;
 
   // Field points top → bottom (+y canvas direction).
   // Negative charge deflects upward (−y); positive charge deflects downward (+y).
   const qDir = q < 0 ? -1 : +1;
 
-  const halfD     = d / 2;
-  const hitsPlate = yCross >= halfD;
+  // Time to cross plates horizontally; ∞ when v₀ = 0 (particle never exits horizontally).
+  const tCross = V0 > 0 ? L / V0 : Infinity;
+  const yCross = 0.5 * a * tCross * tCross; // m (deflection if no collision)
+
+  // Particle hits a plate iff it would deflect ≥ halfD before exiting.
+  // With a = 0 it never deflects, so it can't hit. With v₀ = 0 and a > 0 it
+  // falls straight down and hits at x = 0.
+  const hitsPlate = a > 0 && yCross >= halfD;
   const tHit      = hitsPlate ? Math.sqrt(2 * halfD / a) : tCross;
-  const yExit     = hitsPlate ? halfD : yCross; // m from centre at exit/impact
+  const yExit     = hitsPlate ? halfD : (Number.isFinite(yCross) ? yCross : 0);
+  const xRange    = hitsPlate ? V0 * tHit : null; // m from left edge of plates
 
   // Energy: work done by field = force × displacement in field direction
   const KE_entry = 0.5 * m * V0 * V0;
   const W        = F * yExit;           // always positive (field accelerates particle)
   const KE_exit  = KE_entry + W;
 
-  return { Efield, F, a, L, tCross, yCross, qDir, hitsPlate, tHit, yExit, q, KE_entry, KE_exit };
+  return { Efield, F, a, L, tCross, yCross, qDir, hitsPlate, tHit, yExit, xRange, q, KE_entry, KE_exit };
 }
 
 /* ───────────────────────── Acceleration physics ────────────────────── */
@@ -137,8 +150,12 @@ function calcAccelPhysics() {
 
   // Particle traverses full gap d → v² = v₀² + 2ad
   const v_exit = Math.sqrt(V0 * V0 + 2 * a * d);
-  // Time to cross: v = v₀ + at  →  t = (v_exit − v₀) / a  (guard a = 0)
-  const tCross = a > 0 ? (v_exit - V0) / a : d / V0;
+  // Time to cross: v = v₀ + at  →  t = (v_exit − v₀) / a
+  // Guard a = 0 (no field) and V0 = 0 (particle starts at rest, no field → never moves).
+  let tCross;
+  if (a > 0)      tCross = (v_exit - V0) / a;
+  else if (V0 > 0) tCross = d / V0;
+  else            tCross = Infinity;
 
   // KE gained = |q|V  (particle traverses the full potential difference)
   const KE_entry = 0.5 * m * V0 * V0;
@@ -208,7 +225,10 @@ function drawTrajectory() {
   const pl = plLeft(), pr = plRight();
   const my = midY();
 
-  const tEnd   = hitsPlate ? tHit : L / V0;
+  // tEnd is finite only if the particle actually moves out of view.
+  // With V0 = 0 and a = 0 nothing happens; with V0 = 0 and a > 0 it falls
+  // straight down (tEnd = tHit, exitXpx = pl).
+  const tEnd    = hitsPlate ? tHit : (V0 > 0 ? L / V0 : 0);
   const exitXpx = pl + V0 * tEnd * PPM;
   const exitYpx = my + qDir * yExit * PPM;
 
@@ -237,7 +257,7 @@ function drawTrajectory() {
   ctx.stroke();
 
   // ── 3. Exit path — straight line (only if particle cleared the plates) ──
-  if (!hitsPlate) {
+  if (!hitsPlate && V0 > 0) {
     const vy    = a * (L / V0);           // vertical speed at exit, m/s
     const slope = qDir * vy / V0;         // dy/dx (dimensionless)
     ctx.beginPath();
@@ -392,7 +412,8 @@ function drawAccelTrajectory() {
   ctx.stroke();
 
   // ── 3½. Equal-time stroboscopic ticks inside the field ──
-  {
+  // Skip when the particle never moves (V₀ = 0 and a = 0).
+  if (Number.isFinite(tCross) && tCross > 0) {
     const N    = 12;
     const HALF = 9;   // half-width of each horizontal tick in px
     ctx.strokeStyle = 'rgba(15,118,110,0.55)';
@@ -625,9 +646,20 @@ function updateReadouts() {
     if (ph.hitsPlate) {
       el.textContent = 'Hits plate';
       el.style.color = '#dc2626';
-    } else {
+    } else if (Number.isFinite(ph.yCross)) {
       el.textContent = fmtDist(ph.yCross);
       el.style.color = '';
+    } else {
+      el.textContent = '—';
+      el.style.color = '';
+    }
+    const elR = document.getElementById('readout-range');
+    if (ph.hitsPlate) {
+      elR.textContent = fmtDist(ph.xRange);
+      elR.style.color = '#dc2626';
+    } else {
+      elR.textContent = 'Clears plates';
+      elR.style.color = '';
     }
   } else {
     const ph = calcAccelPhysics();
@@ -700,6 +732,38 @@ document.getElementById('charge-sign-pos').addEventListener('click', () => {
   draw();
 });
 
+function bindSciInput(id, { min, max, integer }, get, apply) {
+  const el = document.getElementById(id);
+  el.addEventListener('input', () => {
+    const raw = el.value.trim();
+    const n   = integer ? parseInt(raw, 10) : parseFloat(raw);
+    const ok  = Number.isFinite(n) && n >= min && n <= max;
+    el.classList.toggle('invalid', !ok);
+    if (ok) {
+      apply(n);
+      draw();
+    }
+  });
+  el.addEventListener('blur', () => {
+    // Snap back to last valid value if the field is empty/invalid.
+    const raw = el.value.trim();
+    const n   = integer ? parseInt(raw, 10) : parseFloat(raw);
+    if (!Number.isFinite(n) || n < min || n > max) {
+      el.value = integer ? String(get()) : get().toFixed(2);
+      el.classList.remove('invalid');
+    }
+  });
+}
+
+bindSciInput('mass-mantissa', { min: 1, max: 9.99, integer: false },
+  () => state.customMantissa, v => { state.customMantissa = v; });
+bindSciInput('mass-exponent', { min: -31, max: -25, integer: true },
+  () => state.customExp, v => { state.customExp = v; });
+bindSciInput('charge-mantissa', { min: 1, max: 9.99, integer: false },
+  () => state.customQMantissa, v => { state.customQMantissa = v; });
+bindSciInput('charge-exponent', { min: -20, max: -15, integer: true },
+  () => state.customQExp, v => { state.customQExp = v; });
+
 document.getElementById('charge-sign-neg').addEventListener('click', () => {
   state.customSign = -1;
   document.getElementById('charge-sign-neg').classList.add('active');
@@ -716,6 +780,7 @@ document.getElementById('btn-mode-deflection').addEventListener('click', () => {
   document.getElementById('btn-mode-deflection').setAttribute('aria-pressed', 'true');
   document.getElementById('btn-mode-acceleration').setAttribute('aria-pressed', 'false');
   document.getElementById('readout-deflection-card').classList.remove('is-hidden');
+  document.getElementById('readout-range-card').classList.remove('is-hidden');
   document.getElementById('readout-exit-speed-card').classList.add('is-hidden');
   draw();
 });
@@ -728,6 +793,7 @@ document.getElementById('btn-mode-acceleration').addEventListener('click', () =>
   document.getElementById('btn-mode-deflection').setAttribute('aria-pressed', 'false');
   document.getElementById('readout-exit-speed-card').classList.remove('is-hidden');
   document.getElementById('readout-deflection-card').classList.add('is-hidden');
+  document.getElementById('readout-range-card').classList.add('is-hidden');
   draw();
 });
 

@@ -223,6 +223,42 @@ input[type="range"] {
   color: var(--ink);
 }
 
+/* ── Mass input row ── */
+
+.mass-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.mass-row input[type="text"] {
+  flex: 1;
+  min-width: 0;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid rgba(21, 48, 77, 0.16);
+  border-radius: 10px;
+  font: inherit;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.9);
+  text-align: center;
+}
+
+.mass-row input[type="text"]:focus {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 1px;
+}
+
+.mass-row input[type="text"].invalid {
+  border-color: var(--positive);
+  background: rgba(254, 226, 226, 0.6);
+}
+
+.mass-times {
+  color: var(--muted);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 /* ── Readout cards ── */
 
 .readout-grid {

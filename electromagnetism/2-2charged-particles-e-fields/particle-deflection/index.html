@@ -68,6 +68,22 @@
             <button class="sign-btn positive active" id="charge-sign-pos" type="button" aria-pressed="true">+</button>
             <button class="sign-btn negative"        id="charge-sign-neg" type="button" aria-pressed="false">−</button>
           </div>
+
+          <label for="charge-mantissa">Charge magnitude \(|q|\) (C)</label>
+          <div class="mass-row">
+            <input id="charge-mantissa" type="text" inputmode="decimal" value="1.60" aria-label="Charge mantissa">
+            <span class="mass-times">× 10</span>
+            <input id="charge-exponent" type="text" inputmode="numeric" value="-19" aria-label="Charge exponent">
+          </div>
+          <p class="value-display">Mantissa 1.00–9.99, exponent −20 to −15</p>
+
+          <label for="mass-mantissa">Mass \(m\) (kg)</label>
+          <div class="mass-row">
+            <input id="mass-mantissa" type="text" inputmode="decimal" value="9.11" aria-label="Mass mantissa">
+            <span class="mass-times">× 10</span>
+            <input id="mass-exponent" type="text" inputmode="numeric" value="-31" aria-label="Mass exponent">
+          </div>
+          <p class="value-display">Mantissa 1.00–9.99, exponent −31 to −25</p>
         </div>
 
         <!-- Plate voltage -->
@@ -87,7 +103,7 @@
         <!-- Entry speed -->
         <div class="control-group">
           <label id="speed-label" for="speed-slider">Entry speed \(v_0\)</label>
-          <input id="speed-slider" type="range" min="1" max="20" step="0.5" value="5">
+          <input id="speed-slider" type="range" min="0" max="20" step="0.5" value="5">
           <p id="speed-display" class="value-display"></p>
         </div>
 
@@ -109,6 +125,11 @@
           <div id="readout-deflection-card" class="readout-card">
             <span class="readout-label">Deflection \(y\) at exit</span>
             <span id="readout-y" class="readout-value">—</span>
+          </div>
+          <!-- Range readout (shown in Deflection mode when particle hits a plate) -->
+          <div id="readout-range-card" class="readout-card">
+            <span class="readout-label">Range \(x\) (impact distance from left plate edge)</span>
+            <span id="readout-range" class="readout-value">—</span>
           </div>
           <!-- Exit speed readout (shown in Acceleration mode) -->
           <div id="readout-exit-speed-card" class="readout-card is-hidden">
