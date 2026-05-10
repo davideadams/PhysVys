@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Double Slit</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../../index.html">← Back to Main Menu</a>
+      <p class="eyebrow">SACE Stage 2 Physics — Light &amp; Atoms 3.1</p>
+      <h1>Double Slit</h1>
+      <p class="intro">
+        A coherent plane wave from the left lights both slits in step.
+        Each slit then radiates secondary cylindrical waves (Huygens) that overlap on the way to the screen.
+        Where their path lengths differ by <em>p = d sin θ = mλ</em>, you get a bright fringe;
+        by <em>(m + ½)λ</em>, a dark fringe. Spacing on the screen is <em>Δy ≈ λL/d</em>.
+      </p>
+    </div>
+  </section>
+
+  <section class="layout">
+    <aside class="panel controls">
+
+      <div class="control-group">
+        <label>Mode</label>
+        <div class="seg-control cols-3" id="seg-mode">
+          <button class="seg-btn"        data-val="bullets"   type="button">Bullets</button>
+          <button class="seg-btn active" data-val="waves"     type="button">Waves</button>
+          <button class="seg-btn"        data-val="electrons" type="button">Electrons</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Slits open</label>
+        <div class="seg-control cols-3" id="seg-slits">
+          <button class="seg-btn"        data-val="topOnly" type="button">Top only</button>
+          <button class="seg-btn active" data-val="both"    type="button">Both</button>
+          <button class="seg-btn"        data-val="botOnly" type="button">Bottom only</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Slit separation <span class="muted">d</span></label>
+        <div class="slider-row">
+          <input type="range" id="slider-d" min="4" max="25" step="0.5" value="12">
+          <span class="slider-val" id="val-d">12.0</span><span class="slider-unit">mm</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Slit width <span class="muted">a</span></label>
+        <div class="slider-row">
+          <input type="range" id="slider-a" min="0.4" max="3.0" step="0.1" value="1.0">
+          <span class="slider-val" id="val-a">1.0</span><span class="slider-unit">mm</span>
+        </div>
+      </div>
+
+      <div class="control-group" id="lambda-group">
+        <label>Wavelength <span class="muted">λ</span></label>
+        <div class="slider-row">
+          <input type="range" id="slider-lambda" min="1" max="6" step="0.1" value="2.0">
+          <span class="slider-val" id="val-lambda">2.0</span><span class="slider-unit">mm</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Screen distance <span class="muted">L</span></label>
+        <div class="slider-row">
+          <input type="range" id="slider-L" min="40" max="156" step="1" value="110">
+          <span class="slider-val" id="val-L">110</span><span class="slider-unit">mm</span>
+        </div>
+      </div>
+
+      <div class="control-group" id="overlays-group">
+        <label>Show / hide</label>
+        <div class="vector-toggles">
+          <button class="vec-btn"        id="btn-deriv"  type="button">
+            <span class="vec-dot" style="background:#e0a93a"></span>Derivation triangle
+          </button>
+          <button class="vec-btn"        id="btn-fringes" type="button">
+            <span class="vec-dot" style="background:#5b8def"></span>Fringe markers on screen
+          </button>
+          <button class="vec-btn active" id="btn-probe"  type="button">
+            <span class="vec-dot" style="background:#0d9488"></span>Cursor probe
+          </button>
+        </div>
+      </div>
+
+      <div class="control-group" id="particle-controls" style="display:none;">
+        <label>Particle controls</label>
+        <div class="slider-row">
+          <input type="range" id="slider-rate" min="10" max="400" step="5" value="100">
+          <span class="slider-val" id="val-rate">100</span><span class="slider-unit">/s</span>
+        </div>
+        <div class="auto-row" style="margin-top:0.5rem">
+          <button id="btn-clear" class="play-btn ghost" type="button">⟲ Clear screen</button>
+        </div>
+        <div class="vector-toggles" id="bullets-toggles" style="display:none; margin-top:0.5rem">
+          <button class="vec-btn active" id="btn-ricochet" type="button">
+            <span class="vec-dot" style="background:#facc15"></span>Slit edge ricochet
+          </button>
+        </div>
+        <div class="vector-toggles" id="electron-toggles" style="display:none; margin-top:0.5rem">
+          <button class="vec-btn" id="btn-detector" type="button">
+            <span class="vec-dot" style="background:#ef4444"></span>Which-path detector
+          </button>
+          <button class="vec-btn" id="btn-histogram" type="button">
+            <span class="vec-dot" style="background:#facc15"></span>Show histogram
+          </button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Animation</label>
+        <div class="auto-row">
+          <button id="btn-play"  class="play-btn" type="button">▶ Play</button>
+          <button id="btn-reset" class="play-btn ghost"   type="button">⟲ Reset</button>
+        </div>
+        <div class="slider-row" style="margin-top:0.5rem">
+          <input type="range" id="slider-speed" min="0.1" max="2.0" step="0.05" value="1.0">
+          <span class="slider-val" id="val-speed">1.00</span><span class="slider-unit">×</span>
+        </div>
+      </div>
+
+      <div class="explain-card" id="readout">
+        <div class="readout-hd">Geometry</div>
+        <div class="readout-row"><span>Δy = λL/d</span><span id="rd-dy">—</span></div>
+        <div class="readout-row"><span>1st-order θ</span><span id="rd-th1">—</span></div>
+      </div>
+
+      <div class="explain-card" id="readout-deriv" style="display:none;">
+        <div class="readout-hd">Derivation point P</div>
+        <div class="readout-row"><span>y</span><span id="rd-y">—</span></div>
+        <div class="readout-row"><span>θ</span><span id="rd-th">—</span></div>
+        <div class="readout-row"><span>p = d sin θ</span><span id="rd-p">—</span></div>
+        <div class="readout-row"><span>p / λ</span><span id="rd-pl">—</span></div>
+        <div class="readout-row"><span>order m</span><span id="rd-m">—</span></div>
+        <div class="readout-row"><span>small-angle d·y/L</span><span id="rd-papp">—</span></div>
+        <div class="auto-row" style="margin-top:0.5rem">
+          <button id="btn-snap" class="play-btn playing" type="button">Snap to fringe</button>
+        </div>
+      </div>
+
+      <div class="explain-card" id="readout-particles" style="display:none;">
+        <div class="readout-hd">Hits</div>
+        <div class="readout-row"><span>Total</span><span id="rd-hits">0</span></div>
+        <div class="readout-row"><span>Rate</span><span id="rd-rate">—</span></div>
+      </div>
+
+      <div class="explain-card" id="readout-probe" style="display:block;">
+        <div class="readout-hd">Cursor probe</div>
+        <div class="readout-row"><span>Position</span><span id="rd-pos">—</span></div>
+        <div class="readout-row"><span>r₁</span><span id="rd-r1">—</span></div>
+        <div class="readout-row"><span>r₂</span><span id="rd-r2">—</span></div>
+        <div class="readout-row"><span>p</span><span id="rd-pd">—</span></div>
+        <div class="readout-row"><span>Verdict</span><span id="rd-verd">—</span></div>
+      </div>
+
+    </aside>
+
+    <section class="panel visual-panel">
+      <div class="canvas-wrap">
+        <canvas id="wave-canvas" width="960" height="600"
+                aria-label="Top-down view of double slit interference"></canvas>
+        <div class="scene-note">Hover the field to probe · drag P on the screen for the derivation triangle</div>
+      </div>
+    </section>
+  </section>
+</main>
+
+<script src="script.js"></script>
+</body>
+</html>

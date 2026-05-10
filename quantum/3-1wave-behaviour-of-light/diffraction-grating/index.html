@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Diffraction Grating</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../../index.html">← Back to Main Menu</a>
+      <p class="eyebrow">SACE Stage 2 Physics — Light &amp; Atoms 3.1</p>
+      <h1>Diffraction Grating</h1>
+      <p class="intro">
+        N evenly-spaced slits, all illuminated in step by a plane wave. At angles where
+        every adjacent pair shares a path difference of <em>mλ</em> the waves all conspire
+        — a sharp principal maximum. The condition <em>d sin θ = mλ</em> is unchanged from
+        the double slit; what changes is how cleanly each maximum stands out as N grows,
+        and — with white light — that each order spreads into a spectrum.
+      </p>
+    </div>
+  </section>
+
+  <section class="layout">
+    <aside class="panel controls">
+
+      <div class="control-group">
+        <label>Mode</label>
+        <div class="seg-control cols-2" id="seg-mode">
+          <button class="seg-btn active" data-val="mono"  type="button">Monochromatic</button>
+          <button class="seg-btn"        data-val="white" type="button">White light</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Number of slits <span class="muted">N</span></label>
+        <div class="slider-row">
+          <input type="range" id="slider-N" min="2" max="40" step="1" value="6">
+          <span class="slider-val" id="val-N">6</span><span class="slider-unit">slits</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Slit separation <span class="muted">d</span></label>
+        <div class="slider-row">
+          <input type="range" id="slider-d" min="3" max="18" step="0.5" value="8">
+          <span class="slider-val" id="val-d">8.0</span><span class="slider-unit" id="unit-d">mm</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Slit width <span class="muted">a</span></label>
+        <div class="slider-row">
+          <input type="range" id="slider-a" min="0.3" max="3.0" step="0.1" value="0.6">
+          <span class="slider-val" id="val-a">0.6</span><span class="slider-unit" id="unit-a">mm</span>
+        </div>
+      </div>
+
+      <div class="control-group" id="lambda-group">
+        <label>Wavelength <span class="muted">λ</span></label>
+        <div class="slider-row">
+          <input type="range" id="slider-lambda" min="0.8" max="2.4" step="0.05" value="1.4">
+          <span class="slider-val" id="val-lambda">1.40</span><span class="slider-unit" id="unit-lambda">mm</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Screen distance <span class="muted">L</span></label>
+        <div class="slider-row">
+          <input type="range" id="slider-L" min="50" max="156" step="1" value="130">
+          <span class="slider-val" id="val-L">130</span><span class="slider-unit" id="unit-L">mm</span>
+        </div>
+      </div>
+
+      <div class="control-group" id="overlays-group">
+        <label>Show / hide</label>
+        <div class="vector-toggles">
+          <button class="vec-btn"        id="btn-light" type="button">
+            <span class="vec-dot" style="background:#facc15;border:1px solid #c0a712"></span>Light mode (for projection)
+          </button>
+          <button class="vec-btn"        id="btn-real" type="button">
+            <span class="vec-dot" style="background:#a78bfa"></span>Actual distances
+          </button>
+          <button class="vec-btn"        id="btn-orders" type="button">
+            <span class="vec-dot" style="background:#5b8def"></span>Order markers (m)
+          </button>
+          <button class="vec-btn"        id="btn-deriv"  type="button">
+            <span class="vec-dot" style="background:#e0a93a"></span>Derivation triangle
+          </button>
+          <button class="vec-btn active" id="btn-probe"  type="button">
+            <span class="vec-dot" style="background:#0d9488"></span>Cursor probe
+          </button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Animation</label>
+        <div class="auto-row">
+          <button id="btn-play"  class="play-btn" type="button">▶ Play</button>
+          <button id="btn-reset" class="play-btn ghost" type="button">⟲ Reset</button>
+        </div>
+        <div class="slider-row" style="margin-top:0.5rem">
+          <input type="range" id="slider-speed" min="0.1" max="2.0" step="0.05" value="1.0">
+          <span class="slider-val" id="val-speed">1.00</span><span class="slider-unit">×</span>
+        </div>
+      </div>
+
+      <div class="explain-card" id="readout">
+        <div class="readout-hd">Geometry</div>
+        <div class="readout-row"><span>m=1 angle</span><span id="rd-th1">—</span></div>
+        <div class="readout-row"><span>m=1 Δy</span><span id="rd-dy">—</span></div>
+        <div class="readout-row"><span>highest m</span><span id="rd-mmax">—</span></div>
+      </div>
+
+      <div class="explain-card" id="readout-deriv" style="display:none;">
+        <div class="readout-hd">Derivation point P</div>
+        <div class="readout-row"><span>y</span><span id="rd-y">—</span></div>
+        <div class="readout-row"><span>θ</span><span id="rd-th">—</span></div>
+        <div class="readout-row"><span>p = d sin θ</span><span id="rd-p">—</span></div>
+        <div class="readout-row"><span>p / λ</span><span id="rd-pl">—</span></div>
+        <div class="readout-row"><span>order m</span><span id="rd-m">—</span></div>
+        <div class="auto-row" style="margin-top:0.5rem">
+          <button id="btn-snap" class="play-btn playing" type="button">Snap to fringe</button>
+        </div>
+      </div>
+
+      <div class="explain-card" id="readout-probe">
+        <div class="readout-hd">Cursor probe</div>
+        <div class="readout-row"><span>Position</span><span id="rd-pos">—</span></div>
+        <div class="readout-row"><span>θ</span><span id="rd-pth">—</span></div>
+        <div class="readout-row"><span>p / λ</span><span id="rd-ppl">—</span></div>
+        <div class="readout-row"><span>Verdict</span><span id="rd-verd">—</span></div>
+      </div>
+
+    </aside>
+
+    <section class="panel visual-panel">
+      <div class="canvas-wrap">
+        <canvas id="wave-canvas" width="960" height="600"
+                aria-label="Top-down view of N-slit diffraction grating"></canvas>
+        <div class="scene-note">Hover the field to probe · drag P on the screen for the derivation triangle</div>
+      </div>
+    </section>
+  </section>
+</main>
+
+<script src="script.js"></script>
+</body>
+</html>
