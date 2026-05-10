@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Polarisation</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../../index.html">← Back to Main Menu</a>
+      <p class="eyebrow">SACE Stage 2 Physics — Light &amp; Atoms 3.1</p>
+      <h1>Polarisation</h1>
+      <p class="intro">
+        Unpolarised light has its electric field oscillating in every direction perpendicular to the beam.
+        A linear polariser only lets through the component along its transmission axis, dropping the intensity to
+        <em>I₀ / 2</em>. After that, each further polariser applies Malus's Law:
+        <em>I = I_in cos²Δθ</em>, where Δθ is measured between adjacent axes.
+        Switch filters on, rotate them, and see what comes out the other end.
+      </p>
+    </div>
+  </section>
+
+  <section class="layout">
+    <aside class="panel controls">
+
+      <div class="control-group">
+        <label>Filters</label>
+
+        <div class="pol-slot" id="slot-1" data-i="0">
+          <div class="pol-slot-title">
+            <span class="pol-slot-dot" style="background:#f59e0b"></span>Filter 1
+          </div>
+          <input type="range" class="pol-angle" min="-90" max="90" step="1" value="0">
+          <div class="pol-slot-row" style="grid-column: 2 / -1;">
+            <span class="slider-unit">θ₁ =</span>
+            <span class="slider-val pol-angle-val">0</span>
+            <span class="slider-unit">°</span>
+            <span class="slider-unit" style="margin-left:auto">T</span>
+            <span class="slider-val pol-cos-val">0.50</span>
+          </div>
+          <div class="cos-bar" style="grid-column: 1 / -1;"><div class="pol-cos-bar"></div></div>
+        </div>
+
+        <div class="pol-slot" id="slot-2" data-i="1" style="display:none;">
+          <div class="pol-slot-title">
+            <span class="pol-slot-dot" style="background:#5b8def"></span>Filter 2
+          </div>
+          <input type="range" class="pol-angle" min="-90" max="90" step="1" value="0">
+          <div class="pol-slot-row" style="grid-column: 2 / -1;">
+            <span class="slider-unit">θ₂ =</span>
+            <span class="slider-val pol-angle-val">0</span>
+            <span class="slider-unit">°</span>
+            <span class="slider-unit" style="margin-left:auto">T</span>
+            <span class="slider-val pol-cos-val">—</span>
+          </div>
+          <div class="cos-bar" style="grid-column: 1 / -1;"><div class="pol-cos-bar"></div></div>
+        </div>
+
+        <div class="pol-slot" id="slot-3" data-i="2" style="display:none;">
+          <div class="pol-slot-title">
+            <span class="pol-slot-dot" style="background:#ef4444"></span>Filter 3
+          </div>
+          <input type="range" class="pol-angle" min="-90" max="90" step="1" value="0">
+          <div class="pol-slot-row" style="grid-column: 2 / -1;">
+            <span class="slider-unit">θ₃ =</span>
+            <span class="slider-val pol-angle-val">0</span>
+            <span class="slider-unit">°</span>
+            <span class="slider-unit" style="margin-left:auto">T</span>
+            <span class="slider-val pol-cos-val">—</span>
+          </div>
+          <div class="cos-bar" style="grid-column: 1 / -1;"><div class="pol-cos-bar"></div></div>
+        </div>
+
+        <div class="auto-row" style="margin-top:0.4rem">
+          <button id="btn-add"    class="play-btn" type="button">+ Add filter</button>
+          <button id="btn-remove" class="play-btn ghost" type="button" style="display:none;">− Remove filter</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Show / hide</label>
+        <div class="vector-toggles">
+          <button class="vec-btn" id="btn-arrows" type="button">
+            <span class="vec-dot" style="background:#fff3c2"></span>E-field arrows
+          </button>
+          <button class="vec-btn active" id="btn-axes" type="button">
+            <span class="vec-dot" style="background:#facc15"></span>Transmission-axis lines
+          </button>
+          <button class="vec-btn active" id="btn-labels" type="button">
+            <span class="vec-dot" style="background:#a78bfa"></span>Intensity labels between plates
+          </button>
+          <button class="vec-btn active" id="btn-snap" type="button">
+            <span class="vec-dot" style="background:#0d9488"></span>Snap angles to 15°
+          </button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Animation</label>
+        <div class="auto-row">
+          <button id="btn-play"  class="play-btn" type="button">▶ Play</button>
+          <button id="btn-reset" class="play-btn ghost"   type="button">⟲ Reset</button>
+        </div>
+        <div class="slider-row" style="margin-top:0.5rem">
+          <input type="range" id="slider-speed" min="0.1" max="2.0" step="0.05" value="1.0">
+          <span class="slider-val" id="val-speed">1.00</span><span class="slider-unit">×</span>
+        </div>
+      </div>
+
+      <div class="explain-card">
+        <div class="readout-hd">Transmitted intensity</div>
+        <div class="readout-row"><span>I_out / I₀</span><span id="rd-iout">—</span></div>
+        <div class="readout-row"><span>Final polarisation</span><span id="rd-polax">—</span></div>
+      </div>
+
+    </aside>
+
+    <section class="panel visual-panel">
+      <div class="canvas-wrap">
+        <canvas id="wave-canvas" width="960" height="600"
+                aria-label="Side view of light passing through up to three polarisers"></canvas>
+        <div class="scene-note">Drag a polariser disc to rotate · or use the angle sliders</div>
+      </div>
+    </section>
+  </section>
+</main>
+
+<script src="script.js"></script>
+</body>
+</html>
