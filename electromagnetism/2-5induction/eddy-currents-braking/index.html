@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Eddy Currents &amp; Magnetic Braking</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../../index.html">← Back to Main Menu</a>
+      <p class="eyebrow">SACE Stage 2 Physics — Electricity &amp; Magnetism 2.5</p>
+      <h1>Eddy Currents &amp; Magnetic Braking</h1>
+      <p class="intro">
+        Drop a conducting plate through a magnet's gap and the changing flux
+        induces swirling <em>eddy currents</em>. By Lenz's law those currents
+        feel a force that opposes the motion — the plate brakes. Compare two
+        plates side-by-side, slot one to break the current loops, or sweep a
+        coin over a metal-detector coil and watch the signal spike.
+      </p>
+    </div>
+  </section>
+
+  <section class="layout">
+    <aside class="panel controls">
+
+      <div class="control-group">
+        <label>Mode</label>
+        <div class="seg-control cols-2" id="seg-mode">
+          <button class="seg-btn active" data-val="guillotine" type="button">Guillotine</button>
+          <button class="seg-btn"        data-val="detector"   type="button">Metal&nbsp;detector</button>
+        </div>
+      </div>
+
+      <!-- Guillotine controls --------------------------------- -->
+      <div class="mode-block" data-mode="guillotine">
+
+        <div class="control-group">
+          <label>Magnetic field <span class="muted">B</span></label>
+          <div class="slider-row">
+            <input type="range" id="slider-B" min="0" max="2.4" step="0.01" value="1.20">
+            <span class="slider-val" id="val-B">1.20</span><span class="slider-unit">T</span>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label>Plate material</label>
+          <div class="seg-control cols-4" id="seg-material">
+            <button class="seg-btn"        data-val="cu"      type="button">Copper</button>
+            <button class="seg-btn active" data-val="al"      type="button">Aluminium</button>
+            <button class="seg-btn"        data-val="brass"   type="button">Brass</button>
+            <button class="seg-btn"        data-val="plastic" type="button">Plastic</button>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label>Right plate</label>
+          <div class="seg-control cols-2" id="seg-slot">
+            <button class="seg-btn active" data-val="solid"   type="button">Solid</button>
+            <button class="seg-btn"        data-val="slotted" type="button">Slotted</button>
+          </div>
+          <p class="hint">Slots cut up the eddy-current loops.</p>
+        </div>
+
+        <div class="control-group">
+          <label>Show / hide</label>
+          <div class="vector-toggles">
+            <button class="vec-btn active" id="btn-eddies" type="button">
+              <span class="vec-dot" style="background:#f59e0b"></span>Eddy currents
+            </button>
+            <button class="vec-btn active" id="btn-fbrake" type="button">
+              <span class="vec-dot" style="background:#15803d"></span>Braking force
+            </button>
+            <button class="vec-btn" id="btn-fieldarrows" type="button">
+              <span class="vec-dot" style="background:#6366f1"></span>Field arrows
+            </button>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label>Run</label>
+          <div class="auto-row">
+            <button id="btn-drop"  class="play-btn" type="button">▶ Drop</button>
+            <button id="btn-reset" class="play-btn ghost" type="button">⟲ Reset</button>
+          </div>
+          <div class="auto-row" style="margin-top:0.5rem">
+            <button id="btn-slowmo" class="play-btn" type="button">Slow-mo&nbsp;×0.1</button>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label>v&nbsp;(t)&nbsp;<span class="muted">— speed of each plate</span></label>
+          <canvas id="v-graph" width="320" height="140" class="phi-graph"></canvas>
+          <div class="legend-row">
+            <span class="legend-chip"><span class="lc-dot" style="background:#9ca3af"></span>Free fall</span>
+            <span class="legend-chip"><span class="lc-dot" style="background:#dc2626"></span>Braked</span>
+          </div>
+        </div>
+
+        <div class="explain-card" id="readout-g">
+          <div class="readout-hd">Live values</div>
+          <div class="readout-row"><span>v (free)</span><span id="rd-vf">0.00 m/s</span></div>
+          <div class="readout-row"><span>v (braked)</span><span id="rd-vb">0.00 m/s</span></div>
+          <div class="readout-row"><span>ε (right)</span><span id="rd-emf">0 mV</span></div>
+          <div class="readout-row"><span>F<sub>brake</sub></span><span id="rd-fb">0 N</span></div>
+        </div>
+      </div>
+
+      <!-- Detector controls ----------------------------------- -->
+      <div class="mode-block" data-mode="detector" hidden>
+
+        <div class="control-group">
+          <label>Drive frequency <span class="muted">f</span></label>
+          <div class="slider-row">
+            <input type="range" id="slider-freq" min="50" max="300" step="5" value="100">
+            <span class="slider-val" id="val-freq">100</span><span class="slider-unit">Hz</span>
+          </div>
+          <p class="hint">Animated at ×0.02 speed so the cycle is visible.</p>
+        </div>
+
+        <div class="control-group">
+          <label>Person carrying</label>
+          <div class="seg-control cols-3" id="seg-target">
+            <button class="seg-btn active" data-val="keys"    type="button">Keys</button>
+            <button class="seg-btn"        data-val="coin"    type="button">Coin</button>
+            <button class="seg-btn"        data-val="nothing" type="button">Nothing</button>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label>Walk</label>
+          <div class="auto-row">
+            <button id="btn-walk"  class="play-btn" type="button">Auto-walk</button>
+            <button id="btn-audio" class="play-btn ghost" type="button">Sound off</button>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label>Signal strength</label>
+          <canvas id="meter" width="320" height="48" class="phi-graph"></canvas>
+        </div>
+
+        <div class="control-group">
+          <label>Coil EMF <span class="muted">ε(t)</span></label>
+          <canvas id="emf-graph" width="320" height="120" class="phi-graph"></canvas>
+          <div class="vector-toggles" style="margin-top:0.4rem">
+            <button class="vec-btn" id="btn-show-indB" type="button">
+              <span class="vec-dot" style="background:#15803d"></span>Overlay B<sub>ind</sub>(t)
+            </button>
+          </div>
+        </div>
+
+        <div class="explain-card">
+          <div class="readout-hd">How it works</div>
+          The gate's transmit coil makes an oscillating B field across the
+          walkway. As metal moves through, the changing flux induces eddy
+          currents in it (<em>Faraday</em>). Those currents make their own
+          field, opposing the change (<em>Lenz</em>) — and that reaction is
+          what the receive coil reads as a signal. Drag the person, or hit
+          Auto-walk.
+        </div>
+      </div>
+
+    </aside>
+
+    <section class="panel visual-panel">
+      <div class="canvas-wrap">
+        <canvas id="scene" class="scene"></canvas>
+        <div id="three-root" class="three-root" hidden aria-label="Airport metal-detector gate"></div>
+        <div id="inset-panel" class="inset-panel" hidden>
+          <div class="inset-title">Induced field on metal</div>
+          <canvas id="inset-canvas" class="inset-canvas"></canvas>
+        </div>
+        <div class="scene-note" id="scene-note">Press <strong>▶ Drop</strong> · drag a plate to reposition</div>
+      </div>
+    </section>
+  </section>
+</main>
+
+<script src="../../../vendor/three/three.min.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
