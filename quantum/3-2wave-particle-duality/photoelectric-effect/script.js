@@ -58,6 +58,7 @@ const state = {
   showKEBars: false,
 
   lampOn: true,
+  lightMode: false,        // false = dark canvas (default), true = pale for projection
   t: 0,
   photonAccum: 0,
 
@@ -66,6 +67,60 @@ const state = {
 
   current: 0,    // smoothed display value (µA-equivalent units)
 };
+
+// ---- Theme (dark vs projection-friendly light) -----------------------------
+// Lamp colour (beam tint, photon packets) is *not* themed — it's an
+// experimental variable and must look the same regardless.
+
+const THEME = {};
+function applyTheme() {
+  if (state.lightMode) {
+    THEME.bg              = "#f5efde";
+    THEME.ink             = "#1c2738";
+    THEME.muted           = "#5a6a7d";
+    THEME.tubeStroke      = "rgba(28,39,56,0.35)";
+    THEME.tubeFill        = "rgba(28,39,56,0.04)";
+    THEME.tubeHighlight   = "rgba(28,39,56,0.10)";
+    THEME.plateMetal      = "#8a96a3";
+    THEME.plateStroke     = "#1f2937";
+    THEME.wire            = "#3a4a5e";
+    THEME.ammeterFill     = "#fff6dc";
+    THEME.ammeterStroke   = "#3a4a5e";
+    THEME.ammeterLetter   = "#8a5a0a";
+    THEME.readoutBoxFill  = "#1c2738";
+    THEME.readoutBoxText  = "#ffd866";
+    THEME.battery         = "#1c2738";
+    THEME.lampBody        = "#c8cfd6";
+    THEME.lampStroke      = "#3a4a5e";
+    THEME.lampSlit        = "#f5efde";
+    THEME.electron        = "#1a4b8a";
+    THEME.keBar           = "#0d7a4a";
+    THEME.keBarTrack      = "rgba(13,122,74,0.22)";
+  } else {
+    THEME.bg              = "#0a1628";
+    THEME.ink             = "#cfdce8";
+    THEME.muted           = "#7d93aa";
+    THEME.tubeStroke      = "rgba(180,210,235,0.35)";
+    THEME.tubeFill        = "rgba(140,180,220,0.04)";
+    THEME.tubeHighlight   = "rgba(255,255,255,0.07)";
+    THEME.plateMetal      = METAL_COLOR;
+    THEME.plateStroke     = "#1f2937";
+    THEME.wire            = "#7c93aa";
+    THEME.ammeterFill     = "#101a2c";
+    THEME.ammeterStroke   = "#94a3b8";
+    THEME.ammeterLetter   = "#fde68a";
+    THEME.readoutBoxFill  = "#0a1628";
+    THEME.readoutBoxText  = "#fde68a";
+    THEME.battery         = "#cbd5e1";
+    THEME.lampBody        = "#1c2738";
+    THEME.lampStroke      = "#4a5568";
+    THEME.lampSlit        = "#0a1628";
+    THEME.electron        = "#5dd1ff";
+    THEME.keBar           = "#34d399";
+    THEME.keBarTrack      = "rgba(52,211,153,0.25)";
+  }
+}
+applyTheme();
 
 // ---- Wavelength → RGB ------------------------------------------------------
 
@@ -199,8 +254,8 @@ function drawLamp() {
   const rgb = wavelengthToRGB(state.lambda);
   const on = state.lampOn;
   // body
-  ctx.fillStyle = "#1c2738";
-  ctx.strokeStyle = "#4a5568";
+  ctx.fillStyle = THEME.lampBody;
+  ctx.strokeStyle = THEME.lampStroke;
   ctx.lineWidth = 1.5;
   roundRect(LAMP.x, LAMP.y, LAMP.w, LAMP.h, 8, true, true);
   if (on) {
@@ -215,28 +270,28 @@ function drawLamp() {
     ctx.fillRect(LAMP.x, LAMP.y - 30, LAMP.w + 80, LAMP.h + 60);
   }
   // slit/aperture
-  ctx.fillStyle = "#0a1628";
+  ctx.fillStyle = THEME.lampSlit;
   ctx.fillRect(LAMP.x + LAMP.w - 6, LAMP.y + LAMP.h / 2 - 30, 8, 60);
   if (on) {
     ctx.fillStyle = rgbStr(rgb, 0.85);
     ctx.fillRect(LAMP.x + LAMP.w - 4, LAMP.y + LAMP.h / 2 - 24, 4, 48);
   }
   // labels — placed clear of the glow gradient
-  ctx.fillStyle = "#9fb4c8";
+  ctx.fillStyle = THEME.muted;
   ctx.font = "600 12px 'Segoe UI', sans-serif";
   ctx.textAlign = "center";
   ctx.fillText("Lamp", LAMP.x + LAMP.w / 2, LAMP.y - 14);
   // wavelength readout (below the glow region)
   const cx = LAMP.x + LAMP.w / 2;
   const yReadout = LAMP.y + LAMP.h + 42;
-  ctx.fillStyle = "#cfdce8";
+  ctx.fillStyle = THEME.ink;
   ctx.font = "700 13px 'Segoe UI', sans-serif";
   ctx.fillText(`λ = ${state.lambda} nm`, cx, yReadout);
   // band indicator
   let band = "visible";
   if (state.lambda < 380) band = "ultraviolet";
   else if (state.lambda > 700) band = "infrared";
-  ctx.fillStyle = "#7d93aa";
+  ctx.fillStyle = THEME.muted;
   ctx.font = "italic 500 11px 'Segoe UI', sans-serif";
   ctx.fillText(band, cx, yReadout + 16);
 }
@@ -254,12 +309,12 @@ function drawBeam() {
 
 function drawTube() {
   ctx.save();
-  ctx.strokeStyle = "rgba(180,210,235,0.35)";
+  ctx.strokeStyle = THEME.tubeStroke;
   ctx.lineWidth = 2;
-  ctx.fillStyle = "rgba(140,180,220,0.04)";
+  ctx.fillStyle = THEME.tubeFill;
   roundRect(TUBE.x0, TUBE.y0, TUBE.x1 - TUBE.x0, TUBE.y1 - TUBE.y0, 28, true, true);
   // glass highlight
-  ctx.strokeStyle = "rgba(255,255,255,0.07)";
+  ctx.strokeStyle = THEME.tubeHighlight;
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(TUBE.x0 + 30, TUBE.y0 + 10);
@@ -267,7 +322,7 @@ function drawTube() {
   ctx.stroke();
   ctx.restore();
   // vacuum label
-  ctx.fillStyle = "rgba(160,190,220,0.4)";
+  ctx.fillStyle = THEME.muted;
   ctx.font = "italic 500 11px 'Segoe UI', sans-serif";
   ctx.textAlign = "center";
   ctx.fillText("evacuated", (TUBE.x0 + TUBE.x1) / 2, TUBE.y0 + 22);
@@ -275,31 +330,31 @@ function drawTube() {
 
 function drawPlates() {
   // Cathode
-  ctx.fillStyle = METAL_COLOR;
+  ctx.fillStyle = THEME.plateMetal;
   ctx.fillRect(CATHODE.x, CATHODE.y0, CATHODE.w, CATHODE.y1 - CATHODE.y0);
-  ctx.strokeStyle = "#1f2937";
+  ctx.strokeStyle = THEME.plateStroke;
   ctx.lineWidth = 1;
   ctx.strokeRect(CATHODE.x, CATHODE.y0, CATHODE.w, CATHODE.y1 - CATHODE.y0);
 
-  ctx.fillStyle = "#cfdce8";
+  ctx.fillStyle = THEME.ink;
   ctx.font = "700 13px 'Segoe UI', sans-serif";
   ctx.textAlign = "center";
   ctx.fillText("Cathode", CATHODE.x + 6, CATHODE.y0 - 22);
-  ctx.fillStyle = "#9fb4c8";
+  ctx.fillStyle = THEME.muted;
   ctx.font = "600 11px 'Segoe UI', sans-serif";
   ctx.fillText(METALS[state.metal].label, CATHODE.x + 6, CATHODE.y0 - 8);
 
   // Anode (collector)
-  ctx.fillStyle = METAL_COLOR;
+  ctx.fillStyle = THEME.plateMetal;
   ctx.fillRect(ANODE.x, ANODE.y0, ANODE.w, ANODE.y1 - ANODE.y0);
   ctx.strokeRect(ANODE.x, ANODE.y0, ANODE.w, ANODE.y1 - ANODE.y0);
-  ctx.fillStyle = "#cfdce8";
+  ctx.fillStyle = THEME.ink;
   ctx.font = "700 13px 'Segoe UI', sans-serif";
   ctx.fillText("Collector", ANODE.x + 6, ANODE.y0 - 14);
 }
 
 function drawCircuit() {
-  ctx.strokeStyle = "#7c93aa";
+  ctx.strokeStyle = THEME.wire;
   ctx.lineWidth = 2;
   ctx.lineCap = "round";
 
@@ -311,21 +366,21 @@ function drawCircuit() {
   ctx.stroke();
 
   // Ammeter circle
-  ctx.fillStyle = "#101a2c";
+  ctx.fillStyle = THEME.ammeterFill;
   ctx.beginPath();
   ctx.arc(AMM.x, AMM.y, AMM.r, 0, Math.PI * 2);
   ctx.fill();
-  ctx.strokeStyle = "#94a3b8";
+  ctx.strokeStyle = THEME.ammeterStroke;
   ctx.lineWidth = 2;
   ctx.stroke();
-  ctx.fillStyle = "#fde68a";
+  ctx.fillStyle = THEME.ammeterLetter;
   ctx.font = "700 16px 'Segoe UI', sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText("A", AMM.x, AMM.y - 2);
 
   // Ammeter wire to battery left
-  ctx.strokeStyle = "#7c93aa";
+  ctx.strokeStyle = THEME.wire;
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(AMM.x + AMM.r, RAIL_Y);
@@ -340,7 +395,7 @@ function drawCircuit() {
   const longOnRight = V > 0;
   const noPolarity = Math.abs(V) < 0.05;
   // Draw plates
-  ctx.strokeStyle = "#cbd5e1";
+  ctx.strokeStyle = THEME.battery;
   ctx.lineCap = "butt";
   // Left plate (length depends on polarity)
   const leftLong = !longOnRight && !noPolarity;
@@ -357,7 +412,7 @@ function drawCircuit() {
   ctx.stroke();
   // + / - labels
   if (!noPolarity) {
-    ctx.fillStyle = "#cbd5e1";
+    ctx.fillStyle = THEME.battery;
     ctx.font = "700 13px 'Segoe UI', sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "alphabetic";
@@ -366,7 +421,7 @@ function drawCircuit() {
   }
 
   // Battery wire to anode
-  ctx.strokeStyle = "#7c93aa";
+  ctx.strokeStyle = THEME.wire;
   ctx.lineCap = "round";
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -376,7 +431,7 @@ function drawCircuit() {
   ctx.stroke();
 
   // Voltage label below battery
-  ctx.fillStyle = "#9fb4c8";
+  ctx.fillStyle = THEME.muted;
   ctx.font = "600 12px 'Segoe UI', sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
@@ -386,12 +441,12 @@ function drawCircuit() {
 
 function drawAmmeterReading() {
   const I = state.current;
-  // map 0..1 to 0..9.99 µA
+  // map 0..1 to 0..9.99 mA
   const reading = (I * 9.99);
-  ctx.fillStyle = "#0a1628";
+  ctx.fillStyle = THEME.readoutBoxFill;
   const bx = AMM.x - 44, by = AMM.y + AMM.r + 8, bw = 88, bh = 22;
   roundRect(bx, by, bw, bh, 5, true, false);
-  ctx.fillStyle = "#fde68a";
+  ctx.fillStyle = THEME.readoutBoxText;
   ctx.font = "700 13px 'Consolas', 'Courier New', monospace";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -427,7 +482,7 @@ function drawPhotons() {
 function drawElectrons() {
   if (!state.showElectrons) return;
   for (const e of state.electrons) {
-    ctx.fillStyle = "#5dd1ff";
+    ctx.fillStyle = THEME.electron;
     ctx.beginPath();
     ctx.arc(e.x, e.y, 3.8, 0, Math.PI * 2);
     ctx.fill();
@@ -437,9 +492,9 @@ function drawElectrons() {
       if (Emax > 0) {
         const f = Math.max(0, Math.min(1, e.KE / Emax));
         const barH = 18;
-        ctx.fillStyle = "rgba(52,211,153,0.25)";
+        ctx.fillStyle = THEME.keBarTrack;
         ctx.fillRect(e.x - 2, e.y - 22, 4, barH);
-        ctx.fillStyle = "#34d399";
+        ctx.fillStyle = THEME.keBar;
         ctx.fillRect(e.x - 2, e.y - 22 + (barH * (1 - f)), 4, barH * f);
       }
     }
@@ -486,7 +541,7 @@ function frame(now) {
 
   // Draw
   ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = "#0a1628";
+  ctx.fillStyle = THEME.bg;
   ctx.fillRect(0, 0, W, H);
 
   drawTube();
@@ -554,6 +609,13 @@ bindToggle("btn-photons", "showPhotons");
 bindToggle("btn-electrons", "showElectrons");
 bindToggle("btn-maxke", "maxKEOnly");
 bindToggle("btn-kebars", "showKEBars");
+
+// Light mode toggle — re-themes the canvas without clearing in-flight particles
+$("btn-light").addEventListener("click", () => {
+  state.lightMode = !state.lightMode;
+  $("btn-light").classList.toggle("active", state.lightMode);
+  applyTheme();
+});
 
 $("btn-lamp").addEventListener("click", () => {
   state.lampOn = !state.lampOn;
