@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Photoelectric Effect</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../../index.html">← Back to Main Menu</a>
+      <p class="eyebrow">SACE Stage 2 Physics — Light &amp; Atoms 3.2</p>
+      <h1>Photoelectric Effect</h1>
+      <p class="intro">
+        Light of wavelength <em>λ</em> shines on a metal cathode in an evacuated tube.
+        Depending on the sign and size of the voltage <em>V</em> between the plates,
+        electrons that escape the metal are either pulled across to the collector or
+        turned back before they get there. The ammeter reads the resulting current. Vary the lamp, vary the voltage, change the cathode metal, and write
+        down what you see.
+      </p>
+    </div>
+  </section>
+
+  <section class="layout">
+    <aside class="panel controls">
+
+      <div class="control-group">
+        <label>Lamp</label>
+        <div class="auto-row">
+          <button id="btn-lamp" class="play-btn playing" type="button">Light: ON</button>
+        </div>
+        <div class="slider-row" style="margin-top:0.55rem">
+          <input type="range" id="slider-lambda" min="200" max="700" step="1" value="450">
+          <span class="slider-val" id="val-lambda">450</span><span class="slider-unit">nm</span>
+        </div>
+        <div class="slider-row" style="margin-top:0.5rem">
+          <input type="range" id="slider-intensity" min="0" max="100" step="1" value="60">
+          <span class="slider-val" id="val-intensity">60</span><span class="slider-unit">%</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Cathode metal</label>
+        <select id="sel-metal" class="metal-select">
+          <option value="Cs">Caesium (Cs)</option>
+          <option value="Na">Sodium (Na)</option>
+          <option value="Ca">Calcium (Ca)</option>
+          <option value="Mg">Magnesium (Mg)</option>
+          <option value="Zn">Zinc (Zn)</option>
+          <option value="Cu">Copper (Cu)</option>
+          <option value="Unknown">Unknown</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label>Voltage between plates</label>
+        <div class="slider-row">
+          <input type="range" id="slider-V" min="-3.0" max="3.0" step="0.1" value="0.0">
+          <input type="number" id="num-V" class="num-input" min="-3.0" max="3.0" step="0.1" value="0.0">
+          <span class="slider-unit">V</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Show / hide</label>
+        <div class="vector-toggles">
+          <button class="vec-btn active" id="btn-photons" type="button">
+            <span class="vec-dot" style="background:#ffd86b"></span>Photons
+          </button>
+          <button class="vec-btn active" id="btn-electrons" type="button">
+            <span class="vec-dot" style="background:#5dd1ff"></span>Electrons
+          </button>
+          <button class="vec-btn" id="btn-maxke" type="button">
+            <span class="vec-dot" style="background:#a78bfa"></span>Max-KE electrons only
+          </button>
+          <button class="vec-btn" id="btn-kebars" type="button">
+            <span class="vec-dot" style="background:#34d399"></span>KE bars on electrons
+          </button>
+        </div>
+      </div>
+
+    </aside>
+
+    <section class="panel visual-panel">
+      <div class="canvas-wrap">
+        <canvas id="pe-canvas" width="960" height="600"
+                aria-label="Photoelectric effect apparatus: lamp, evacuated tube with cathode and collector, ammeter."></canvas>
+      </div>
+    </section>
+  </section>
+</main>
+
+<script src="script.js"></script>
+</body>
+</html>
