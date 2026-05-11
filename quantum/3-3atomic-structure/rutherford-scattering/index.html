@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rutherford Scattering</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../../index.html">← Back to Main Menu</a>
+      <p class="eyebrow">SACE Stage 2 Physics — Light &amp; Atoms 3.3</p>
+      <h1>Rutherford Scattering</h1>
+      <p class="intro">
+        A collimated beam of alpha particles is fired at a thin metal foil. A phosphor-coated
+        screen wraps around the foil and glows wherever an alpha lands. Switch the atomic model
+        between Thomson's plum pudding (positive charge spread through the whole atom) and
+        Rutherford's nuclear model (positive charge concentrated at a point) and compare the
+        glow patterns each predicts.
+      </p>
+    </div>
+  </section>
+
+  <section class="layout">
+    <aside class="panel controls">
+
+      <div class="control-group">
+        <label>Atomic model</label>
+        <div class="seg-control cols-2" id="seg-model">
+          <button class="seg-btn active" data-model="thomson" type="button">Thomson</button>
+          <button class="seg-btn" data-model="rutherford" type="button">Rutherford</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Target foil</label>
+        <select id="sel-target" class="metal-select">
+          <option value="Au">Gold (Z = 79)</option>
+          <option value="Ag">Silver (Z = 47)</option>
+          <option value="Cu">Copper (Z = 29)</option>
+          <option value="Al">Aluminium (Z = 13)</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label>Alpha energy</label>
+        <div class="slider-row">
+          <label for="slider-E" class="inline-lbl">E</label>
+          <input type="range" id="slider-E" min="1.0" max="8.0" step="0.1" value="5.0">
+          <span class="slider-val" id="val-E">5.0</span><span class="slider-unit">MeV</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Beam</label>
+        <div class="auto-row">
+          <button id="btn-play" class="play-btn" type="button">▶ Play</button>
+          <button id="btn-reset" class="play-btn ghost" type="button">⟲ Reset</button>
+        </div>
+        <div class="slider-row" style="margin-top:0.55rem">
+          <label for="slider-rate" class="inline-lbl">Rate</label>
+          <input type="range" id="slider-rate" min="1" max="40" step="1" value="12">
+          <span class="slider-val" id="val-rate">12</span><span class="slider-unit">α/s</span>
+        </div>
+        <div class="auto-row" style="margin-top:0.55rem">
+          <button id="btn-fire-one" class="play-btn ghost" type="button">Fire one α</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Show / hide</label>
+        <div class="vector-toggles">
+          <button class="vec-btn active" id="btn-trails" type="button">
+            <span class="vec-dot" style="background:#fde68a"></span>α trails
+          </button>
+          <button class="vec-btn active" id="btn-counts" type="button">
+            <span class="vec-dot" style="background:#7dd3fc"></span>Angle labels
+          </button>
+          <button class="vec-btn" id="btn-axis" type="button">
+            <span class="vec-dot" style="background:#a78bfa"></span>Beam axis
+          </button>
+        </div>
+      </div>
+
+      <div class="control-group readout-card">
+        <label>Counts</label>
+        <div class="readout-row"><span>Fired</span><span class="readout-val" id="r-fired">0</span></div>
+        <div class="readout-row"><span>Forward (θ &lt; 20°)</span><span class="readout-val" id="r-fwd">0 (0.0%)</span></div>
+        <div class="readout-row"><span>θ &gt; 90°</span><span class="readout-val" id="r-back90">0 (0.0%)</span></div>
+        <div class="readout-row"><span>θ &gt; 150°</span><span class="readout-val" id="r-back150">0 (0.0%)</span></div>
+      </div>
+
+    </aside>
+
+    <section class="panel visual-panel">
+      <div class="canvas-wrap" id="canvas-wrap">
+        <canvas id="rs-canvas" width="960" height="600"
+                aria-label="Top-down diagram of an alpha source firing into a metal foil, with a ring of detectors counting scattered alphas."></canvas>
+        <p class="scene-note">Diagrammatic. Back-scatter rate exaggerated so rare events appear within a sensible run.</p>
+      </div>
+    </section>
+  </section>
+</main>
+
+<script src="script.js"></script>
+</body>
+</html>
