@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Electron Diffraction</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../../index.html">← Back to Main Menu</a>
+      <p class="eyebrow">SACE Stage 2 Physics — Light &amp; Atoms 3.2</p>
+      <h1>Electron Diffraction</h1>
+      <p class="intro">
+        Electrons accelerated through a voltage <em>V</em> strike a thin polycrystalline target and
+        land on a phosphor screen a distance <em>L</em> behind it. Vary <em>V</em>, choose a target,
+        and watch where the electrons go.
+      </p>
+    </div>
+  </section>
+
+  <section class="layout">
+    <aside class="panel controls">
+
+      <div class="control-group">
+        <label>Beam</label>
+        <div class="auto-row">
+          <button id="btn-beam" class="play-btn" type="button">Beam: OFF</button>
+        </div>
+        <div class="slider-row" style="margin-top:0.55rem">
+          <label for="slider-V" class="inline-lbl">V</label>
+          <input type="range" id="slider-V" min="500" max="5000" step="100" value="3000">
+          <span class="slider-val" id="val-V">3000</span><span class="slider-unit">V</span>
+        </div>
+        <div class="slider-row" style="margin-top:0.4rem">
+          <label for="slider-rate" class="inline-lbl">Rate</label>
+          <input type="range" id="slider-rate" min="5" max="400" step="5" value="120">
+          <span class="slider-val" id="val-rate">120</span><span class="slider-unit">e⁻/s</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Target</label>
+        <select id="sel-target" class="metal-select">
+          <option value="graphite">Graphite (calibration)</option>
+          <option value="unknownA">Unknown A</option>
+          <option value="unknownB">Unknown B</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label>Mode</label>
+        <div class="seg-control cols-2" id="seg-mode">
+          <button class="seg-btn active" data-mode="single" type="button">Single electrons</button>
+          <button class="seg-btn" data-mode="continuous" type="button">Continuous</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Show / hide</label>
+        <div class="vector-toggles">
+          <button class="vec-btn" id="btn-scale" type="button">
+            <span class="vec-dot" style="background:#9fb4c8"></span>Radial scale
+          </button>
+          <button class="vec-btn" id="btn-light" type="button">
+            <span class="vec-dot" style="background:#fde68a"></span>Light mode (projection)
+          </button>
+        </div>
+        <div class="auto-row" style="margin-top:0.5rem">
+          <button id="btn-reset" class="play-btn ghost" type="button">⟲ Reset screen</button>
+        </div>
+      </div>
+
+      <div class="control-group spec-card">
+        <label>Apparatus</label>
+        <div class="spec-row"><span>Screen distance L</span><span class="spec-val">14.0 cm</span></div>
+        <div class="spec-row"><span>Screen diameter</span><span class="spec-val">10.0 cm</span></div>
+        <div class="spec-row" id="spec-d-row"><span>Graphite d-spacings</span>
+          <span class="spec-val">0.213 nm, 0.123 nm</span>
+        </div>
+      </div>
+
+    </aside>
+
+    <section class="panel visual-panel">
+      <div class="canvas-wrap">
+        <canvas id="ed-canvas" width="960" height="600"
+                aria-label="Electron diffraction phosphor screen, viewed end-on."></canvas>
+        <p class="scene-note">Each flash is one electron arriving. Change <em>V</em> and watch the pattern.</p>
+      </div>
+    </section>
+  </section>
+</main>
+
+<script src="script.js"></script>
+</body>
+</html>
