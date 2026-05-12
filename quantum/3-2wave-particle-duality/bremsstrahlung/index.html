@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bremsstrahlung</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../../index.html">← Back to Main Menu</a>
+      <p class="eyebrow">SACE Stage 2 Physics — Light &amp; Atoms 3.2</p>
+      <h1>Bremsstrahlung</h1>
+      <p class="intro">
+        A single electron, fired from a heated cathode through a chosen tube voltage, approaches a single
+        target atom. The atom's nucleus pulls the electron off its straight path; as the electron brakes,
+        an x-ray photon is emitted. Different incoming paths brake the electron by different amounts.
+        The spectrometer strip along the bottom sorts each emitted photon by its energy.
+      </p>
+    </div>
+  </section>
+
+  <section class="layout">
+    <aside class="panel controls">
+
+      <div class="control-group">
+        <label>Target atom</label>
+        <select id="sel-target" class="metal-select">
+          <option value="W">Tungsten (Z = 74)</option>
+          <option value="Mo">Molybdenum (Z = 42)</option>
+          <option value="Cu">Copper (Z = 29)</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label>Tube voltage</label>
+        <div class="slider-row">
+          <label for="slider-V" class="inline-lbl">V</label>
+          <input type="range" id="slider-V" min="20" max="150" step="1" value="80">
+          <span class="slider-val" id="val-V">80</span><span class="slider-unit">kV</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Beam</label>
+        <div class="auto-row">
+          <button id="btn-play" class="play-btn" type="button">▶ Play</button>
+          <button id="btn-reset" class="play-btn ghost" type="button">⟲ Reset</button>
+        </div>
+        <div class="slider-row" style="margin-top:0.55rem">
+          <label for="slider-rate" class="inline-lbl">Rate</label>
+          <input type="range" id="slider-rate" min="1" max="60" step="1" value="6">
+          <span class="slider-val" id="val-rate">6</span><span class="slider-unit">e⁻/s</span>
+        </div>
+        <div class="auto-row" style="margin-top:0.55rem">
+          <button id="btn-fire-one" class="play-btn ghost" type="button">Fire one e⁻</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Show / hide</label>
+        <div class="vector-toggles">
+          <button class="vec-btn active" id="btn-trails" type="button">
+            <span class="vec-dot" style="background:#fde68a"></span>Electron trails
+          </button>
+          <button class="vec-btn active" id="btn-photons" type="button">
+            <span class="vec-dot" style="background:#e0f2fe"></span>Photon trails
+          </button>
+          <button class="vec-btn active" id="btn-cutoff" type="button">
+            <span class="vec-dot" style="background:#f472b6"></span>Cutoff marker
+          </button>
+          <button class="vec-btn" id="btn-lambda" type="button">
+            <span class="vec-dot" style="background:#a78bfa"></span>λ axis (pm)
+          </button>
+        </div>
+      </div>
+
+      <div class="control-group readout-card">
+        <label>Counts</label>
+        <div class="readout-row"><span>Electrons fired</span><span class="readout-val" id="r-fired">0</span></div>
+        <div class="readout-row"><span>Tube voltage</span><span class="readout-val" id="r-V">80 kV</span></div>
+      </div>
+
+    </aside>
+
+    <section class="panel visual-panel">
+      <div class="canvas-wrap" id="canvas-wrap">
+        <canvas id="br-canvas" width="960" height="600"
+                aria-label="Top-down diagram of an electron gun firing single electrons at a single target atom, with a spectrometer strip along the bottom showing the photon energies emitted."></canvas>
+      </div>
+    </section>
+  </section>
+</main>
+
+<script src="script.js"></script>
+</body>
+</html>
