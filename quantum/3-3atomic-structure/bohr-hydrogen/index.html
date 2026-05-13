@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bohr Model of Hydrogen</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../../index.html">← Back to Main Menu</a>
+      <p class="eyebrow">SACE Stage 2 Physics — Light &amp; Atoms 3.3</p>
+      <h1>Bohr Model of Hydrogen</h1>
+      <p class="intro">
+        A single hydrogen atom, sitting in its ground state. The diagram shows the
+        allowed energy levels <em>E<sub>n</sub> = −13.6/n²</em> eV, packed up
+        against the ionisation line at the top. Grab the electron and drag it up
+        to a higher level to give it some energy; watch what happens next, and
+        watch the strip at the bottom.
+      </p>
+    </div>
+  </section>
+
+  <section class="layout">
+    <aside class="panel controls">
+
+      <div class="control-group">
+        <label>Mode</label>
+        <div class="seg-control cols-2" id="seg-mode">
+          <button class="seg-btn active" data-mode="emission" type="button">Emission</button>
+          <button class="seg-btn"        data-mode="absorption" type="button">Absorption</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Last transition</label>
+        <div class="readout-card" id="readout-card">
+          <div class="readout-row"><span class="readout-k">n<sub>i</sub> → n<sub>f</sub></span><span class="readout-v" id="rd-transition">—</span></div>
+          <div class="readout-row"><span class="readout-k">ΔE</span><span class="readout-v" id="rd-de">— <span class="readout-unit">eV</span></span></div>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Arrow order</label>
+        <div class="seg-control cols-2" id="seg-sort">
+          <button class="seg-btn active" data-sort="chrono" type="button">Chronological</button>
+          <button class="seg-btn"        data-sort="series" type="button">By series</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <div class="auto-row">
+          <button class="play-btn" id="btn-clear" type="button">Clear spectrum</button>
+        </div>
+        <div class="auto-row" style="margin-top:0.45rem">
+          <button class="play-btn ghost" id="btn-reset" type="button">Reset atom</button>
+        </div>
+      </div>
+
+    </aside>
+
+    <section class="panel visual-panel">
+      <div class="canvas-wrap">
+        <canvas id="bohr-canvas" width="960" height="600"
+                aria-label="Bohr model of hydrogen: energy-level diagram and spectrum strip."></canvas>
+      </div>
+    </section>
+  </section>
+</main>
+
+<script src="script.js"></script>
+</body>
+</html>
