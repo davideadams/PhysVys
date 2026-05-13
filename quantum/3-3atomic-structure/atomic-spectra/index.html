@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Atomic Spectra</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../../index.html">← Back to Main Menu</a>
+      <p class="eyebrow">SACE Stage 2 Physics — Light &amp; Atoms 3.3</p>
+      <h1>Atomic Spectra</h1>
+      <p class="intro">
+        Select an element to display its emission and absorption spectra across the
+        visible range. Scroll to zoom in, drag to pan, or use the preset buttons
+        to jump to a region of interest.
+      </p>
+    </div>
+  </section>
+
+  <section class="layout">
+    <aside class="panel controls">
+
+      <div class="control-group">
+        <label>Element</label>
+        <select id="sel-element" class="source-select"></select>
+      </div>
+
+      <div class="control-group">
+        <label>Show</label>
+        <div class="show-grid">
+          <button class="show-btn active" id="btn-emission"   type="button">Emission</button>
+          <button class="show-btn active" id="btn-absorption" type="button">Absorption</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Zoom presets</label>
+        <div class="preset-grid" id="preset-grid"></div>
+      </div>
+
+      <div class="control-group">
+        <label>Cursor</label>
+        <div class="readout-card">
+          <div class="readout-row">
+            <span class="readout-k">&#955;</span>
+            <span class="readout-v" id="rd-lambda">— <span class="readout-unit">nm</span></span>
+          </div>
+          <div class="readout-row">
+            <span class="readout-k">Range</span>
+            <span class="readout-v" id="rd-range">380–780 <span class="readout-unit">nm</span></span>
+          </div>
+        </div>
+      </div>
+
+    </aside>
+
+    <section class="panel visual-panel">
+      <div class="canvas-wrap">
+        <canvas id="spec-canvas" width="960" height="600"
+                aria-label="Atomic emission and absorption spectra."></canvas>
+      </div>
+    </section>
+  </section>
+</main>
+
+<script src="script.js"></script>
+</body>
+</html>
