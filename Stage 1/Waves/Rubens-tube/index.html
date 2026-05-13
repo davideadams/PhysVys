@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ruben's Tube</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../../index.html">&#8592; Back</a>
+      <p class="eyebrow">SACE Stage 1 Physics &#8212; Waves</p>
+      <h1>Ruben's Tube</h1>
+      <p class="intro">
+        A gas-filled tube with a row of small holes along the top. A speaker drives standing waves
+        inside; pressure antinodes push gas out faster, producing taller flames. Switch between
+        a tone generator, microphone input, or system audio to explore how different sources
+        excite the tube's resonant modes.
+      </p>
+    </div>
+  </section>
+
+  <section class="layout">
+    <aside class="panel controls">
+
+      <div class="control-group">
+        <label>View</label>
+        <div class="seg-control cols-2" id="seg-view">
+          <button class="seg-btn active" data-view="particles" type="button">Particles</button>
+          <button class="seg-btn" data-view="graph" type="button">Pressure</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Source</label>
+        <div class="seg-control cols-3" id="seg-source">
+          <button class="seg-btn active" data-source="tone" type="button">Tone</button>
+          <button class="seg-btn" data-source="mic" type="button">Mic</button>
+          <button class="seg-btn" data-source="system" type="button">System</button>
+        </div>
+      </div>
+
+      <!-- Tone controls -->
+      <div class="control-group" id="grp-tone">
+        <label>Frequency</label>
+        <div class="slider-row">
+          <label for="slider-freq" class="inline-lbl">f</label>
+          <input type="range" id="slider-freq" min="20" max="600" step="1" value="100">
+          <input type="number" id="val-freq" min="20" max="600" step="1" value="100" class="freq-box">
+          <span class="slider-unit">Hz</span>
+        </div>
+        <p class="hint" id="hint-modes">Resonances: &#8212;</p>
+        <div class="auto-row" style="margin-top:0.4rem">
+          <button id="btn-sound" class="play-btn" type="button">&#9654; Sound on</button>
+          <button id="btn-sweep" class="play-btn ghost" type="button">Sweep</button>
+        </div>
+      </div>
+
+      <!-- Mic / system audio controls -->
+      <div class="control-group" id="grp-audio" style="display:none">
+        <div class="auto-row">
+          <button id="btn-connect" class="play-btn" type="button">Connect</button>
+        </div>
+        <p class="hint" id="hint-audio"></p>
+        <div class="slider-row" style="margin-top:0.5rem">
+          <label for="slider-gain" class="inline-lbl">Gain</label>
+          <input type="range" id="slider-gain" min="1" max="30" step="0.5" value="8">
+          <span class="slider-val" id="val-gain">8</span><span class="slider-unit">&#215;</span>
+        </div>
+      </div>
+
+      <!-- Tube settings -->
+      <div class="control-group">
+        <label>Gas</label>
+        <select id="sel-gas" class="metal-select">
+          <option value="250">Propane &#8212; 250 m/s</option>
+          <option value="343">Air &#8212; 343 m/s</option>
+          <option value="446">Methane &#8212; 446 m/s</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label>Tube length</label>
+        <div class="slider-row">
+          <label for="slider-L" class="inline-lbl">L</label>
+          <input type="range" id="slider-L" min="0.5" max="3.0" step="0.05" value="1.5">
+          <span class="slider-val" id="val-L">1.50</span><span class="slider-unit">m</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Damping</label>
+        <div class="slider-row">
+          <label for="slider-Q" class="inline-lbl">Q</label>
+          <input type="range" id="slider-Q" min="2" max="40" step="1" value="12">
+          <span class="slider-val" id="val-Q">12</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Display</label>
+        <div class="auto-row">
+          <button id="btn-light" class="play-btn ghost" type="button">Light mode</button>
+        </div>
+      </div>
+
+      <div class="control-group readout-card">
+        <label>Readout</label>
+        <div class="readout-row"><span>Drive</span><span class="readout-val" id="r-drive">100 Hz</span></div>
+        <div class="readout-row"><span>Dominant mode</span><span class="readout-val" id="r-dominant">n = ?</span></div>
+        <div class="readout-row"><span>Resonances</span><span class="readout-val" id="r-modes">&#8212;</span></div>
+      </div>
+
+    </aside>
+
+    <section class="panel visual-panel">
+      <div class="canvas-wrap" id="canvas-wrap">
+        <canvas id="rt-canvas" width="960" height="500"
+                aria-label="Ruben's tube simulation showing standing waves as flame heights or particle displacement."></canvas>
+      </div>
+    </section>
+  </section>
+
+</main>
+<script src="script.js"></script>
+</body>
+</html>
