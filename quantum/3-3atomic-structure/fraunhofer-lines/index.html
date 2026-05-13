@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fraunhofer Lines</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../../index.html">← Back to Main Menu</a>
+      <p class="eyebrow">SACE Stage 2 Physics — Light &amp; Atoms 3.3</p>
+      <h1>Fraunhofer Lines</h1>
+      <p class="intro">
+        A solar spectrum, spread across the visible range. Dark lines appear where
+        certain wavelengths have been absorbed. Toggle candidate elements below to
+        overlay their known emission-line patterns and see which ones match.
+      </p>
+    </div>
+  </section>
+
+  <section class="layout">
+    <aside class="panel controls">
+
+      <div class="control-group">
+        <label>Source</label>
+        <select id="sel-source" class="source-select">
+          <option value="sun">Sun</option>
+          <option value="hLamp">Lab: H lamp</option>
+          <option value="naLamp">Lab: Na lamp</option>
+          <option value="unknown">Unknown star</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label>Candidate elements</label>
+        <div class="elem-grid" id="elem-grid"></div>
+      </div>
+
+      <div class="control-group">
+        <label>Display</label>
+        <button class="toggle-btn" id="btn-fraunhofer" type="button" data-active="false">
+          Show Fraunhofer letters
+        </button>
+      </div>
+
+      <div class="control-group">
+        <label>Cursor position</label>
+        <div class="readout-card">
+          <div class="readout-row">
+            <span class="readout-k">&#955;</span>
+            <span class="readout-v" id="rd-lambda">— <span class="readout-unit">nm</span></span>
+          </div>
+        </div>
+      </div>
+
+    </aside>
+
+    <section class="panel visual-panel">
+      <div class="canvas-wrap">
+        <canvas id="spec-canvas" width="960" height="600"
+                aria-label="Solar spectrum with Fraunhofer absorption lines and element overlays."></canvas>
+      </div>
+    </section>
+  </section>
+</main>
+
+<script src="script.js"></script>
+</body>
+</html>
