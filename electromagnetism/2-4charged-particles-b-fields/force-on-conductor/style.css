@@ -140,7 +140,7 @@ h1 {
 }
 
 input[type="range"] {
-  width: 100%;
+  flex: 1;
   accent-color: var(--accent-strong);
 }
 
@@ -150,12 +150,28 @@ input[type="range"] {
   gap: 0.4rem;
 }
 
-.slider-val {
+input[type="number"].slider-val {
+  width: 4rem;
+  padding: 0.2rem 0.35rem;
+  border: 1.5px solid rgba(21,48,77,0.2);
+  border-radius: 7px;
+  background: rgba(255,255,255,0.8);
+  font: inherit;
   font-size: 0.85rem;
   font-weight: 700;
   color: var(--ink);
-  min-width: 2.8rem;
   text-align: right;
+  -moz-appearance: textfield;
+}
+input[type="number"].slider-val::-webkit-outer-spin-button,
+input[type="number"].slider-val::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"].slider-val:focus {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 1px;
+  background: white;
 }
 
 .slider-unit {

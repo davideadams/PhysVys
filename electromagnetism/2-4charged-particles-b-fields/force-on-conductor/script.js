@@ -138,7 +138,6 @@ function buildFieldArrows() {
   const SHAFT_LEN = FIELD_LINE_X_HALF * 1.7;
   for (const y of FIELD_GRID_YS) {
     for (const z of FIELD_GRID_ZS) {
-      if (y === 0 && z === 0) continue;
       const shaft = new THREE.Mesh(
         new THREE.CylinderGeometry(0.04, 0.04, SHAFT_LEN, 10),
         mat,
@@ -164,7 +163,6 @@ function buildFieldGlyphs() {
   fieldGlyphSprites.length = 0;
   for (const y of FIELD_GRID_YS) {
     for (const z of FIELD_GRID_ZS) {
-      if (y === 0 && z === 0) continue;
       const mat = new THREE.SpriteMaterial({ map: fieldGlyphTexIn, transparent: true, depthTest: false });
       const sp = new THREE.Sprite(mat);
       sp.scale.set(0.55, 0.55, 1);
@@ -588,7 +586,15 @@ function wireSlider(id, valId, onChange, digits = 2) {
   const vl = document.getElementById(valId);
   el.addEventListener('input', () => {
     const v = parseFloat(el.value);
-    vl.textContent = v.toFixed(digits);
+    vl.value = v.toFixed(digits);
+    onChange(v);
+  });
+  vl.addEventListener('change', () => {
+    let v = parseFloat(vl.value);
+    if (isNaN(v)) v = parseFloat(el.value);
+    el.value = v;                          // range clamps & snaps to step
+    v = parseFloat(parseFloat(el.value).toFixed(digits));
+    vl.value = v.toFixed(digits);
     onChange(v);
   });
 }
