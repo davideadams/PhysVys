@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Black Body Radiation</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../../index.html">← Back to Main Menu</a>
+      <p class="eyebrow">SACE Stage 2 Physics — Light &amp; Atoms 3.3</p>
+      <h1>Black Body Radiation</h1>
+      <p class="intro">
+        A perfect absorber at temperature <em>T</em> glows across a continuous range of wavelengths.
+        Drag the slider to heat it up and watch the colour shift. Then toggle the classical
+        Rayleigh–Jeans prediction to see why 1900-era physicists called the short-wavelength
+        divergence the <strong>Ultraviolet Catastrophe</strong>.
+      </p>
+    </div>
+  </section>
+
+  <section class="layout">
+    <aside class="panel controls">
+
+      <div class="control-group">
+        <label>Temperature</label>
+        <div class="slider-row">
+          <input type="range" id="slider-T" min="0" max="1" step="0.001" value="0.589">
+          <input type="number" class="num-input" id="val-T" min="300" max="15000" step="1" value="3000"><span class="slider-unit">K</span>
+        </div>
+        <div class="preset-chips" id="preset-chips">
+          <button class="chip" data-t="1000">Stove element (1 000 K)</button>
+          <button class="chip active" data-t="3000">Tungsten filament (3 000 K)</button>
+          <button class="chip" data-t="5778">Sun's surface (5 778 K)</button>
+          <button class="chip" data-t="9900">Sirius A (9 900 K)</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Curves</label>
+        <div class="vector-toggles">
+          <button class="vec-btn active" id="btn-planck" type="button">
+            <span class="vec-dot" style="background:#2dd4bf"></span>Planck (observed)
+          </button>
+          <button class="vec-btn" id="btn-rj" type="button">
+            <span class="vec-dot" style="background:#f97316"></span>Rayleigh–Jeans (classical)
+          </button>
+          <button class="vec-btn" id="btn-wien" type="button">
+            <span class="vec-dot" style="background:#a78bfa"></span>Wien approximation
+          </button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>y-axis scale</label>
+        <div class="seg-control cols-2">
+          <button class="seg-btn active" id="btn-linear" type="button">Linear</button>
+          <button class="seg-btn" id="btn-log" type="button">Log</button>
+        </div>
+      </div>
+
+      <div class="control-group readout-card">
+        <label>Readouts</label>
+        <div class="readout-row">
+          <span>Peak wavelength</span>
+          <span class="readout-val" id="r-lmax">—</span>
+        </div>
+        <div class="readout-row">
+          <span>Peak region</span>
+          <span class="readout-val" id="r-region">—</span>
+        </div>
+        <div class="readout-row">
+          <span>Relative power (T&#x2074;)</span>
+          <span class="readout-val" id="r-power">—</span>
+        </div>
+      </div>
+
+    </aside>
+
+    <section class="panel visual-panel">
+      <div class="canvas-wrap">
+        <canvas id="bb-canvas" width="960" height="600"
+          aria-label="Top section: a glowing body whose colour matches the selected temperature. Bottom section: spectral radiance vs wavelength, showing Planck, Rayleigh-Jeans and Wien curves.">
+        </canvas>
+      </div>
+    </section>
+  </section>
+
+</main>
+<script src="script.js"></script>
+</body>
+</html>
