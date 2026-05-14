@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HeNe Laser</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../../index.html">← Back to Main Menu</a>
+      <p class="eyebrow">SACE Stage 2 Physics — Light &amp; Atoms 3.3</p>
+      <h1>HeNe Laser</h1>
+      <p class="intro">
+        A helium–neon laser produces a coherent 632.8 nm beam through <em>stimulated emission</em>.
+        The Cascade mode shows how one photon triggers an exponential avalanche;
+        the Full Simulation traces every step from electrical discharge to the output beam.
+      </p>
+    </div>
+  </section>
+
+  <section class="layout">
+    <aside class="panel controls">
+
+      <div class="control-group">
+        <label>Mode</label>
+        <div class="seg-control cols-2" id="seg-mode">
+          <button class="seg-btn active" data-mode="cascade" type="button">Cascade</button>
+          <button class="seg-btn"        data-mode="full"    type="button">Full Sim</button>
+        </div>
+      </div>
+
+      <!-- Cascade controls -->
+      <div id="casc-controls">
+
+        <div class="control-group">
+          <div class="auto-row">
+            <button class="play-btn" id="btn-pump" type="button">Pump atoms</button>
+          </div>
+          <div class="auto-row" style="margin-top:0.4rem">
+            <button class="play-btn" id="btn-casc-play" type="button">▶ Play</button>
+            <button class="play-btn ghost" id="btn-casc-reset" type="button">⟲ Reset</button>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label>Speed</label>
+          <div class="seg-control cols-3" id="seg-casc-speed">
+            <button class="seg-btn" data-speed="0.05" type="button">0.05×</button>
+            <button class="seg-btn" data-speed="0.25" type="button">0.25×</button>
+            <button class="seg-btn active" data-speed="1" type="button">1×</button>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <div class="readout-card">
+            <div class="readout-row">
+              <span class="readout-k">Photons in cascade</span>
+              <span class="readout-v" id="rd-photons">—</span>
+            </div>
+            <div class="readout-row">
+              <span class="readout-k">Atoms still inverted</span>
+              <span class="readout-v" id="rd-inverted">—</span>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- #casc-controls -->
+
+      <!-- Full sim controls -->
+      <div id="full-controls" style="display:none">
+
+        <div class="control-group">
+          <label>Pump current</label>
+          <input type="range" id="sld-current" min="0" max="100" value="55">
+          <div class="slider-labels">
+            <span>0</span><span>Threshold</span><span>Max</span>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label>Speed</label>
+          <div class="seg-control cols-3" id="seg-full-speed">
+            <button class="seg-btn" data-speed="0.05" type="button">0.05×</button>
+            <button class="seg-btn" data-speed="0.25" type="button">0.25×</button>
+            <button class="seg-btn active" data-speed="1" type="button">1×</button>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label class="check-row">
+            <input type="checkbox" id="chk-ir">
+            Show IR transitions
+          </label>
+          <label class="check-row" style="margin-top:0.4rem">
+            <input type="checkbox" id="chk-nohe">
+            Remove He gas
+          </label>
+        </div>
+
+        <div class="control-group">
+          <div class="readout-card">
+            <div class="readout-row">
+              <span class="readout-k">Population</span>
+              <span class="readout-v" id="rd-pop" style="font-size:0.82rem">—</span>
+            </div>
+            <div class="readout-row">
+              <span class="readout-k">Inversion</span>
+              <span class="readout-v" id="rd-inv">—</span>
+            </div>
+            <div class="readout-row">
+              <span class="readout-k">Cavity photons</span>
+              <span class="readout-v" id="rd-cav">0</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <div class="readout-card" style="min-height:2.6rem">
+            <span class="readout-v" id="rd-event"
+                  style="font-size:0.78rem;color:var(--muted);font-weight:600;line-height:1.4;display:block">—</span>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <div class="auto-row">
+            <button class="play-btn" id="btn-full-play" type="button">▶ Play</button>
+            <button class="play-btn ghost" id="btn-full-reset" type="button">⟲ Reset</button>
+          </div>
+        </div>
+
+      </div><!-- #full-controls -->
+
+    </aside>
+
+    <section class="panel visual-panel">
+      <div class="canvas-wrap">
+        <canvas id="hene-canvas" width="960" height="600"
+                aria-label="HeNe laser simulation."></canvas>
+      </div>
+    </section>
+  </section>
+
+</main>
+<script src="script.js"></script>
+</body>
+</html>
