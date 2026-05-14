@@ -195,6 +195,25 @@ input[type="range"] {
   color: var(--muted);
 }
 
+.num-input {
+  width: 4.2rem;
+  padding: 0.25rem 0.35rem;
+  border: 1.5px solid rgba(21,48,77,0.14);
+  border-radius: 8px;
+  background: white;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.num-input:focus { outline: 2px solid var(--accent-strong); outline-offset: 1px; }
+.num-input::-webkit-outer-spin-button,
+.num-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.num-input { -moz-appearance: textfield; }
+.param-row .num-input { width: 3.6rem; padding: 0.2rem 0.3rem; font-size: 0.8rem; }
+
 /* ── Particle / fragment config groups ─────────────────────── */
 
 .particle-group {

@@ -56,8 +56,11 @@
       </div>
 
       <div class="control-group hidden" id="grp-lifetime">
-        <label>Metastable lifetime &nbsp;<span id="lbl-lifetime">2.0 s</span></label>
-        <input type="range" id="sld-lifetime" min="0.5" max="5" step="0.5" value="2">
+        <label>Metastable lifetime</label>
+        <div class="slider-row">
+          <input type="range" id="sld-lifetime" min="0.5" max="5" step="0.5" value="2">
+          <input type="number" class="num-input" id="lbl-lifetime" min="0.5" max="5" step="0.5" value="2.0"><span class="slider-unit">s</span>
+        </div>
       </div>
 
       <div class="control-group">

@@ -212,12 +212,29 @@ els.selTarget.addEventListener('change', () => {
 });
 els.sliderE.addEventListener('input', () => {
   state.E_MeV = parseFloat(els.sliderE.value);
-  els.valE.textContent = state.E_MeV.toFixed(1);
+  els.valE.value = state.E_MeV.toFixed(1);
+  invalidate();
+});
+els.valE.addEventListener('change', () => {
+  const raw = parseFloat(els.valE.value);
+  if (isNaN(raw)) { els.valE.value = state.E_MeV.toFixed(1); return; }
+  const v = Math.max(1.0, Math.min(8.0, Math.round(raw * 10) / 10));
+  state.E_MeV = v;
+  els.sliderE.value = v;
+  els.valE.value = v.toFixed(1);
   invalidate();
 });
 els.sliderRate.addEventListener('input', () => {
   state.rate = parseInt(els.sliderRate.value, 10);
-  els.valRate.textContent = String(state.rate);
+  els.valRate.value = String(state.rate);
+});
+els.valRate.addEventListener('change', () => {
+  const raw = parseFloat(els.valRate.value);
+  if (isNaN(raw)) { els.valRate.value = String(state.rate); return; }
+  const v = Math.max(1, Math.min(40, Math.round(raw)));
+  state.rate = v;
+  els.sliderRate.value = v;
+  els.valRate.value = String(v);
 });
 els.btnPlay.addEventListener('click', () => {
   state.playing = !state.playing;

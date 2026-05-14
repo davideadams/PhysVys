@@ -92,8 +92,18 @@ function fmtP(simP) {
 
 function setSlider(key, valId, unitId, fmt) {
   const [v, u] = fmt(state[key]);
-  $(valId).textContent = v;
+  $(valId).value = v;
   $(unitId).textContent = u;
+}
+// Inverse converters: convert a number typed in the *currently displayed* unit back to sim mm.
+function invLambda(v) {
+  return state.realUnits ? v / REAL.LEN_NM_PER_SIM_MM : v;
+}
+function invSlit(v) {
+  return state.realUnits ? v * 1000 / REAL.LEN_NM_PER_SIM_MM : v;
+}
+function invL(v) {
+  return state.realUnits ? v / REAL.L_M_PER_SIM_MM : v;
 }
 function refreshUnits() {
   setSlider('lambda', 'val-lambda', 'unit-lambda', fmtLambda);
@@ -764,7 +774,17 @@ function bindSlider(id, valId, key, fmt, onChange) {
   sl.addEventListener('input', () => {
     const v = parseFloat(sl.value);
     state[key] = v;
-    va.textContent = fmt(v);
+    va.value = fmt(v);
+    if (onChange) onChange(v);
+  });
+  va.addEventListener('change', () => {
+    const raw = parseFloat(va.value);
+    if (isNaN(raw)) { va.value = fmt(state[key]); return; }
+    const lo = parseFloat(sl.min), hi = parseFloat(sl.max);
+    const v = Math.max(lo, Math.min(hi, raw));
+    state[key] = v;
+    sl.value = v;
+    va.value = fmt(v);
     if (onChange) onChange(v);
   });
 }
@@ -780,17 +800,27 @@ function bindToggle(id, key, onChange) {
 
 bindSeg('seg-mode', 'mode', m => onModeChange(m));
 bindSlider('slider-N',      'val-N',      'N',      v => v.toFixed(0));
-function bindUnitSlider(id, key, valId, unitId, fmt) {
-  const sl = $(id);
+function bindUnitSlider(id, key, valId, unitId, fmt, inv) {
+  const sl = $(id), va = $(valId);
   sl.addEventListener('input', () => {
     state[key] = parseFloat(sl.value);
     setSlider(key, valId, unitId, fmt);
   });
+  va.addEventListener('change', () => {
+    const raw = parseFloat(va.value);
+    if (isNaN(raw)) { setSlider(key, valId, unitId, fmt); return; }
+    const sim = inv(raw);
+    const lo = parseFloat(sl.min), hi = parseFloat(sl.max);
+    const v = Math.max(lo, Math.min(hi, sim));
+    state[key] = v;
+    sl.value = v;
+    setSlider(key, valId, unitId, fmt);
+  });
 }
-bindUnitSlider('slider-d',      'd',      'val-d',      'unit-d',      fmtSlit);
-bindUnitSlider('slider-a',      'a',      'val-a',      'unit-a',      fmtSlit);
-bindUnitSlider('slider-lambda', 'lambda', 'val-lambda', 'unit-lambda', fmtLambda);
-bindUnitSlider('slider-L',      'L',      'val-L',      'unit-L',      fmtL);
+bindUnitSlider('slider-d',      'd',      'val-d',      'unit-d',      fmtSlit,   invSlit);
+bindUnitSlider('slider-a',      'a',      'val-a',      'unit-a',      fmtSlit,   invSlit);
+bindUnitSlider('slider-lambda', 'lambda', 'val-lambda', 'unit-lambda', fmtLambda, invLambda);
+bindUnitSlider('slider-L',      'L',      'val-L',      'unit-L',      fmtL,      invL);
 bindSlider('slider-speed',  'val-speed',  'speed',  v => v.toFixed(2));
 bindToggle('btn-real',   'realUnits', () => refreshUnits());
 bindToggle('btn-light',  'lightMode', v => {

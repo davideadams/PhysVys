@@ -59,7 +59,7 @@
           <label>Mass <span class="muted">m</span></label>
           <div class="slider-row">
             <input type="range" id="slider-m" min="0.5" max="5" step="0.1" value="1.0">
-            <span class="slider-val" id="val-m">1.0</span>
+            <input type="number" class="slider-val" id="val-m" min="0.5" max="5" step="0.1" value="1.0">
           </div>
         </div>
 
@@ -67,7 +67,7 @@
           <label>Speed <span class="muted">v</span></label>
           <div class="slider-row">
             <input type="range" id="slider-v" min="1" max="8" step="0.1" value="4.0">
-            <span class="slider-val" id="val-v">4.0</span>
+            <input type="number" class="slider-val" id="val-v" min="1" max="8" step="0.1" value="4.0">
           </div>
         </div>
 
@@ -75,7 +75,7 @@
           <label>Field strength <span class="muted">B</span></label>
           <div class="slider-row">
             <input type="range" id="slider-B" min="0.3" max="5" step="0.1" value="3.0">
-            <span class="slider-val" id="val-B">3.0</span>
+            <input type="number" class="slider-val" id="val-B" min="0.3" max="5" step="0.1" value="3.0">
           </div>
         </div>
       </div>
@@ -95,7 +95,7 @@
           <label>Speed <span class="muted">v</span></label>
           <div class="slider-row">
             <input type="range" id="slider-v-real" min="0.1" max="15" step="0.1" value="5">
-            <span class="slider-val" id="val-v-real">5.0</span><span class="slider-unit">× 10⁶ m/s</span>
+            <input type="number" class="slider-val" id="val-v-real" min="0.1" max="15" step="0.1" value="5.0"><span class="slider-unit">× 10⁶ m/s</span>
           </div>
         </div>
 
@@ -103,7 +103,7 @@
           <label>Field strength <span class="muted">B</span></label>
           <div class="slider-row">
             <input type="range" id="slider-B-real" min="0.1" max="30" step="0.1" value="2">
-            <span class="slider-val" id="val-B-real">2.0</span><span class="slider-unit" id="unit-B-real">mT</span>
+            <input type="number" class="slider-val" id="val-B-real" min="0.1" max="30" step="0.1" value="2.0"><span class="slider-unit" id="unit-B-real">mT</span>
           </div>
         </div>
       </div>

@@ -601,7 +601,15 @@ document.getElementById('btn-lamp').addEventListener('click', () => {
 
 document.getElementById('sld-lifetime').addEventListener('input', e => {
   state.lifetime = parseFloat(e.target.value);
-  document.getElementById('lbl-lifetime').textContent = `${state.lifetime.toFixed(1)} s`;
+  document.getElementById('lbl-lifetime').value = state.lifetime.toFixed(1);
+});
+document.getElementById('lbl-lifetime').addEventListener('change', e => {
+  const raw = parseFloat(e.target.value);
+  if (isNaN(raw)) { e.target.value = state.lifetime.toFixed(1); return; }
+  const v = Math.max(0.5, Math.min(5, Math.round(raw * 2) / 2));
+  state.lifetime = v;
+  document.getElementById('sld-lifetime').value = v;
+  e.target.value = v.toFixed(1);
 });
 
 document.getElementById('btn-clear').addEventListener('click', () => {

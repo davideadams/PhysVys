@@ -255,6 +255,42 @@ h1 {
   color: var(--ink);
 }
 
+.ctrl-val-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+input[type="number"].ctrl-val {
+  width: 5.5rem;
+  padding: 0.2rem 0.4rem;
+  border: 1.5px solid rgba(21,48,77,0.2);
+  border-radius: 7px;
+  background: rgba(255,255,255,0.85);
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--ink);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  -moz-appearance: textfield;
+}
+input[type="number"].ctrl-val::-webkit-outer-spin-button,
+input[type="number"].ctrl-val::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"].ctrl-val:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  background: white;
+}
+
+.ctrl-unit {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
 .ctrl input[type="range"] {
   width: 100%;
   accent-color: var(--accent);

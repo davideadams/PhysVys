@@ -99,9 +99,34 @@ h1 {
   padding-top: 0;
 }
 
+.subtopic-block > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  user-select: none;
+}
+
+.subtopic-block > summary::-webkit-details-marker {
+  display: none;
+}
+
+.subtopic-block > summary::after {
+  content: '▸';
+  font-size: 0.85rem;
+  color: var(--muted);
+  flex-shrink: 0;
+  transition: transform 0.18s ease;
+}
+
+.subtopic-block[open] > summary::after {
+  transform: rotate(90deg);
+}
+
 .subtopic-block h3 {
   font-size: 1.06rem;
-  margin-bottom: 0.35rem;
 }
 
 .concepts {
@@ -131,7 +156,7 @@ h1 {
 .link-list {
   display: grid;
   gap: 0.55rem;
-  margin-top: 0.8rem;
+  margin-top: 0.65rem;
 }
 
 .app-link {

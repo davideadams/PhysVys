@@ -13,6 +13,7 @@ const STREAM_THRESHOLD = 0.5;  // mL/s above which we render a stream
 // Flow slider (0..100) maps logarithmically to [0.02, 2.0] mL/s
 const FLOW_MIN = 0.02, FLOW_MAX = 2.0;
 const flowFromSlider = v => FLOW_MIN * Math.pow(FLOW_MAX / FLOW_MIN, v / 100);
+const sliderFromFlow = f => 100 * Math.log(f / FLOW_MIN) / Math.log(FLOW_MAX / FLOW_MIN);
 
 // Indicator colour mapping (phenolphthalein)
 const PINK_RGB = [230, 90, 160];
@@ -188,7 +189,14 @@ const flowSlider = document.getElementById('flow-slider');
 const flowReadout = document.getElementById('flow-readout');
 flowSlider.addEventListener('input', () => {
   state.flowRate = flowFromSlider(+flowSlider.value);
-  flowReadout.textContent = state.flowRate.toFixed(2);
+  flowReadout.value = state.flowRate.toFixed(2);
+});
+flowReadout.addEventListener('change', () => {
+  const raw = parseFloat(flowReadout.value);
+  if (isNaN(raw)) { flowReadout.value = state.flowRate.toFixed(2); return; }
+  state.flowRate = Math.max(FLOW_MIN, Math.min(FLOW_MAX, raw));
+  flowSlider.value = sliderFromFlow(state.flowRate);
+  flowReadout.value = state.flowRate.toFixed(2);
 });
 
 // Reading inputs

@@ -455,9 +455,21 @@ document.querySelectorAll('#seg-cam .seg-btn').forEach(btn => {
 function wireSlider(id, valId, onChange, unit = '', digits = 2) {
   const el = document.getElementById(id);
   const vl = document.getElementById(valId);
+  const min = parseFloat(el.min);
+  const max = parseFloat(el.max);
+  const step = parseFloat(el.step) || 1;
   el.addEventListener('input', () => {
     const v = parseFloat(el.value);
-    vl.textContent = v.toFixed(digits);
+    vl.value = v.toFixed(digits);
+    onChange(v);
+  });
+  vl.addEventListener('change', () => {
+    const raw = parseFloat(vl.value);
+    if (isNaN(raw)) { vl.value = parseFloat(el.value).toFixed(digits); return; }
+    const snapped = Math.round((raw - min) / step) * step + min;
+    const v = Math.max(min, Math.min(max, snapped));
+    el.value = v;
+    vl.value = v.toFixed(digits);
     onChange(v);
   });
 }

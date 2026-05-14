@@ -614,14 +614,28 @@ document.querySelectorAll('#seg-field .seg-btn').forEach((btn) => {
 function wireSlider(id, valId, store, digits = 1) {
   const el = document.getElementById(id);
   const vl = document.getElementById(valId);
-  el.addEventListener('input', () => {
-    const v = parseFloat(el.value);
-    vl.textContent = v.toFixed(digits);
+  function apply(v) {
     store(v);
     resetParticle();
     state.playing = false;
     updatePlayBtn();
     updateReadouts();
+  }
+  el.addEventListener('input', () => {
+    const v = parseFloat(el.value);
+    vl.value = v.toFixed(digits);
+    apply(v);
+  });
+  vl.addEventListener('change', () => {
+    let v = parseFloat(vl.value);
+    if (isNaN(v)) { vl.value = parseFloat(el.value).toFixed(digits); return; }
+    const min = parseFloat(el.min), max = parseFloat(el.max);
+    if (v < min) v = min;
+    if (v > max) v = max;
+    el.value = v;
+    v = parseFloat(el.value);
+    vl.value = v.toFixed(digits);
+    apply(v);
   });
 }
 wireSlider('slider-B', 'val-B', (v) => { state.B = v; }, 2);

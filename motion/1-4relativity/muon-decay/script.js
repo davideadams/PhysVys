@@ -923,7 +923,7 @@ function updatePhase4Display() {
   effInlineT.textContent    = tMean > 0 ? tMean.toFixed(2) : '—';
   effInlineFrac.textContent = nMtn > 0 ? (measuredFrac * 100).toFixed(1) + '%' : '—';
 
-  effSliderVal.textContent      = `${Math.round(d)} m`;
+  effSliderVal.value            = `${Math.round(d)}`;
   effPredictedFrac.textContent  = (predictedSurvival(d, tMean) * 100).toFixed(1) + '%';
   effMeasuredFrac.textContent   = nMtn > 0 ? (measuredFrac * 100).toFixed(1) + '%' : '—';
 
@@ -936,6 +936,13 @@ function updatePhase4Display() {
 }
 
 effSlider.addEventListener('input', updatePhase4Display);
+effSliderVal.addEventListener('change', () => {
+  const raw = parseFloat(effSliderVal.value);
+  if (isNaN(raw)) { effSliderVal.value = Math.round(parseFloat(effSlider.value)); return; }
+  const min = parseFloat(effSlider.min), max = parseFloat(effSlider.max);
+  effSlider.value = Math.max(min, Math.min(max, raw));
+  updatePhase4Display();
+});
 
 effSnapBtn.addEventListener('click', () => {
   const nMtn = state.confirmed.length;

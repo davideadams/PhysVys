@@ -29,7 +29,18 @@
   function bindSlider(el, valEl, key, parse = parseFloat) {
     el.addEventListener('input', () => {
       state[key] = parse(el.value);
-      valEl.textContent = el.value;
+      valEl.value = el.value;
+      updatePresetHighlight();
+      updateReadouts();
+    });
+    valEl.addEventListener('change', () => {
+      let v = parseFloat(valEl.value);
+      if (isNaN(v)) { valEl.value = el.value; return; }
+      const min = parseFloat(el.min), max = parseFloat(el.max);
+      v = Math.max(min, Math.min(max, v));
+      el.value = v;
+      state[key] = parse(el.value);
+      valEl.value = el.value;
       updatePresetHighlight();
       updateReadouts();
     });
@@ -44,8 +55,8 @@
       if (v === 'up')   { state.Nin = 8;  state.Nout = 32; }
       else if (v === 'down') { state.Nin = 32; state.Nout = 8;  }
       else                   { state.Nin = 20; state.Nout = 20; }
-      els.nin.value  = state.Nin;  els.ninV.textContent  = state.Nin;
-      els.nout.value = state.Nout; els.noutV.textContent = state.Nout;
+      els.nin.value  = state.Nin;  els.ninV.value  = state.Nin;
+      els.nout.value = state.Nout; els.noutV.value = state.Nout;
       updatePresetHighlight();
       updateReadouts();
     });

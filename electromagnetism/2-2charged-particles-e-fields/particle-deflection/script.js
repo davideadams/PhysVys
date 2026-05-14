@@ -698,20 +698,60 @@ function updateSpeedDisplay() {
 
 /* ─────────────────────────────── Controls wiring ───────────────────── */
 
-document.getElementById('voltage-slider').addEventListener('input', e => {
+const voltageSlider = document.getElementById('voltage-slider');
+const voltageNum    = document.getElementById('voltage-num');
+const separationSlider = document.getElementById('separation-slider');
+const separationNum    = document.getElementById('separation-num');
+const speedSlider = document.getElementById('speed-slider');
+const speedNum    = document.getElementById('speed-num');
+
+voltageSlider.addEventListener('input', e => {
   state.V = parseInt(e.target.value, 10);
+  voltageNum.value = state.V;
+  updateVoltageDisplay();
+  draw();
+});
+voltageNum.addEventListener('change', () => {
+  const raw = parseFloat(voltageNum.value);
+  if (isNaN(raw)) { voltageNum.value = state.V; return; }
+  const v = Math.max(0, Math.min(5000, Math.round(raw / 100) * 100));
+  state.V = v;
+  voltageNum.value = v;
+  voltageSlider.value = v;
   updateVoltageDisplay();
   draw();
 });
 
-document.getElementById('separation-slider').addEventListener('input', e => {
+separationSlider.addEventListener('input', e => {
   state.d = parseInt(e.target.value, 10) / 100;
+  separationNum.value = parseInt(e.target.value, 10);
+  updateSeparationDisplay();
+  draw();
+});
+separationNum.addEventListener('change', () => {
+  const raw = parseFloat(separationNum.value);
+  if (isNaN(raw)) { separationNum.value = Math.round(state.d * 100); return; }
+  const v = Math.max(2, Math.min(20, Math.round(raw)));
+  state.d = v / 100;
+  separationNum.value = v;
+  separationSlider.value = v;
   updateSeparationDisplay();
   draw();
 });
 
-document.getElementById('speed-slider').addEventListener('input', e => {
+speedSlider.addEventListener('input', e => {
   state.v0f = parseFloat(e.target.value);
+  speedNum.value = state.v0f;
+  updateSpeedDisplay();
+  draw();
+});
+speedNum.addEventListener('change', () => {
+  const raw = parseFloat(speedNum.value);
+  if (isNaN(raw)) { speedNum.value = state.v0f; return; }
+  const v = Math.max(0, Math.min(20, Math.round(raw * 2) / 2));
+  state.v0f = v;
+  speedNum.value = v;
+  speedSlider.value = v;
   updateSpeedDisplay();
   draw();
 });

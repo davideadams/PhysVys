@@ -328,12 +328,29 @@ els.selTarget.addEventListener('change', () => {
 });
 els.sliderV.addEventListener('input', () => {
   state.V_kV = parseInt(els.sliderV.value, 10);
-  els.valV.textContent = String(state.V_kV);
+  els.valV.value = String(state.V_kV);
+  resetRun();
+});
+els.valV.addEventListener('change', () => {
+  const raw = parseFloat(els.valV.value);
+  if (isNaN(raw)) { els.valV.value = String(state.V_kV); return; }
+  const v = Math.max(20, Math.min(150, Math.round(raw)));
+  state.V_kV = v;
+  els.sliderV.value = v;
+  els.valV.value = String(v);
   resetRun();
 });
 els.sliderRate.addEventListener('input', () => {
   state.rate = parseInt(els.sliderRate.value, 10);
-  els.valRate.textContent = String(state.rate);
+  els.valRate.value = String(state.rate);
+});
+els.valRate.addEventListener('change', () => {
+  const raw = parseFloat(els.valRate.value);
+  if (isNaN(raw)) { els.valRate.value = String(state.rate); return; }
+  const v = Math.max(1, Math.min(60, Math.round(raw)));
+  state.rate = v;
+  els.sliderRate.value = v;
+  els.valRate.value = String(v);
 });
 els.btnPlay.addEventListener('click', () => {
   state.playing = !state.playing;

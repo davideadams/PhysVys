@@ -23,6 +23,10 @@ const ctx = canvas.getContext('2d');
 const btnShowForces = document.getElementById('btn-show-forces');
 const q1Display = document.getElementById('q1-display');
 const q2Display = document.getElementById('q2-display');
+const q1Num = document.getElementById('q1-num');
+const q2Num = document.getElementById('q2-num');
+const q1Slider = document.getElementById('q1-slider');
+const q2Slider = document.getElementById('q2-slider');
 const readoutR = document.getElementById('readout-r');
 const readoutF = document.getElementById('readout-f');
 
@@ -386,6 +390,10 @@ function formatCharge(key) {
 function updateDisplays() {
   q1Display.textContent = formatCharge('q1');
   q2Display.textContent = formatCharge('q2');
+  q1Num.value = state.q1.magnitude;
+  q2Num.value = state.q2.magnitude;
+  q1Slider.value = state.q1.magnitude;
+  q2Slider.value = state.q2.magnitude;
 }
 
 // ─── Sign toggles ─────────────────────────────────────────────────────────────
@@ -409,17 +417,30 @@ document.getElementById('q2-sign-neg').addEventListener('click', () => setSign('
 
 // ─── Magnitude sliders ────────────────────────────────────────────────────────
 
-document.getElementById('q1-slider').addEventListener('input', (e) => {
+q1Slider.addEventListener('input', (e) => {
   state.q1.magnitude = Number(e.target.value);
   updateDisplays();
   draw();
 });
 
-document.getElementById('q2-slider').addEventListener('input', (e) => {
+q2Slider.addEventListener('input', (e) => {
   state.q2.magnitude = Number(e.target.value);
   updateDisplays();
   draw();
 });
+
+function bindNumInput(numEl, sliderEl, key) {
+  numEl.addEventListener('change', () => {
+    const raw = parseFloat(numEl.value);
+    if (isNaN(raw)) { numEl.value = state[key].magnitude; return; }
+    const clamped = Math.max(1, Math.min(10, Math.round(raw)));
+    state[key].magnitude = clamped;
+    updateDisplays();
+    draw();
+  });
+}
+bindNumInput(q1Num, q1Slider, 'q1');
+bindNumInput(q2Num, q2Slider, 'q2');
 
 // ─── Show Forces toggle ───────────────────────────────────────────────────────
 

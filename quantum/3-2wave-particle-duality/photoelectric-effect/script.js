@@ -571,11 +571,27 @@ function setV(v, source) {
 
 $("slider-lambda").addEventListener("input", (e) => {
   state.lambda = parseInt(e.target.value, 10);
-  $("val-lambda").textContent = state.lambda;
+  $("val-lambda").value = state.lambda;
+});
+$("val-lambda").addEventListener("change", (e) => {
+  const raw = parseFloat(e.target.value);
+  if (isNaN(raw)) { e.target.value = state.lambda; return; }
+  const v = Math.max(200, Math.min(700, Math.round(raw)));
+  state.lambda = v;
+  $("slider-lambda").value = v;
+  e.target.value = v;
 });
 $("slider-intensity").addEventListener("input", (e) => {
   state.intensity = parseInt(e.target.value, 10);
-  $("val-intensity").textContent = state.intensity;
+  $("val-intensity").value = state.intensity;
+});
+$("val-intensity").addEventListener("change", (e) => {
+  const raw = parseFloat(e.target.value);
+  if (isNaN(raw)) { e.target.value = state.intensity; return; }
+  const v = Math.max(0, Math.min(100, Math.round(raw)));
+  state.intensity = v;
+  $("slider-intensity").value = v;
+  e.target.value = v;
 });
 $("slider-V").addEventListener("input", (e) => {
   setV(parseFloat(e.target.value), "slider");

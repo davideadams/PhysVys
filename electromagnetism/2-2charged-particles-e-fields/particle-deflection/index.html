@@ -89,21 +89,30 @@
         <!-- Plate voltage -->
         <div class="control-group">
           <label for="voltage-slider">Plate voltage \(V\)</label>
-          <input id="voltage-slider" type="range" min="0" max="5000" step="100" value="0">
+          <div class="slider-row">
+            <input id="voltage-slider" type="range" min="0" max="5000" step="100" value="0">
+            <input id="voltage-num" type="number" class="num-input" min="0" max="5000" step="100" value="0"><span class="slider-unit">V</span>
+          </div>
           <p id="voltage-display" class="value-display"></p>
         </div>
 
         <!-- Plate separation -->
         <div class="control-group">
           <label for="separation-slider">Plate separation \(d\)</label>
-          <input id="separation-slider" type="range" min="2" max="20" step="1" value="10">
+          <div class="slider-row">
+            <input id="separation-slider" type="range" min="2" max="20" step="1" value="10">
+            <input id="separation-num" type="number" class="num-input" min="2" max="20" step="1" value="10"><span class="slider-unit">cm</span>
+          </div>
           <p id="separation-display" class="value-display"></p>
         </div>
 
         <!-- Entry speed -->
         <div class="control-group">
           <label id="speed-label" for="speed-slider">Entry speed \(v_0\)</label>
-          <input id="speed-slider" type="range" min="0" max="20" step="0.5" value="5">
+          <div class="slider-row">
+            <input id="speed-slider" type="range" min="0" max="20" step="0.5" value="5">
+            <input id="speed-num" type="number" class="num-input" min="0" max="20" step="0.5" value="5"><span class="slider-unit">× 10⁷ m/s</span>
+          </div>
           <p id="speed-display" class="value-display"></p>
         </div>
 

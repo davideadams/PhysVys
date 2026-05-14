@@ -845,8 +845,8 @@ function onModeChange() {
     :                     'Hover the field to probe · drag P on the screen for the derivation triangle';
   }
   // Mode-appropriate default rates: bullets fast, electrons slow so the pattern builds visibly.
-  if (m === 'bullets')   { state.rate = 100; $('slider-rate').value = 100; $('val-rate').textContent = '100'; }
-  if (m === 'electrons') { state.rate = 10;  $('slider-rate').value = 10;  $('val-rate').textContent = '10';  }
+  if (m === 'bullets')   { state.rate = 100; $('slider-rate').value = 100; $('val-rate').value = '100'; }
+  if (m === 'electrons') { state.rate = 10;  $('slider-rate').value = 10;  $('val-rate').value = '10';  }
   $('particle-controls').style.display = (m === 'waves') ? 'none' : 'block';
   $('bullets-toggles').style.display   = (m === 'bullets')   ? 'flex' : 'none';
   $('electron-toggles').style.display  = (m === 'electrons') ? 'flex' : 'none';
@@ -887,7 +887,17 @@ function bindSlider(id, valId, key, fmt, onChange) {
   sl.addEventListener('input', () => {
     const v = parseFloat(sl.value);
     state[key] = v;
-    va.textContent = fmt(v);
+    va.value = fmt(v);
+    if (onChange) onChange(v);
+  });
+  va.addEventListener('change', () => {
+    const raw = parseFloat(va.value);
+    if (isNaN(raw)) { va.value = fmt(state[key]); return; }
+    const lo = parseFloat(sl.min), hi = parseFloat(sl.max);
+    const v = Math.max(lo, Math.min(hi, raw));
+    state[key] = v;
+    sl.value = v;
+    va.value = fmt(v);
     if (onChange) onChange(v);
   });
 }

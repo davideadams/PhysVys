@@ -146,6 +146,26 @@ input[type="range"] {
   accent-color: var(--accent-strong);
 }
 
+.slider-row { display: flex; align-items: center; gap: 0.4rem; }
+.slider-row input[type="range"] { margin-bottom: 0; }
+.slider-unit { font-size: 0.8rem; color: var(--muted); white-space: nowrap; }
+.num-input {
+  width: 4.5rem;
+  padding: 0.3rem 0.4rem;
+  border: 1.5px solid rgba(21,48,77,0.14);
+  border-radius: 8px;
+  background: white;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.95rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.num-input:focus { outline: 2px solid var(--accent-strong); outline-offset: 1px; }
+.num-input::-webkit-outer-spin-button,
+.num-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.num-input { -moz-appearance: textfield; }
+
 .value-display {
   margin: 0.3rem 0 0;
   min-height: 1.3rem;

@@ -426,7 +426,15 @@ const vSlider = document.getElementById("v-slider");
 const vVal = document.getElementById("v-val");
 vSlider.addEventListener("input", () => {
   setVoltage(Number(vSlider.value));
-  vVal.textContent = V_VOLT;
+  vVal.value = V_VOLT;
+});
+vVal.addEventListener("change", () => {
+  const raw = parseFloat(vVal.value);
+  if (isNaN(raw)) { vVal.value = V_VOLT; return; }
+  const v = Math.max(100, Math.min(1000, Math.round(raw / 25) * 25));
+  vVal.value = v;
+  vSlider.value = v;
+  setVoltage(v);
 });
 
 // ───────── Utilities ─────────

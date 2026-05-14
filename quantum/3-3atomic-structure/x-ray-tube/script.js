@@ -6,11 +6,27 @@ const voltageReadout = document.getElementById('voltage-readout');
 const currentReadout = document.getElementById('current-readout');
 
 voltageSlider.addEventListener('input', () => {
-  voltageReadout.textContent = `${voltageSlider.value} kV`;
+  voltageReadout.value = voltageSlider.value;
+  redraw();
+});
+voltageReadout.addEventListener('change', () => {
+  const raw = parseFloat(voltageReadout.value);
+  if (isNaN(raw)) { voltageReadout.value = voltageSlider.value; return; }
+  const v = Math.max(10, Math.min(75, Math.round(raw)));
+  voltageSlider.value = v;
+  voltageReadout.value = v;
   redraw();
 });
 currentSlider.addEventListener('input', () => {
-  currentReadout.textContent = `${parseFloat(currentSlider.value).toFixed(1)} (relative)`;
+  currentReadout.value = parseFloat(currentSlider.value).toFixed(1);
+  redraw();
+});
+currentReadout.addEventListener('change', () => {
+  const raw = parseFloat(currentReadout.value);
+  if (isNaN(raw)) { currentReadout.value = parseFloat(currentSlider.value).toFixed(1); return; }
+  const v = Math.max(1, Math.min(10, Math.round(raw * 10) / 10));
+  currentSlider.value = v;
+  currentReadout.value = v.toFixed(1);
   redraw();
 });
 metalSelect.addEventListener('change', redraw);

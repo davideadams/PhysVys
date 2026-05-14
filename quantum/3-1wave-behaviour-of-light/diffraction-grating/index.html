@@ -39,7 +39,7 @@
         <label>Number of slits <span class="muted">N</span></label>
         <div class="slider-row">
           <input type="range" id="slider-N" min="2" max="40" step="1" value="6">
-          <span class="slider-val" id="val-N">6</span><span class="slider-unit">slits</span>
+          <input type="number" class="num-input" id="val-N" min="2" max="40" step="1" value="6"><span class="slider-unit">slits</span>
         </div>
       </div>
 
@@ -47,7 +47,7 @@
         <label>Slit separation <span class="muted">d</span></label>
         <div class="slider-row">
           <input type="range" id="slider-d" min="3" max="18" step="0.5" value="8">
-          <span class="slider-val" id="val-d">8.0</span><span class="slider-unit" id="unit-d">mm</span>
+          <input type="number" class="num-input" id="val-d" step="0.1" value="8.0"><span class="slider-unit" id="unit-d">mm</span>
         </div>
       </div>
 
@@ -55,7 +55,7 @@
         <label>Slit width <span class="muted">a</span></label>
         <div class="slider-row">
           <input type="range" id="slider-a" min="0.3" max="3.0" step="0.1" value="0.6">
-          <span class="slider-val" id="val-a">0.6</span><span class="slider-unit" id="unit-a">mm</span>
+          <input type="number" class="num-input" id="val-a" step="0.05" value="0.6"><span class="slider-unit" id="unit-a">mm</span>
         </div>
       </div>
 
@@ -63,7 +63,7 @@
         <label>Wavelength <span class="muted">λ</span></label>
         <div class="slider-row">
           <input type="range" id="slider-lambda" min="0.8" max="2.4" step="0.05" value="1.4">
-          <span class="slider-val" id="val-lambda">1.40</span><span class="slider-unit" id="unit-lambda">mm</span>
+          <input type="number" class="num-input" id="val-lambda" step="0.05" value="1.40"><span class="slider-unit" id="unit-lambda">mm</span>
         </div>
       </div>
 
@@ -71,7 +71,7 @@
         <label>Screen distance <span class="muted">L</span></label>
         <div class="slider-row">
           <input type="range" id="slider-L" min="50" max="156" step="1" value="130">
-          <span class="slider-val" id="val-L">130</span><span class="slider-unit" id="unit-L">mm</span>
+          <input type="number" class="num-input" id="val-L" step="1" value="130"><span class="slider-unit" id="unit-L">mm</span>
         </div>
       </div>
 
@@ -104,7 +104,7 @@
         </div>
         <div class="slider-row" style="margin-top:0.5rem">
           <input type="range" id="slider-speed" min="0.1" max="2.0" step="0.05" value="1.0">
-          <span class="slider-val" id="val-speed">1.00</span><span class="slider-unit">×</span>
+          <input type="number" class="num-input" id="val-speed" min="0.1" max="2.0" step="0.05" value="1.00"><span class="slider-unit">×</span>
         </div>
       </div>
 

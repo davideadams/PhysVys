@@ -481,7 +481,7 @@ function applyAutoStrobeInterval() {
   const sl = document.getElementById('slider-strobe');
   const vl = document.getElementById('val-strobe');
   if (sl) sl.value = cfg.strobeInterval;
-  if (vl) vl.textContent = cfg.strobeInterval.toFixed(2);
+  if (vl) vl.value = cfg.strobeInterval.toFixed(2);
 }
 
 /* ── Apply preset ────────────────────────────────────────────── */
@@ -493,9 +493,9 @@ function applyPreset() {
     const massEl  = document.getElementById(`mass-${i}`);
     const speedEl = document.getElementById(`speed-${i}`);
     const angleEl = document.getElementById(`angle-${i}`);
-    if (massEl)  { massEl.value  = f.mass;              document.getElementById(`val-mass-${i}`).textContent  = f.mass; }
-    if (speedEl) { speedEl.value = Math.round(f.speed); document.getElementById(`val-speed-${i}`).textContent = Math.round(f.speed); }
-    if (angleEl) { angleEl.value = Math.round(f.angle); document.getElementById(`val-angle-${i}`).textContent = Math.round(f.angle) + '°'; }
+    if (massEl)  { massEl.value  = f.mass;              document.getElementById(`val-mass-${i}`).value  = f.mass; }
+    if (speedEl) { speedEl.value = Math.round(f.speed); document.getElementById(`val-speed-${i}`).value = Math.round(f.speed); }
+    if (angleEl) { angleEl.value = Math.round(f.angle); document.getElementById(`val-angle-${i}`).value = Math.round(f.angle); }
   });
 
   showFragmentControls(p.numFragments);
@@ -582,11 +582,23 @@ document.getElementById('btn-labels').addEventListener('click', () => {
 });
 
 /* ── Strobe interval ─────────────────────────────────────────── */
-document.getElementById('slider-strobe').addEventListener('input', function () {
-  cfg.strobeInterval = parseFloat(this.value);
-  document.getElementById('val-strobe').textContent = cfg.strobeInterval.toFixed(2);
-  if (cfg.mode === 'strobe') generateStrobe();
-});
+{
+  const sl = document.getElementById('slider-strobe');
+  const vl = document.getElementById('val-strobe');
+  sl.addEventListener('input', () => {
+    cfg.strobeInterval = parseFloat(sl.value);
+    vl.value = cfg.strobeInterval.toFixed(2);
+    if (cfg.mode === 'strobe') generateStrobe();
+  });
+  vl.addEventListener('change', () => {
+    const r = parseFloat(vl.value);
+    if (isNaN(r)) { vl.value = cfg.strobeInterval.toFixed(2); return; }
+    cfg.strobeInterval = Math.max(0.10, Math.min(1.0, r));
+    sl.value = cfg.strobeInterval;
+    vl.value = cfg.strobeInterval.toFixed(2);
+    if (cfg.mode === 'strobe') generateStrobe();
+  });
+}
 
 /* ── Fragment sliders ────────────────────────────────────────── */
 // Rule: fragments 0..n-2 are freely specified; the last fragment is derived
@@ -616,9 +628,9 @@ document.getElementById('slider-strobe').addEventListener('input', function () {
       const vm = document.getElementById(`val-mass-${j}`);
       const vs = document.getElementById(`val-speed-${j}`);
       const va = document.getElementById(`val-angle-${j}`);
-      if (vm) vm.textContent = ff.mass;
-      if (vs) vs.textContent = Math.round(ff.speed);
-      if (va) va.textContent = Math.round(ff.angle) + '°';
+      if (vm) vm.value = ff.mass;
+      if (vs) vs.value = Math.round(ff.speed);
+      if (va) va.value = Math.round(ff.angle);
     });
 
     applyAutoStrobeInterval();
@@ -631,9 +643,35 @@ document.getElementById('slider-strobe').addEventListener('input', function () {
     }
   }
 
+  const massNum  = document.getElementById(`val-mass-${i}`);
+  const speedNum = document.getElementById(`val-speed-${i}`);
+  const angleNum = document.getElementById(`val-angle-${i}`);
+
+  function syncFromNum(numEl, sliderEl) {
+    const r = parseFloat(numEl.value);
+    if (isNaN(r) || !sliderEl) return false;
+    const min = parseFloat(sliderEl.min), max = parseFloat(sliderEl.max);
+    const clamped = Math.max(min, Math.min(max, Math.round(r)));
+    sliderEl.value = clamped;
+    numEl.value = clamped;
+    return true;
+  }
+
   if (massEl)  massEl.addEventListener('input',  onChange);
   if (speedEl) speedEl.addEventListener('input', onChange);
   if (angleEl) angleEl.addEventListener('input', onChange);
+  if (massNum) massNum.addEventListener('change', () => {
+    if (!syncFromNum(massNum, massEl)) { massNum.value = PRESETS[cfg.presetIdx].fragments[i].mass; return; }
+    onChange();
+  });
+  if (speedNum) speedNum.addEventListener('change', () => {
+    if (!syncFromNum(speedNum, speedEl)) { speedNum.value = Math.round(PRESETS[cfg.presetIdx].fragments[i].speed); return; }
+    onChange();
+  });
+  if (angleNum) angleNum.addEventListener('change', () => {
+    if (!syncFromNum(angleNum, angleEl)) { angleNum.value = Math.round(PRESETS[cfg.presetIdx].fragments[i].angle); return; }
+    onChange();
+  });
 });
 
 /* ── Play/pause and reset ────────────────────────────────────── */
@@ -701,7 +739,9 @@ function buildTriVertices(frags) {
 /* ── Slider lock/unlock ───────────────────────────────────── */
 function setSliderLock(locked) {
   ['speed-0','speed-1','speed-2','angle-0','angle-1','angle-2',
-   'mass-0','mass-1','mass-2'].forEach(id => {
+   'mass-0','mass-1','mass-2',
+   'val-speed-0','val-speed-1','val-speed-2','val-angle-0','val-angle-1','val-angle-2',
+   'val-mass-0','val-mass-1','val-mass-2'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.disabled = locked;
   });
@@ -740,8 +780,8 @@ function applyTriVertices() {
     const aVal = document.getElementById(`val-angle-${i}`);
     const sIn  = document.getElementById(`speed-${i}`);
     const aIn  = document.getElementById(`angle-${i}`);
-    if (sVal) sVal.textContent = Math.round(f.speed);
-    if (aVal) aVal.textContent = Math.round(f.angle) + '°';
+    if (sVal) sVal.value = Math.round(f.speed);
+    if (aVal) aVal.value = Math.round(f.angle);
     if (sIn)  sIn.value = Math.min(400, Math.max(0, Math.round(f.speed)));
     if (aIn)  aIn.value = Math.round(f.angle);
   });

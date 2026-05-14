@@ -233,11 +233,18 @@ numSpeed.addEventListener('change',   () => syncSpeed(numSpeed.value));
 sliderAngle.addEventListener('input', () => syncAngle(sliderAngle.value));
 numAngle.addEventListener('change',   () => syncAngle(numAngle.value));
 
-sliderSweep.addEventListener('input', () => {
-  cfg.sweepCount = +sliderSweep.value;
-  sweepCountLbl.textContent = cfg.sweepCount;
+function syncSweep(raw) {
+  let v = parseFloat(raw);
+  if (isNaN(v)) { sweepCountLbl.value = cfg.sweepCount; return; }
+  v = Math.max(3, Math.min(11, Math.round(v)));
+  if (v % 2 === 0) v = Math.min(11, v + 1);
+  cfg.sweepCount = v;
+  sliderSweep.value = v;
+  sweepCountLbl.value = v;
   onParamsChanged();
-});
+}
+sliderSweep.addEventListener('input', () => syncSweep(sliderSweep.value));
+sweepCountLbl.addEventListener('change', () => syncSweep(sweepCountLbl.value));
 
 /* ── Simulation state ────────────────────────────────────── */
 let animId    = null;   // rAF handle

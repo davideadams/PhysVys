@@ -32,7 +32,7 @@ const chargeTray = document.getElementById('charge-tray');
 const selectedPanel = document.getElementById('selected-panel');
 const selectedLabel = document.getElementById('selected-label');
 const magnitudeSlider = document.getElementById('magnitude-slider');
-const magnitudeValue = document.getElementById('magnitude-value');
+const magnitudeNum = document.getElementById('magnitude-num');
 const btnDelete = document.getElementById('btn-delete');
 const btnArrows = document.getElementById('btn-mode-arrows');
 const btnLines = document.getElementById('btn-mode-lines');
@@ -423,7 +423,7 @@ function draw() {
 function showSelectedPanel(charge) {
   selectedLabel.textContent = `Selected: ${charge.sign === '+' ? 'positive' : 'negative'} charge`;
   magnitudeSlider.value = charge.magnitude;
-  magnitudeValue.textContent = `${charge.magnitude} nC`;
+  magnitudeNum.value = charge.magnitude;
   selectedPanel.classList.remove('is-hidden');
 }
 
@@ -596,7 +596,19 @@ magnitudeSlider.addEventListener('input', () => {
   const charge = state.charges.find((c) => c.id === state.selectedId);
   if (!charge) return;
   charge.magnitude = Number(magnitudeSlider.value);
-  magnitudeValue.textContent = `${charge.magnitude} nC`;
+  magnitudeNum.value = charge.magnitude;
+  draw();
+});
+
+magnitudeNum.addEventListener('change', () => {
+  const charge = state.charges.find((c) => c.id === state.selectedId);
+  if (!charge) return;
+  const raw = parseFloat(magnitudeNum.value);
+  if (isNaN(raw)) { magnitudeNum.value = charge.magnitude; return; }
+  const clamped = Math.max(1, Math.min(10, Math.round(raw)));
+  charge.magnitude = clamped;
+  magnitudeNum.value = clamped;
+  magnitudeSlider.value = clamped;
   draw();
 });
 

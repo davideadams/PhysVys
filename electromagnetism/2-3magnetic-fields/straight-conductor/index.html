@@ -36,7 +36,7 @@
         <label>Current magnitude <span class="muted">I</span></label>
         <div class="slider-row">
           <input type="range" id="slider-current" min="0.1" max="10" step="0.1" value="1.0">
-          <span class="slider-val" id="val-current">1.0</span><span class="slider-unit">A</span>
+          <input type="number" class="num-input" id="val-current" min="0.1" max="10" step="0.1" value="1.0"><span class="slider-unit">A</span>
         </div>
       </div>
 
@@ -44,15 +44,15 @@
         <label>Probe position</label>
         <div class="param-row"><span>x</span>
           <input type="range" id="slider-px" min="-4" max="4" step="0.05" value="1.5">
-          <span class="slider-val" id="val-px">1.50</span><span class="slider-unit">cm</span>
+          <input type="number" class="num-input" id="val-px" min="-4" max="4" step="0.05" value="1.50"><span class="slider-unit">cm</span>
         </div>
         <div class="param-row"><span>y</span>
           <input type="range" id="slider-py" min="-3" max="3" step="0.05" value="0.0">
-          <span class="slider-val" id="val-py">0.00</span><span class="slider-unit">cm</span>
+          <input type="number" class="num-input" id="val-py" min="-3" max="3" step="0.05" value="0.00"><span class="slider-unit">cm</span>
         </div>
         <div class="param-row"><span>z</span>
           <input type="range" id="slider-pz" min="-4" max="4" step="0.05" value="1.5">
-          <span class="slider-val" id="val-pz">1.50</span><span class="slider-unit">cm</span>
+          <input type="number" class="num-input" id="val-pz" min="-4" max="4" step="0.05" value="1.50"><span class="slider-unit">cm</span>
         </div>
       </div>
 

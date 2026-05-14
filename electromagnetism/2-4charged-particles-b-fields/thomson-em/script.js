@@ -53,6 +53,21 @@ sliderVa.addEventListener("input", e => { state.Va = +e.target.value; refresh();
 sliderVd.addEventListener("input", e => { state.Vd = +e.target.value; refresh(); });
 sliderB .addEventListener("input", e => { state.B  = +e.target.value; refresh(); });
 
+function wireNumInput(numEl, sliderEl, parseKey) {
+  numEl.addEventListener("change", () => {
+    let v = parseFloat(numEl.value);
+    if (isNaN(v)) { refresh(); return; }
+    const min = parseFloat(sliderEl.min), max = parseFloat(sliderEl.max);
+    v = Math.max(min, Math.min(max, v));
+    sliderEl.value = v;
+    state[parseKey] = +sliderEl.value;
+    refresh();
+  });
+}
+wireNumInput(valVa, sliderVa, "Va");
+wireNumInput(valVd, sliderVd, "Vd");
+wireNumInput(valB,  sliderB,  "B");
+
 // ── B-field overlay (always into page) ───────────────────────
 function renderBSymbols(B_mT) {
   bSymbols.innerHTML = "";
@@ -170,9 +185,9 @@ function updateReadings() {
   rVa.textContent = `${state.Va} V`;
   rVd.textContent = `${state.Vd >= 0 ? "+" : ""}${state.Vd} V`;
   rB.textContent  = `${state.B.toFixed(3)} mT`;
-  valVa.textContent = `${state.Va} V`;
-  valVd.textContent = `${state.Vd >= 0 ? "+" : ""}${state.Vd} V`;
-  valB.textContent  = `${state.B.toFixed(3)} mT`;
+  valVa.value = String(state.Va);
+  valVd.value = String(state.Vd);
+  valB.value  = state.B.toFixed(3);
 }
 
 function refresh() {

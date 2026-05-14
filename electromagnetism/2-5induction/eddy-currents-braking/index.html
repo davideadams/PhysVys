@@ -42,7 +42,7 @@
           <label>Magnetic field <span class="muted">B</span></label>
           <div class="slider-row">
             <input type="range" id="slider-B" min="0" max="2.4" step="0.01" value="1.20">
-            <span class="slider-val" id="val-B">1.20</span><span class="slider-unit">T</span>
+            <input type="number" class="slider-val" id="val-B" min="0" max="2.4" step="0.01" value="1.20"><span class="slider-unit">T</span>
           </div>
         </div>
 
@@ -116,7 +116,7 @@
           <label>Drive frequency <span class="muted">f</span></label>
           <div class="slider-row">
             <input type="range" id="slider-freq" min="50" max="300" step="5" value="100">
-            <span class="slider-val" id="val-freq">100</span><span class="slider-unit">Hz</span>
+            <input type="number" class="slider-val" id="val-freq" min="50" max="300" step="5" value="100"><span class="slider-unit">Hz</span>
           </div>
           <p class="hint">Animated at ×0.02 speed so the cycle is visible.</p>
         </div>

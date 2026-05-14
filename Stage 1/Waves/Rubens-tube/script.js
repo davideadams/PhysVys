@@ -772,7 +772,16 @@ document.getElementById("btn-connect").addEventListener("click", () => {
 
 document.getElementById("slider-gain").addEventListener("input", e => {
   state.gainMult = +e.target.value;
-  document.getElementById("val-gain").textContent = e.target.value;
+  document.getElementById("val-gain").value = e.target.value;
+});
+document.getElementById("val-gain").addEventListener("change", e => {
+  const raw = parseFloat(e.target.value);
+  const sl = document.getElementById("slider-gain");
+  if (isNaN(raw)) { e.target.value = sl.value; return; }
+  const v = Math.max(+sl.min, Math.min(+sl.max, raw));
+  sl.value = v;
+  e.target.value = sl.value;
+  state.gainMult = +sl.value;
 });
 
 document.getElementById("sel-gas").addEventListener("change", e => {
@@ -783,14 +792,34 @@ document.getElementById("sel-gas").addEventListener("change", e => {
 
 document.getElementById("slider-L").addEventListener("input", e => {
   state.tubeLength = +e.target.value;
-  document.getElementById("val-L").textContent = (+e.target.value).toFixed(2);
+  document.getElementById("val-L").value = (+e.target.value).toFixed(2);
+  updateReadout();
+  updateModeHint();
+});
+document.getElementById("val-L").addEventListener("change", e => {
+  const raw = parseFloat(e.target.value);
+  const sl = document.getElementById("slider-L");
+  if (isNaN(raw)) { e.target.value = (+sl.value).toFixed(2); return; }
+  const v = Math.max(+sl.min, Math.min(+sl.max, raw));
+  sl.value = v;
+  e.target.value = (+sl.value).toFixed(2);
+  state.tubeLength = +sl.value;
   updateReadout();
   updateModeHint();
 });
 
 document.getElementById("slider-Q").addEventListener("input", e => {
   state.Q = +e.target.value;
-  document.getElementById("val-Q").textContent = e.target.value;
+  document.getElementById("val-Q").value = e.target.value;
+});
+document.getElementById("val-Q").addEventListener("change", e => {
+  const raw = parseFloat(e.target.value);
+  const sl = document.getElementById("slider-Q");
+  if (isNaN(raw)) { e.target.value = sl.value; return; }
+  const v = Math.max(+sl.min, Math.min(+sl.max, raw));
+  sl.value = v;
+  e.target.value = sl.value;
+  state.Q = +sl.value;
 });
 
 document.getElementById("btn-light").addEventListener("click", () => {

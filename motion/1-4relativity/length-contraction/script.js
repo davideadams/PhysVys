@@ -789,14 +789,22 @@ btnReset.addEventListener('click', () => {
   btnPlay.textContent = 'Pause';
 });
 
-sliderBeta.addEventListener('input', () => {
-  const b = parseFloat(sliderBeta.value);
-  valBeta.textContent = fmt(b, 2);
+function applyBeta(b) {
+  valBeta.value = fmt(b, 2);
+  sliderBeta.value = b;
   if (state.scenario === 'ship') {
     state.beta = b;
     state.animT = 0;
   }
   updateReadouts();
+}
+sliderBeta.addEventListener('input', () => {
+  applyBeta(parseFloat(sliderBeta.value));
+});
+valBeta.addEventListener('change', () => {
+  const raw = parseFloat(valBeta.value);
+  if (isNaN(raw)) { valBeta.value = fmt(parseFloat(sliderBeta.value), 2); return; }
+  applyBeta(Math.max(0.1, Math.min(0.99, raw)));
 });
 
 /* ── Init ───────────────────────────────────────────────────── */

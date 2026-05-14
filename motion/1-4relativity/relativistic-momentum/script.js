@@ -368,7 +368,15 @@ const valLabel = document.getElementById('val-beta');
 
 slider.addEventListener('input', () => {
   beta = parseFloat(slider.value);
-  valLabel.textContent = beta.toFixed(2);
+  valLabel.value = beta.toFixed(2);
+  draw();
+});
+valLabel.addEventListener('change', () => {
+  const raw = parseFloat(valLabel.value);
+  if (isNaN(raw)) { valLabel.value = beta.toFixed(2); return; }
+  beta = Math.max(parseFloat(slider.min), Math.min(parseFloat(slider.max), raw));
+  slider.value = beta;
+  valLabel.value = beta.toFixed(2);
   draw();
 });
 

@@ -430,7 +430,7 @@ function updateReadouts(segs, transFactors) {
     const valEl = slot.querySelector(".pol-angle-val");
     const cosVal = slot.querySelector(".pol-cos-val");
     const cosBar = slot.querySelector(".pol-cos-bar");
-    valEl.textContent = state.polarisers[i].angle.toFixed(0);
+    valEl.value = state.polarisers[i].angle.toFixed(0);
     const T = transFactors[i];
     if (i >= state.count || T === null) {
       cosVal.textContent = "—";
@@ -465,11 +465,21 @@ function frame(now) {
 function wireSlot(i) {
   const slot = document.getElementById(`slot-${i + 1}`);
   const slider = slot.querySelector(".pol-angle");
+  const valEl  = slot.querySelector(".pol-angle-val");
   slider.addEventListener("input", () => {
     const raw = parseFloat(slider.value);
     const snapped = applySnap(raw);
     state.polarisers[i].angle = snapped;
     if (snapped !== raw) slider.value = String(snapped);
+    render();
+  });
+  valEl.addEventListener("change", () => {
+    const raw = parseFloat(valEl.value);
+    if (isNaN(raw)) { valEl.value = state.polarisers[i].angle.toFixed(0); return; }
+    const clamped = Math.max(-90, Math.min(90, raw));
+    const snapped = applySnap(clamped);
+    state.polarisers[i].angle = snapped;
+    slider.value = String(snapped);
     render();
   });
 }
@@ -502,7 +512,7 @@ document.getElementById("btn-reset").addEventListener("click", () => {
   state.t = 0;
   state.speed = 1.0;
   document.getElementById("slider-speed").value = "1.0";
-  document.getElementById("val-speed").textContent = "1.00";
+  document.getElementById("val-speed").value = "1.00";
   for (let i = 0; i < 3; i++) {
     document.getElementById(`slot-${i + 1}`)
       .querySelector(".pol-angle").value = state.polarisers[i].angle;
@@ -513,7 +523,15 @@ document.getElementById("btn-reset").addEventListener("click", () => {
 
 document.getElementById("slider-speed").addEventListener("input", (e) => {
   state.speed = parseFloat(e.target.value);
-  document.getElementById("val-speed").textContent = state.speed.toFixed(2);
+  document.getElementById("val-speed").value = state.speed.toFixed(2);
+});
+document.getElementById("val-speed").addEventListener("change", (e) => {
+  const raw = parseFloat(e.target.value);
+  if (isNaN(raw)) { e.target.value = state.speed.toFixed(2); return; }
+  const v = Math.max(0.1, Math.min(2.0, raw));
+  state.speed = v;
+  document.getElementById("slider-speed").value = v;
+  e.target.value = v.toFixed(2);
 });
 
 document.getElementById("btn-arrows").addEventListener("click", () => {

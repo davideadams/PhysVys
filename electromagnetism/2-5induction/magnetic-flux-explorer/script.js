@@ -618,7 +618,17 @@ function wireSlider(id, valId, onChange, digits = 2) {
   const vl = document.getElementById(valId);
   el.addEventListener('input', () => {
     const v = parseFloat(el.value);
-    vl.textContent = v.toFixed(digits);
+    vl.value = v.toFixed(digits);
+    onChange(v);
+  });
+  vl.addEventListener('change', () => {
+    let v = parseFloat(vl.value);
+    if (isNaN(v)) { vl.value = parseFloat(el.value).toFixed(digits); return; }
+    const min = parseFloat(el.min), max = parseFloat(el.max);
+    v = Math.max(min, Math.min(max, v));
+    el.value = v;
+    v = parseFloat(el.value);
+    vl.value = v.toFixed(digits);
     onChange(v);
   });
 }

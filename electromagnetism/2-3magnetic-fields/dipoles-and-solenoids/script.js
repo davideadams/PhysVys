@@ -599,11 +599,23 @@ function bindSeg(groupId, handler) {
 function bindSlider(id, valId, transform, handler) {
   const slider = document.getElementById(id);
   const out = document.getElementById(valId);
+  const min = parseFloat(slider.min);
+  const max = parseFloat(slider.max);
+  const step = parseFloat(slider.step) || 1;
   const update = () => {
-    out.textContent = transform(parseFloat(slider.value));
+    out.value = transform(parseFloat(slider.value));
     handler(parseFloat(slider.value));
   };
   slider.addEventListener('input', update);
+  out.addEventListener('change', () => {
+    const raw = parseFloat(out.value);
+    if (isNaN(raw)) { out.value = transform(parseFloat(slider.value)); return; }
+    const snapped = Math.round((raw - min) / step) * step + min;
+    const v = Math.max(min, Math.min(max, snapped));
+    slider.value = v;
+    out.value = transform(v);
+    handler(v);
+  });
   update();
 }
 

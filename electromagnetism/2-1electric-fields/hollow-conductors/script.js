@@ -932,11 +932,27 @@ const fieldAngleV    = document.getElementById('field-angle-val');
 
 fieldStrength.addEventListener('input', () => {
   cavityField.mag = Number(fieldStrength.value) / 100;
-  fieldStrengthV.textContent = `${fieldStrength.value}%`;
+  fieldStrengthV.value = fieldStrength.value;
+});
+fieldStrengthV.addEventListener('change', () => {
+  const raw = parseFloat(fieldStrengthV.value);
+  if (isNaN(raw)) { fieldStrengthV.value = fieldStrength.value; return; }
+  const v = Math.max(0, Math.min(100, Math.round(raw)));
+  fieldStrengthV.value = v;
+  fieldStrength.value = v;
+  cavityField.mag = v / 100;
 });
 fieldAngle.addEventListener('input', () => {
   cavityField.angle = (Number(fieldAngle.value) * Math.PI) / 180;
-  fieldAngleV.textContent = `${fieldAngle.value}°`;
+  fieldAngleV.value = fieldAngle.value;
+});
+fieldAngleV.addEventListener('change', () => {
+  const raw = parseFloat(fieldAngleV.value);
+  if (isNaN(raw)) { fieldAngleV.value = fieldAngle.value; return; }
+  const v = Math.max(0, Math.min(359, Math.round(raw)));
+  fieldAngleV.value = v;
+  fieldAngle.value = v;
+  cavityField.angle = (v * Math.PI) / 180;
 });
 document.querySelectorAll('.dir-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
@@ -966,12 +982,29 @@ const pointCurvature  = document.getElementById('point-curvature');
 const pointCurvatureV = document.getElementById('point-curvature-val');
 
 pointCount.addEventListener('input', () => {
-  pointCountV.textContent = pointCount.value;
+  pointCountV.value = pointCount.value;
   setPointChargeCount(Number(pointCount.value));
+});
+pointCountV.addEventListener('change', () => {
+  const raw = parseFloat(pointCountV.value);
+  if (isNaN(raw)) { pointCountV.value = pointCount.value; return; }
+  const v = Math.max(0, Math.min(40, Math.round(raw)));
+  pointCountV.value = v;
+  pointCount.value = v;
+  setPointChargeCount(v);
 });
 pointCurvature.addEventListener('input', () => {
   pointMode.curvature = Number(pointCurvature.value) / 100;
-  pointCurvatureV.textContent = `${pointCurvature.value}%`;
+  pointCurvatureV.value = pointCurvature.value;
+  buildPointOutline();
+});
+pointCurvatureV.addEventListener('change', () => {
+  const raw = parseFloat(pointCurvatureV.value);
+  if (isNaN(raw)) { pointCurvatureV.value = pointCurvature.value; return; }
+  const v = Math.max(0, Math.min(100, Math.round(raw)));
+  pointCurvatureV.value = v;
+  pointCurvature.value = v;
+  pointMode.curvature = v / 100;
   buildPointOutline();
 });
 document.getElementById('show-lines-2').addEventListener('change', (e) => {

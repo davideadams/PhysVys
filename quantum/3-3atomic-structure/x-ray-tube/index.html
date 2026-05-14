@@ -43,14 +43,18 @@
 
         <div class="control-group">
           <label for="voltage-slider">Accelerating Voltage</label>
-          <input type="range" id="voltage-slider" min="10" max="75" step="1" value="40">
-          <span class="value-readout" id="voltage-readout">40 kV</span>
+          <div class="slider-row">
+            <input type="range" id="voltage-slider" min="10" max="75" step="1" value="40">
+            <input type="number" class="num-input" id="voltage-readout" min="10" max="75" step="1" value="40"><span class="slider-unit">kV</span>
+          </div>
         </div>
 
         <div class="control-group">
           <label for="current-slider">Filament Current (electron beam intensity)</label>
-          <input type="range" id="current-slider" min="1" max="10" step="0.1" value="5">
-          <span class="value-readout" id="current-readout">5.0 (relative)</span>
+          <div class="slider-row">
+            <input type="range" id="current-slider" min="1" max="10" step="0.1" value="5">
+            <input type="number" class="num-input" id="current-readout" min="1" max="10" step="0.1" value="5.0"><span class="slider-unit">(relative)</span>
+          </div>
         </div>
 
         <div class="control-group">

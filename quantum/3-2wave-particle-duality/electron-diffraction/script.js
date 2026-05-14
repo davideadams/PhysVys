@@ -329,14 +329,32 @@ function clearScreen() { state.dots = []; state.dotAccum = 0; }
 
 $("slider-V").addEventListener("input", (e) => {
   state.V = parseInt(e.target.value, 10);
-  $("val-V").textContent = state.V;
+  $("val-V").value = state.V;
   fieldCacheKey = "";   // force re-render
+  clearScreen();
+});
+$("val-V").addEventListener("change", (e) => {
+  const raw = parseFloat(e.target.value);
+  if (isNaN(raw)) { e.target.value = state.V; return; }
+  const v = Math.max(500, Math.min(5000, Math.round(raw)));
+  state.V = v;
+  $("slider-V").value = v;
+  e.target.value = v;
+  fieldCacheKey = "";
   clearScreen();
 });
 
 $("slider-rate").addEventListener("input", (e) => {
   state.rate = parseInt(e.target.value, 10);
-  $("val-rate").textContent = state.rate;
+  $("val-rate").value = state.rate;
+});
+$("val-rate").addEventListener("change", (e) => {
+  const raw = parseFloat(e.target.value);
+  if (isNaN(raw)) { e.target.value = state.rate; return; }
+  const v = Math.max(5, Math.min(400, Math.round(raw)));
+  state.rate = v;
+  $("slider-rate").value = v;
+  e.target.value = v;
 });
 
 $("sel-target").addEventListener("change", (e) => {

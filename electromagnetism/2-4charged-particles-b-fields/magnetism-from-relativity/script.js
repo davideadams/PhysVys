@@ -411,7 +411,16 @@ const sliderBeta = document.getElementById('slider-beta');
 const valBeta = document.getElementById('val-beta');
 sliderBeta.addEventListener('input', () => {
   state.beta = parseFloat(sliderBeta.value);
-  valBeta.textContent = state.beta.toFixed(2);
+  valBeta.value = state.beta.toFixed(2);
+});
+valBeta.addEventListener('change', () => {
+  let v = parseFloat(valBeta.value);
+  if (isNaN(v)) { valBeta.value = state.beta.toFixed(2); return; }
+  const min = parseFloat(sliderBeta.min), max = parseFloat(sliderBeta.max);
+  v = Math.max(min, Math.min(max, v));
+  sliderBeta.value = v;
+  state.beta = parseFloat(sliderBeta.value);
+  valBeta.value = state.beta.toFixed(2);
 });
 
 function toggleVecBtn(id, key) {
@@ -440,7 +449,7 @@ document.getElementById('btn-reset').addEventListener('click', () => {
   state.showField = true;
   state.playing = true;
   sliderBeta.value = '0.6';
-  valBeta.textContent = '0.60';
+  valBeta.value = '0.60';
   setActive('#seg-frame', document.querySelector('#seg-frame .seg-btn[data-val="lab"]'));
   setActive('#seg-q',     document.querySelector('#seg-q .seg-btn[data-val="neg"]'));
   ['btn-vels','btn-force','btn-field'].forEach((id) => document.getElementById(id).classList.add('active'));

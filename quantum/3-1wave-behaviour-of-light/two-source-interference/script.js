@@ -349,7 +349,16 @@ function bindSlider(id, valId, key, fmt) {
   sl.addEventListener('input', () => {
     const v = parseFloat(sl.value);
     state[key] = v;
-    va.textContent = fmt(v);
+    va.value = fmt(v);
+  });
+  va.addEventListener('change', () => {
+    const raw = parseFloat(va.value);
+    if (isNaN(raw)) { va.value = fmt(state[key]); return; }
+    const lo = parseFloat(sl.min), hi = parseFloat(sl.max);
+    const v = Math.max(lo, Math.min(hi, raw));
+    state[key] = v;
+    sl.value = v;
+    va.value = fmt(v);
   });
 }
 bindSlider('slider-d',      'val-d',      'd',           v => v.toFixed(0));

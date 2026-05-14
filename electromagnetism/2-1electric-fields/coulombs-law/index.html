@@ -42,7 +42,10 @@
             <button class="sign-btn positive active" id="q1-sign-pos" type="button" aria-pressed="true">+</button>
             <button class="sign-btn negative" id="q1-sign-neg" type="button" aria-pressed="false">−</button>
           </div>
-          <input id="q1-slider" type="range" min="1" max="10" step="1" value="1">
+          <div class="slider-row">
+            <input id="q1-slider" type="range" min="1" max="10" step="1" value="1">
+            <input id="q1-num" type="number" class="num-input" min="1" max="10" step="1" value="1"><span class="slider-unit">μC</span>
+          </div>
           <p id="q1-display" class="value-display"></p>
         </div>
 
@@ -52,7 +55,10 @@
             <button class="sign-btn positive" id="q2-sign-pos" type="button" aria-pressed="false">+</button>
             <button class="sign-btn negative active" id="q2-sign-neg" type="button" aria-pressed="true">−</button>
           </div>
-          <input id="q2-slider" type="range" min="1" max="10" step="1" value="1">
+          <div class="slider-row">
+            <input id="q2-slider" type="range" min="1" max="10" step="1" value="1">
+            <input id="q2-num" type="number" class="num-input" min="1" max="10" step="1" value="1"><span class="slider-unit">μC</span>
+          </div>
           <p id="q2-display" class="value-display"></p>
         </div>
 

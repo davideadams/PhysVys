@@ -152,6 +152,25 @@ h1 {
 
 .mono { font-family: "Courier New", monospace; }
 
+.num-input {
+  width: 5rem;
+  padding: 0.2rem 0.35rem;
+  border: 1.5px solid rgba(21,48,77,0.14);
+  border-radius: 8px;
+  background: white;
+  color: var(--ink);
+  font: inherit;
+  font-family: "Courier New", monospace;
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.num-input:focus { outline: 2px solid var(--accent-strong); outline-offset: 1px; }
+.num-input::-webkit-outer-spin-button,
+.num-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.num-input { -moz-appearance: textfield; }
+
 .explainer {
   padding: 0.85rem 1rem;
   background: rgba(239, 247, 255, 0.95);

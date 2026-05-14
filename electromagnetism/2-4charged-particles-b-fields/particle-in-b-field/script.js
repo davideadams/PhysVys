@@ -487,15 +487,30 @@ function clampRealB(req) {
 function wireSlider(id, valId, clamp, store, digits = 1, unitFn = null) {
   const el = document.getElementById(id);
   const vl = document.getElementById(valId);
-  el.addEventListener('input', () => {
-    let v = parseFloat(el.value);
+  function apply(v) {
     const clamped = clamp(v);
-    if (clamped !== v) { v = clamped; el.value = v; }
-    vl.textContent = v.toFixed(digits);
+    if (clamped !== v) { v = clamped; }
+    el.value = v;
+    vl.value = v.toFixed(digits);
     if (unitFn) unitFn(v);
     store(v);
     resetParticle();
     updateReadouts();
+  }
+  el.addEventListener('input', () => {
+    apply(parseFloat(el.value));
+  });
+  vl.addEventListener('change', () => {
+    let typed = parseFloat(vl.value);
+    if (isNaN(typed)) { vl.value = parseFloat(el.value).toFixed(digits); return; }
+    // For val-B-real: when current unit is T, the user typed a value in T → convert to mT.
+    if (id === 'slider-B-real') {
+      const unitEl = document.getElementById('unit-B-real');
+      if (unitEl && unitEl.textContent === 'T') typed *= 1000;
+    }
+    const min = parseFloat(el.min), max = parseFloat(el.max);
+    typed = Math.max(min, Math.min(max, typed));
+    apply(typed);
   });
 }
 wireSlider('slider-m', 'val-m', clampAbstractM, (v) => { state.m = v; }, 1);
@@ -508,7 +523,7 @@ wireSlider('slider-B-real', 'val-B-real', clampRealB, (v) => { state.BReal = v; 
   document.getElementById('unit-B-real').textContent = v >= 1000 ? 'T' : 'mT';
   // When showing T, scale value display.
   if (v >= 1000) {
-    document.getElementById('val-B-real').textContent = (v / 1000).toFixed(2);
+    document.getElementById('val-B-real').value = (v / 1000).toFixed(2);
   }
 });
 
@@ -521,8 +536,12 @@ function applyParticle(name) {
   const sb = document.getElementById('slider-B-real');
   sv.max = p.vMax; sv.value = p.vDefault; state.vReal = p.vDefault;
   sb.max = p.BMax; sb.value = p.BDefault; state.BReal = p.BDefault;
-  document.getElementById('val-v-real').textContent = p.vDefault.toFixed(1);
-  document.getElementById('val-B-real').textContent = p.BDefault >= 1000
+  const valV = document.getElementById('val-v-real');
+  const valB = document.getElementById('val-B-real');
+  valV.max = p.vMax;
+  valB.max = p.BMax;
+  valV.value = p.vDefault.toFixed(1);
+  valB.value = p.BDefault >= 1000
     ? (p.BDefault / 1000).toFixed(2)
     : p.BDefault.toFixed(1);
   document.getElementById('unit-B-real').textContent = p.BDefault >= 1000 ? 'T' : 'mT';

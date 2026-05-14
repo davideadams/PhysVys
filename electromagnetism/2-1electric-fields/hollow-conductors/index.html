@@ -40,7 +40,7 @@
             <label for="field-strength">External field strength</label>
             <div class="slider-row">
               <input id="field-strength" type="range" min="0" max="100" step="1" value="60">
-              <span id="field-strength-val" class="slider-readout">60%</span>
+              <input id="field-strength-val" type="number" class="num-input" min="0" max="100" step="1" value="60"><span class="slider-unit">%</span>
             </div>
           </div>
 
@@ -48,7 +48,7 @@
             <label for="field-angle">Field direction</label>
             <div class="slider-row">
               <input id="field-angle" type="range" min="0" max="359" step="1" value="0">
-              <span id="field-angle-val" class="slider-readout">0°</span>
+              <input id="field-angle-val" type="number" class="num-input" min="0" max="359" step="1" value="0"><span class="slider-unit">°</span>
             </div>
             <div class="direction-buttons">
               <button class="dir-btn" data-angle="0" type="button">→</button>
@@ -108,7 +108,7 @@
             <label for="point-count">Number of charges</label>
             <div class="slider-row">
               <input id="point-count" type="range" min="0" max="40" step="1" value="10">
-              <span id="point-count-val" class="slider-readout">10</span>
+              <input id="point-count-val" type="number" class="num-input" min="0" max="40" step="1" value="10">
             </div>
           </div>
 
@@ -116,7 +116,7 @@
             <label for="point-curvature">Curvature</label>
             <div class="slider-row">
               <input id="point-curvature" type="range" min="0" max="100" step="1" value="0">
-              <span id="point-curvature-val" class="slider-readout">0%</span>
+              <input id="point-curvature-val" type="number" class="num-input" min="0" max="100" step="1" value="0"><span class="slider-unit">%</span>
             </div>
           </div>
 

@@ -105,7 +105,7 @@
           <div class="ctrl">
             <div class="ctrl-head">
               <label for="va">Accelerating voltage <em>V<sub>a</sub></em></label>
-              <span class="ctrl-val mono" id="va-val">200 V</span>
+              <span class="ctrl-val-wrap"><input type="number" class="ctrl-val mono" id="va-val" min="100" max="300" step="5" value="200"><span class="ctrl-unit mono">V</span></span>
             </div>
             <input type="range" id="va" min="100" max="300" step="5" value="200">
             <div class="ctrl-foot"><span class="muted mono">100 V</span><span class="muted mono">300 V</span></div>
@@ -113,7 +113,7 @@
           <div class="ctrl">
             <div class="ctrl-head">
               <label for="vd">Deflecting voltage <em>V<sub>d</sub></em></label>
-              <span class="ctrl-val mono" id="vd-val">0 V</span>
+              <span class="ctrl-val-wrap"><input type="number" class="ctrl-val mono" id="vd-val" min="-800" max="800" step="1" value="0"><span class="ctrl-unit mono">V</span></span>
             </div>
             <input type="range" id="vd" min="-800" max="800" step="1" value="0">
             <div class="ctrl-foot"><span class="muted mono">−800 V</span><span class="muted mono">+800 V</span></div>
@@ -121,7 +121,7 @@
           <div class="ctrl">
             <div class="ctrl-head">
               <label for="b">Magnetic field <em>B</em></label>
-              <span class="ctrl-val mono" id="b-val">0.000 mT</span>
+              <span class="ctrl-val-wrap"><input type="number" class="ctrl-val mono" id="b-val" min="0" max="0.6" step="0.005" value="0.000"><span class="ctrl-unit mono">mT</span></span>
             </div>
             <input type="range" id="b" min="0" max="0.6" step="0.005" value="0">
             <div class="ctrl-foot"><span class="muted mono">0 mT</span><span class="muted mono">0.6 mT</span></div>

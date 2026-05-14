@@ -504,9 +504,20 @@ function updateReadout(eNow, psiNow) {
 function wireSlider(id, valId, onChange, digits = 2) {
   const el = document.getElementById(id);
   const vl = document.getElementById(valId);
+  function fmt(v) { return digits === 0 ? Math.round(v).toString() : v.toFixed(digits); }
   el.addEventListener('input', () => {
     const v = parseFloat(el.value);
-    vl.textContent = digits === 0 ? Math.round(v).toString() : v.toFixed(digits);
+    vl.value = fmt(v);
+    onChange(v);
+  });
+  vl.addEventListener('change', () => {
+    let v = parseFloat(vl.value);
+    if (isNaN(v)) { vl.value = fmt(parseFloat(el.value)); return; }
+    const min = parseFloat(el.min), max = parseFloat(el.max);
+    v = Math.max(min, Math.min(max, v));
+    el.value = v;
+    v = parseFloat(el.value);
+    vl.value = fmt(v);
     onChange(v);
   });
 }

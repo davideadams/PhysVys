@@ -50,7 +50,7 @@
         <div class="slider-row">
           <label for="slider-E" class="inline-lbl">E</label>
           <input type="range" id="slider-E" min="1.0" max="8.0" step="0.1" value="5.0">
-          <span class="slider-val" id="val-E">5.0</span><span class="slider-unit">MeV</span>
+          <input type="number" class="num-input" id="val-E" min="1.0" max="8.0" step="0.1" value="5.0"><span class="slider-unit">MeV</span>
         </div>
       </div>
 
@@ -63,7 +63,7 @@
         <div class="slider-row" style="margin-top:0.55rem">
           <label for="slider-rate" class="inline-lbl">Rate</label>
           <input type="range" id="slider-rate" min="1" max="40" step="1" value="12">
-          <span class="slider-val" id="val-rate">12</span><span class="slider-unit">α/s</span>
+          <input type="number" class="num-input" id="val-rate" min="1" max="40" step="1" value="12"><span class="slider-unit">α/s</span>
         </div>
         <div class="auto-row" style="margin-top:0.55rem">
           <button id="btn-fire-one" class="play-btn ghost" type="button">Fire one α</button>

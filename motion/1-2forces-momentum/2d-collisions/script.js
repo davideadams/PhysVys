@@ -540,7 +540,7 @@ function applyAutoStrobeInterval() {
   const sl = document.getElementById('slider-strobe');
   const vl = document.getElementById('val-strobe');
   if (sl) sl.value = cfg.strobeInterval;
-  if (vl) vl.textContent = cfg.strobeInterval.toFixed(2);
+  if (vl) vl.value = cfg.strobeInterval.toFixed(2);
 }
 
 /* ── UI helpers ──────────────────────────────────────────────── */
@@ -753,9 +753,9 @@ function syncCollSliders() {
     const massEl  = document.getElementById(`mass-${i}`);
     const speedEl = document.getElementById(`speed-${i}`);
     const angleEl = document.getElementById(`angle-${i}`);
-    if (massEl)  { massEl.value  = ps[i].mass;  document.getElementById(`val-mass-${i}`).textContent  = ps[i].mass; }
-    if (speedEl) { speedEl.value = ps[i].speed; document.getElementById(`val-speed-${i}`).textContent = ps[i].speed; }
-    if (angleEl) { angleEl.value = ps[i].angle; document.getElementById(`val-angle-${i}`).textContent = ps[i].angle + '°'; }
+    if (massEl)  { massEl.value  = ps[i].mass;  document.getElementById(`val-mass-${i}`).value  = ps[i].mass; }
+    if (speedEl) { speedEl.value = ps[i].speed; document.getElementById(`val-speed-${i}`).value = ps[i].speed; }
+    if (angleEl) { angleEl.value = ps[i].angle; document.getElementById(`val-angle-${i}`).value = ps[i].angle; }
   });
 }
 
@@ -1693,9 +1693,9 @@ function applyPreset() {
     const massEl  = document.getElementById(`mass-${i}`);
     const speedEl = document.getElementById(`speed-${i}`);
     const angleEl = document.getElementById(`angle-${i}`);
-    if (massEl)  { massEl.value  = pp.mass;  document.getElementById(`val-mass-${i}`).textContent  = pp.mass; }
-    if (speedEl) { speedEl.value = pp.speed; document.getElementById(`val-speed-${i}`).textContent = pp.speed; }
-    if (angleEl) { angleEl.value = pp.angle; document.getElementById(`val-angle-${i}`).textContent = pp.angle + '°'; }
+    if (massEl)  { massEl.value  = pp.mass;  document.getElementById(`val-mass-${i}`).value  = pp.mass; }
+    if (speedEl) { speedEl.value = pp.speed; document.getElementById(`val-speed-${i}`).value = pp.speed; }
+    if (angleEl) { angleEl.value = pp.angle; document.getElementById(`val-angle-${i}`).value = pp.angle; }
   });
 
   showParticleControls(p.particles.length);
@@ -1758,12 +1758,26 @@ const show = { triangle: false, labels: false };
 /* ── Wire up sliders ─────────────────────────────────────────── */
 function wireSlider(id, valId, key, transform, resetAfter) {
   const el = document.getElementById(id);
+  const numEl = document.getElementById(valId);
   if (!el) return;
+  const fmt = v => typeof v === 'number' && !Number.isInteger(v) ? v.toFixed(2) : v;
   el.addEventListener('input', () => {
     const v = transform(parseFloat(el.value));
     cfg[key] = v;
-    document.getElementById(valId).textContent = typeof v === 'number' && !Number.isInteger(v)
-      ? v.toFixed(2) : v;
+    if (numEl) numEl.value = fmt(v);
+    if (resetAfter) {
+      if (cfg.mode === 'strobe') generateStrobe();
+      else reset();
+    }
+  });
+  if (numEl) numEl.addEventListener('change', () => {
+    const raw = parseFloat(numEl.value);
+    if (isNaN(raw)) { numEl.value = fmt(cfg[key]); return; }
+    const min = parseFloat(el.min), max = parseFloat(el.max);
+    const v = transform(Math.max(min, Math.min(max, raw)));
+    cfg[key] = v;
+    el.value = v;
+    numEl.value = fmt(v);
     if (resetAfter) {
       if (cfg.mode === 'strobe') generateStrobe();
       else reset();
@@ -1777,27 +1791,55 @@ function wireParticleSliders() {
     const massEl  = document.getElementById(`mass-${i}`);
     const speedEl = document.getElementById(`speed-${i}`);
     const angleEl = document.getElementById(`angle-${i}`);
+    const massNum  = document.getElementById(`val-mass-${i}`);
+    const speedNum = document.getElementById(`val-speed-${i}`);
+    const angleNum = document.getElementById(`val-angle-${i}`);
 
-    if (massEl) massEl.addEventListener('input', () => {
-      PRESETS[cfg.presetIdx].particles[i].mass = parseInt(massEl.value);
-      document.getElementById(`val-mass-${i}`).textContent = massEl.value;
+    const applyMass = v => {
+      PRESETS[cfg.presetIdx].particles[i].mass = v;
+      if (massEl)  massEl.value = v;
+      if (massNum) massNum.value = v;
       positionPresetParticles();
       applyAutoStrobeInterval();
       if (cfg.mode === 'strobe') generateStrobe(); else reset();
-    });
-    if (speedEl) speedEl.addEventListener('input', () => {
-      PRESETS[cfg.presetIdx].particles[i].speed = parseInt(speedEl.value);
-      document.getElementById(`val-speed-${i}`).textContent = speedEl.value;
+    };
+    const applySpeed = v => {
+      PRESETS[cfg.presetIdx].particles[i].speed = v;
+      if (speedEl)  speedEl.value = v;
+      if (speedNum) speedNum.value = v;
       positionPresetParticles();
       applyAutoStrobeInterval();
       if (cfg.mode === 'strobe') generateStrobe(); else reset();
-    });
-    if (angleEl) angleEl.addEventListener('input', () => {
-      const deg = parseInt(angleEl.value);
-      PRESETS[cfg.presetIdx].particles[i].angle = deg;
-      document.getElementById(`val-angle-${i}`).textContent = deg + '°';
+    };
+    const applyAngle = v => {
+      PRESETS[cfg.presetIdx].particles[i].angle = v;
+      if (angleEl)  angleEl.value = v;
+      if (angleNum) angleNum.value = v;
       positionPresetParticles();
       if (cfg.mode === 'strobe') generateStrobe(); else reset();
+    };
+    const clamp = (el, raw) => {
+      const min = parseFloat(el.min), max = parseFloat(el.max);
+      return Math.max(min, Math.min(max, raw));
+    };
+
+    if (massEl) massEl.addEventListener('input', () => applyMass(parseInt(massEl.value)));
+    if (massNum) massNum.addEventListener('change', () => {
+      const r = parseFloat(massNum.value);
+      if (isNaN(r)) { massNum.value = PRESETS[cfg.presetIdx].particles[i].mass; return; }
+      applyMass(Math.round(clamp(massEl, r)));
+    });
+    if (speedEl) speedEl.addEventListener('input', () => applySpeed(parseInt(speedEl.value)));
+    if (speedNum) speedNum.addEventListener('change', () => {
+      const r = parseFloat(speedNum.value);
+      if (isNaN(r)) { speedNum.value = PRESETS[cfg.presetIdx].particles[i].speed; return; }
+      applySpeed(Math.round(clamp(speedEl, r)));
+    });
+    if (angleEl) angleEl.addEventListener('input', () => applyAngle(parseInt(angleEl.value)));
+    if (angleNum) angleNum.addEventListener('change', () => {
+      const r = parseFloat(angleNum.value);
+      if (isNaN(r)) { angleNum.value = PRESETS[cfg.presetIdx].particles[i].angle; return; }
+      applyAngle(Math.round(clamp(angleEl, r)));
     });
   });
 }
