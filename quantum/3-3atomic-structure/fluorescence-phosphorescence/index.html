@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fluorescence &amp; Phosphorescence</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../../index.html">← Back to Main Menu</a>
+      <p class="eyebrow">SACE Stage 2 Physics — Light &amp; Atoms 3.3</p>
+      <h1>Fluorescence &amp; Phosphorescence</h1>
+      <p class="intro">
+        A UV photon excites a molecule to a high-energy state. In fluorescence
+        the molecule emits a visible photon almost instantly; in phosphorescence
+        it gets trapped in a <em>metastable</em> state (T<sub>1</sub>) first,
+        then emits later at even lower energy. One high-energy photon in;
+        one lower-energy visible photon out — after a delay that can last seconds.
+      </p>
+    </div>
+  </section>
+
+  <section class="layout">
+    <aside class="panel controls">
+
+      <div class="control-group">
+        <label>Mode</label>
+        <div class="seg-control cols-2" id="seg-mode">
+          <button class="seg-btn active" data-mode="fluorescence"    type="button">Fluorescence</button>
+          <button class="seg-btn"        data-mode="phosphorescence" type="button">Phosphorescence</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Source</label>
+        <div class="seg-control cols-2" id="seg-source">
+          <button class="seg-btn active" data-src="single"     type="button">Single shot</button>
+          <button class="seg-btn"        data-src="continuous" type="button">Continuous</button>
+        </div>
+      </div>
+
+      <div class="control-group" id="grp-fire">
+        <div class="auto-row">
+          <button class="play-btn" id="btn-fire" type="button">Fire photon</button>
+        </div>
+      </div>
+
+      <div class="control-group hidden" id="grp-lamp">
+        <div class="auto-row">
+          <button class="play-btn" id="btn-lamp" type="button">Lamp on</button>
+        </div>
+      </div>
+
+      <div class="control-group hidden" id="grp-lifetime">
+        <label>Metastable lifetime &nbsp;<span id="lbl-lifetime">2.0 s</span></label>
+        <input type="range" id="sld-lifetime" min="0.5" max="5" step="0.5" value="2">
+      </div>
+
+      <div class="control-group">
+        <label>Last emission</label>
+        <div class="readout-card">
+          <div class="readout-row">
+            <span class="readout-k">Absorbed</span>
+            <span class="readout-v" id="rd-abs">— <span class="readout-unit">nm</span></span>
+          </div>
+          <div class="readout-row">
+            <span class="readout-k">Emitted</span>
+            <span class="readout-v" id="rd-emit">— <span class="readout-unit">nm</span></span>
+          </div>
+          <div class="readout-row">
+            <span class="readout-k">E in</span>
+            <span class="readout-v" id="rd-ein">— <span class="readout-unit">eV</span></span>
+          </div>
+          <div class="readout-row">
+            <span class="readout-k">E out</span>
+            <span class="readout-v" id="rd-eout">— <span class="readout-unit">eV</span></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <div class="auto-row">
+          <button class="play-btn ghost" id="btn-clear" type="button">Clear spectrum</button>
+        </div>
+      </div>
+
+    </aside>
+
+    <section class="panel visual-panel">
+      <div class="canvas-wrap">
+        <canvas id="fluor-canvas" width="960" height="600"
+                aria-label="Jablonski energy-level diagram and emission spectrum strip."></canvas>
+      </div>
+    </section>
+  </section>
+
+</main>
+<script src="script.js"></script>
+</body>
+</html>
