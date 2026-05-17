@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Decay Checker</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../../index.html">← Back to Main Menu</a>
+      <p class="eyebrow">SACE Stage 2 Physics — Light &amp; Atoms 3.4</p>
+      <h1>Decay Checker</h1>
+      <p class="intro">
+        Use the five conservation laws (Q, B, L<sub>e</sub>, L<sub>μ</sub>,
+        L<sub>τ</sub>) to decide whether a reaction is allowed. In
+        <em>Fix it</em> mode, each reaction is either valid as written or has
+        one wrong particle — fill in the conservation table to find out which,
+        and swap a chip if a fix is needed. In <em>Free build</em>, assemble
+        any reaction from scratch and test it the same way.
+      </p>
+    </div>
+  </section>
+
+  <section class="layout">
+    <aside class="panel controls">
+
+      <div class="control-group">
+        <label>Mode</label>
+        <div class="seg-control cols-2" id="seg-mode">
+          <button class="seg-btn active" data-mode="fixit"  type="button">Fix it</button>
+          <button class="seg-btn"        data-mode="free"   type="button">Free build</button>
+        </div>
+      </div>
+
+      <!-- Fix-it navigation (hidden in free-build mode) -->
+      <div id="fixit-area" class="control-group">
+        <label>Reaction</label>
+        <div class="fixit-nav">
+          <button class="nav-btn" id="btn-prev" type="button">←</button>
+          <span class="nav-counter" id="nav-counter">1 / 8</span>
+          <button class="nav-btn" id="btn-next" type="button">→</button>
+        </div>
+      </div>
+
+      <!-- Zone selector + per-side clears (hidden in fix-it mode) -->
+      <div id="free-zone-area" class="control-group" style="display:none">
+        <label>Add particles to</label>
+        <div class="zone-selector">
+          <button class="zone-sel-btn active" data-zone="lhs" id="zsel-lhs" type="button">← Before</button>
+          <button class="zone-sel-btn"        data-zone="rhs" id="zsel-rhs" type="button">After →</button>
+        </div>
+        <div class="zone-clear-row">
+          <button class="zone-clear-btn" id="lhs-clear" type="button">Clear before</button>
+          <button class="zone-clear-btn" id="rhs-clear" type="button">Clear after</button>
+        </div>
+      </div>
+
+      <!-- Particle palette -->
+      <div class="control-group">
+        <label>Particle palette</label>
+        <p class="palette-hint">Click to add, or drag into the equation.</p>
+        <div class="palette-tabs" id="palette-tabs">
+          <button class="palette-tab" data-tab="hadrons"  type="button">Hadrons</button>
+          <button class="palette-tab" data-tab="leptons"  type="button">Leptons</button>
+          <button class="palette-tab" data-tab="bosons"   type="button">Bosons</button>
+          <button class="palette-tab" data-tab="quarks"   type="button">Quarks</button>
+        </div>
+        <div class="palette-grid" id="palette-grid"></div>
+      </div>
+
+    </aside>
+
+    <section class="panel visual-panel">
+
+      <!-- Reaction & conservation table (chips as column headers) -->
+      <div class="conservation-section">
+        <div class="conservation-title">Reaction &amp; conservation table</div>
+        <div class="verdict-table" id="verdict-table"></div>
+      </div>
+
+      <!-- Actions (outside scroll so they always span full width) -->
+      <div class="qn-actions">
+        <button id="btn-check"  class="qn-btn"           type="button">Check answers</button>
+        <button id="btn-reveal" class="qn-btn secondary" type="button">Reveal</button>
+        <button id="btn-clear"  class="qn-btn secondary" type="button">Clear</button>
+        <span class="qn-score" id="qn-score" aria-live="polite"></span>
+      </div>
+
+    </section>
+  </section>
+
+</main>
+<script src="../_data/particles.js"></script>
+<script src="script.js"></script>
+</body>
+</html>

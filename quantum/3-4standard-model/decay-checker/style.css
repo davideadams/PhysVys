@@ -1,0 +1,629 @@
+:root {
+  --bg-top: #eef6ff;
+  --bg-bottom: #d7e8ff;
+  --panel: rgba(255, 255, 255, 0.82);
+  --panel-border: rgba(18, 57, 99, 0.12);
+  --ink: #15304d;
+  --muted: #55708d;
+  --accent: #0f766e;
+  --shadow: 0 24px 60px rgba(19, 48, 77, 0.14);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Trebuchet MS", "Gill Sans", "Segoe UI", sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at top left, rgba(255,255,255,0.85), transparent 30%),
+    linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+}
+
+.page {
+  width: min(1280px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 1.5rem 0 2rem;
+}
+
+.hero { display: flex; align-items: flex-end; gap: 1rem; margin-bottom: 1rem; }
+.hero-link {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  margin-bottom: 0.75rem; padding: 0.45rem 0.8rem;
+  border-radius: 999px; text-decoration: none;
+  font-size: 0.9rem; font-weight: 700; color: var(--ink);
+  background: rgba(255,255,255,0.9); border: 1px solid rgba(21,48,77,0.12);
+}
+.hero-link:hover { background: white; }
+.eyebrow { margin: 0 0 0.35rem; color: var(--accent); font-size: 0.9rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+h1 { margin: 0; font-size: clamp(1.8rem, 4vw, 3rem); line-height: 0.95; }
+.intro { max-width: 68ch; margin: 0.6rem 0 0; color: var(--muted); font-size: 1rem; }
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(16px);
+}
+
+/* ── Controls column ──────────────────────────────────────────────────── */
+
+.controls {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.control-group > label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-weight: 700;
+  font-size: 0.88rem;
+}
+
+.seg-control {
+  display: grid;
+  background: rgba(21,48,77,0.07);
+  border-radius: 14px;
+  padding: 3px;
+}
+.seg-control.cols-2 { grid-template-columns: 1fr 1fr; }
+
+.seg-btn {
+  padding: 0.42rem 0.3rem;
+  border: 0; border-radius: 11px;
+  font: inherit; font-size: 0.82rem; font-weight: 700;
+  color: var(--muted); background: transparent;
+  cursor: pointer; text-align: center; line-height: 1.2;
+  transition: background 0.15s, color 0.15s;
+}
+.seg-btn.active { background: white; color: var(--ink); box-shadow: 0 2px 8px rgba(21,48,77,0.12); }
+
+/* Fix-it navigation */
+.fixit-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.nav-btn {
+  padding: 0.35rem 0.6rem;
+  border: 1.5px solid rgba(21,48,77,0.14);
+  border-radius: 8px;
+  font: inherit; font-size: 0.82rem; font-weight: 700;
+  background: rgba(255,255,255,0.9); color: var(--ink);
+  cursor: pointer;
+}
+.nav-btn:hover { background: white; }
+.nav-btn:disabled { opacity: 0.35; cursor: default; }
+.nav-counter { flex: 1; text-align: center; font-size: 0.8rem; font-weight: 700; color: var(--muted); }
+
+/* Zone selector (free-build mode) */
+.zone-selector {
+  display: flex; gap: 0.4rem;
+}
+.zone-sel-btn {
+  flex: 1; padding: 0.38rem 0.4rem;
+  border: 1.5px solid rgba(21,48,77,0.14);
+  border-radius: 8px;
+  font: inherit; font-size: 0.8rem; font-weight: 700;
+  background: rgba(255,255,255,0.7); color: var(--muted);
+  cursor: pointer; transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.zone-sel-btn.active {
+  background: var(--ink); color: white; border-color: var(--ink);
+}
+
+/* Per-side clear buttons sit just below the zone selector in free-build mode */
+.zone-clear-row {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
+.zone-clear-row .zone-clear-btn {
+  flex: 1;
+  padding: 0.32rem 0.4rem;
+  font-size: 0.74rem;
+}
+
+/* Palette */
+.palette-tabs {
+  display: flex; gap: 3px;
+  background: rgba(21,48,77,0.07);
+  border-radius: 10px; padding: 3px;
+}
+.palette-tab {
+  flex: 1; padding: 0.32rem 0.2rem;
+  border: 0; border-radius: 7px;
+  font: inherit; font-size: 0.75rem; font-weight: 700;
+  color: var(--muted); background: transparent;
+  cursor: pointer; text-align: center;
+  transition: background 0.12s, color 0.12s;
+}
+.palette-tab.active { background: white; color: var(--ink); box-shadow: 0 1px 4px rgba(21,48,77,0.1); }
+
+.palette-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(46px, 1fr));
+  gap: 4px;
+}
+
+.palette-btn {
+  padding: 0.32rem 0.2rem;
+  border: 1.5px solid transparent;
+  border-radius: 8px;
+  font: inherit; font-size: 0.9rem; font-weight: 700;
+  cursor: grab; text-align: center;
+  transition: filter 0.12s, border-color 0.12s;
+  line-height: 1.2;
+}
+.palette-btn:hover { filter: brightness(0.9); }
+.palette-btn:active { filter: brightness(0.8); cursor: grabbing; }
+
+.palette-hint {
+  margin: -0.15rem 0 0.45rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* Particle category colours */
+.cat-quark-light  { background: rgba(251,191,36,0.18); color: #92400e; border-color: rgba(251,191,36,0.45); }
+.cat-quark-dark   { background: rgba(96,165,250,0.18); color: #1e3a5f; border-color: rgba(96,165,250,0.45); }
+.cat-quark-anti   { background: rgba(165,243,252,0.18); color: #164e63; border-color: rgba(165,243,252,0.35); }
+.cat-lepton       { background: rgba(56,189,248,0.18); color: #0c4a6e; border-color: rgba(56,189,248,0.4); }
+.cat-antilepton   { background: rgba(244,114,182,0.18); color: #831843; border-color: rgba(244,114,182,0.4); }
+.cat-neutrino     { background: rgba(186,230,253,0.25); color: #0e7490; border-color: rgba(186,230,253,0.5); }
+.cat-antineutrino { background: rgba(253,186,116,0.18); color: #9a3412; border-color: rgba(253,186,116,0.4); }
+.cat-boson        { background: rgba(192,132,252,0.18); color: #5b21b6; border-color: rgba(192,132,252,0.4); }
+.cat-hadron-b     { background: rgba(209,250,229,0.4);  color: #064e3b; border-color: rgba(52,211,153,0.4); }
+.cat-hadron-m     { background: rgba(255,237,213,0.5);  color: #78350f; border-color: rgba(251,191,36,0.35); }
+
+.more-toggle {
+  grid-column: 1 / -1;
+  padding: 0.28rem;
+  border: 1px dashed rgba(21,48,77,0.2);
+  border-radius: 7px;
+  font: inherit; font-size: 0.75rem; font-weight: 700; color: var(--muted);
+  background: transparent; cursor: pointer; text-align: center;
+}
+.more-toggle:hover { background: rgba(21,48,77,0.04); }
+
+/* ── Main panel (reaction + conservation) ─────────────────────────────── */
+
+.visual-panel { padding: 1rem; display: flex; flex-direction: column; gap: 0.9rem; }
+
+/* Reaction zone */
+.reaction-zone {
+  display: flex;       /* JS sets display:grid when particles are loaded */
+  align-items: stretch;
+  gap: 0;
+  background: rgba(10,22,40,0.04);
+  border: 1px solid rgba(21,48,77,0.08);
+  border-radius: 16px;
+  overflow: hidden;
+  min-height: 120px;
+}
+/* In grid mode the zones occupy their column spans (flex: 1 has no effect in grid). */
+.reaction-zone.rxn-grid .particle-zone { flex: none; }
+
+.particle-zone {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0.7rem;
+  gap: 0.45rem;
+}
+.particle-zone.zone-active-target {
+  background: rgba(15,118,110,0.06);
+  outline: 2px solid rgba(15,118,110,0.25);
+  outline-offset: -2px;
+  border-radius: 14px;
+}
+
+.zone-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.zone-label {
+  font-size: 0.75rem; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.zone-clear-btn {
+  padding: 0.15rem 0.45rem;
+  border: 1px solid rgba(21,48,77,0.14);
+  border-radius: 6px;
+  font: inherit; font-size: 0.72rem; font-weight: 700; color: var(--muted);
+  background: rgba(255,255,255,0.8); cursor: pointer;
+}
+.zone-clear-btn:hover { color: #991b1b; border-color: #fca5a5; background: #fff5f5; }
+
+.particle-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-height: 38px;
+  align-content: flex-start;
+}
+
+.chips-placeholder {
+  font-size: 0.78rem; color: rgba(21,48,77,0.28); font-style: italic;
+  align-self: center; padding: 0.2rem 0;
+}
+
+/* Individual chip */
+.particle-chip {
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 0.28rem 0.4rem 0.28rem 0.45rem;
+  border-radius: 999px;
+  border: 1.5px solid transparent;
+  font: inherit; font-size: 0.95rem; font-weight: 700;
+  cursor: default;
+  transition: box-shadow 0.15s;
+  white-space: nowrap;
+}
+
+/* SACE-style sub/super prefix on chips: baryon (top) and charge (bottom),
+   stacked to the left of the particle symbol. */
+.quantum-prefix {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  font-size: 0.6em;
+  line-height: 1;
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0.62);
+  text-align: right;
+  margin-right: 1px;
+  min-width: 0.9em;
+}
+.qn-top, .qn-bottom { display: block; padding: 0; }
+.qn-top    { margin-bottom: 1px; }
+.chip-symbol { padding: 0 1px; }
+
+/* Antiparticle overbar — CSS-drawn so the line stays centred over the symbol
+   regardless of font metrics (the U+0304 combining macron renders unreliably). */
+.overbar {
+  display: inline-block;
+  line-height: 1;
+  border-top: 0.09em solid currentColor;
+  padding-top: 0.04em;
+}
+
+/* Plus separator between chips (forms a readable decay equation) */
+.chip-plus {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 3px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--muted);
+  user-select: none;
+}
+.chip-remove {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px;
+  border: 0; border-radius: 50%;
+  font-size: 0.7rem; font-weight: 900; line-height: 1;
+  background: rgba(0,0,0,0.12); color: inherit;
+  cursor: pointer; padding: 0; flex-shrink: 0;
+}
+.chip-remove:hover { background: rgba(0,0,0,0.25); }
+
+/* Chip selected-for-swap (in fix-it, after clicking a chip) */
+.chip-selected-swap {
+  box-shadow: 0 0 0 2.5px #38bdf8, 0 0 12px rgba(56,189,248,0.45);
+  animation: pulse-blue 1.2s ease-in-out infinite;
+}
+@keyframes pulse-blue {
+  0%, 100% { box-shadow: 0 0 0 2.5px #38bdf8, 0 0 8px rgba(56,189,248,0.3); }
+  50%       { box-shadow: 0 0 0 2.5px #0ea5e9, 0 0 18px rgba(56,189,248,0.55); }
+}
+
+/* Reaction arrow column */
+.reaction-divider {
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 0.6rem;
+  font-size: 1.6rem; font-weight: 700; color: var(--muted);
+  flex-shrink: 0;
+  border-left: 1px solid rgba(21,48,77,0.08);
+  border-right: 1px solid rgba(21,48,77,0.08);
+  min-width: max-content; /* don't collapse in grid mode */
+}
+
+/* Conservation table */
+.conservation-section { display: flex; flex-direction: column; gap: 0.35rem; }
+.conservation-title {
+  font-size: 0.78rem; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+
+.verdict-table { display: flex; flex-direction: column; gap: 2px; }
+
+.verdict-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto auto;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.38rem 0.7rem;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.55);
+  border: 1px solid rgba(21,48,77,0.07);
+  font-size: 0.86rem;
+  transition: background 0.2s, border-color 0.2s;
+}
+.verdict-row.ok   { background: rgba(209,250,229,0.55); border-color: rgba(52,211,153,0.3); }
+.verdict-row.fail { background: rgba(254,226,226,0.6);  border-color: rgba(252,165,165,0.4); }
+.verdict-row.empty { opacity: 0.45; }
+
+.verdict-label { font-weight: 700; color: var(--ink); }
+.verdict-val {
+  font-weight: 700; font-variant-numeric: tabular-nums;
+  min-width: 3.2ch; text-align: right; color: var(--ink);
+}
+.verdict-arrow-cell { color: var(--muted); font-size: 0.8rem; }
+.verdict-icon { font-size: 1rem; width: 1.2em; text-align: center; }
+.verdict-row.ok   .verdict-icon { color: #059669; }
+.verdict-row.fail .verdict-icon { color: #dc2626; }
+
+/* The verdict-table wrapper handles horizontal scrolling when many particles
+   push the grid past the panel width. */
+.verdict-table { overflow-x: auto; }
+
+.qn-empty {
+  padding: 0.8rem 0.8rem;
+  font-size: 0.85rem;
+  font-style: italic;
+  color: rgba(21,48,77,0.45);
+  text-align: center;
+  background: rgba(255,255,255,0.55);
+  border-radius: 10px;
+}
+
+.qn-table {
+  display: grid;
+  /* grid-template-columns is set inline per-render based on particle count */
+  gap: 1px;
+  background: rgba(21,48,77,0.12);
+  border: 1px solid rgba(21,48,77,0.12);
+  border-radius: 10px;
+  overflow: hidden;
+  font-size: 0.84rem;
+  min-width: max-content; /* never compress below content; flex stretch fills the rest */
+  width: 100%;
+}
+.qn-table > * {
+  background: rgba(255,255,255,0.78);
+  padding: 0.3rem 0.45rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Header row (top): chip pills, operators, sum/check labels */
+.qn-h {
+  background: rgba(21,48,77,0.08);
+  font-weight: 700;
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+/* Header cells that hold a particle chip — let the chip own the visual */
+.qn-h.qn-chip-cell {
+  background: rgba(255,255,255,0.78);
+  padding: 0.45rem 0.2rem;
+  text-transform: none;
+  letter-spacing: 0;
+  min-height: 60px;
+}
+
+/* "+ add" pill at the end of each side — always present, also a drop target. */
+.qn-add-cell {
+  background: rgba(255,255,255,0.78);
+  padding: 0.45rem 0.2rem;
+  cursor: pointer;
+}
+.add-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.3rem 0.55rem;
+  border-radius: 999px;
+  border: 1.5px dashed rgba(21,48,77,0.28);
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 600;
+  font-style: italic;
+  color: rgba(21,48,77,0.55);
+  background: transparent;
+  white-space: nowrap;
+  transition: border-color 0.15s, color 0.15s;
+}
+.qn-add-cell:hover .add-pill {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Highlight every drop target while a palette particle is being dragged. */
+body.dragging-particle .qn-chip-cell,
+body.dragging-particle .qn-add-cell,
+body.dragging-particle .qn-h.qn-op:not(.qn-arrow) {
+  outline: 1.5px dashed rgba(15,118,110,0.5);
+  outline-offset: -3px;
+  background: rgba(15,118,110,0.04);
+}
+
+/* Data cell for an empty-side placeholder column (no input) */
+.qn-cell-empty {
+  color: rgba(21,48,77,0.35);
+  font-weight: 700;
+  background: rgba(21,48,77,0.025);
+}
+.qn-h.qn-sym {
+  font-size: 1.05rem;
+  text-transform: none;
+  color: var(--ink);
+  letter-spacing: 0;
+  background: rgba(21,48,77,0.04);
+}
+.qn-h.qn-op {
+  font-size: 1.1rem;
+  text-transform: none;
+  color: var(--muted);
+  background: rgba(21,48,77,0.04);
+  padding-left: 0.2rem; padding-right: 0.2rem;
+}
+.qn-h.qn-arrow { color: var(--ink); font-weight: 700; }
+.qn-h.qn-sum-h, .qn-h.qn-check-h { font-size: 0.72rem; }
+
+/* QN label column (leftmost) */
+.qn-lbl {
+  text-align: left;
+  justify-content: flex-start;
+  font-weight: 700;
+  color: var(--ink);
+  cursor: help;
+}
+
+/* Operator cells (+ and → between particle columns) — slim, muted */
+.qn-op {
+  color: var(--muted);
+  font-weight: 700;
+  padding-left: 0.15rem !important;
+  padding-right: 0.15rem !important;
+  background: rgba(255,255,255,0.55);
+}
+.qn-arrow { color: var(--ink); font-size: 0.95rem; }
+
+/* Per-particle value cells */
+.qn-cell { color: var(--ink); }
+
+/* Σ columns and OK? column at the right */
+.qn-sum {
+  background: rgba(15,118,110,0.10);
+  font-weight: 700;
+  color: #0f766e;
+}
+.qn-check {
+  background: white;
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+/* Auto-computed OK? cell (not a student input) */
+.qn-check-auto { padding: 0.14rem 0.12rem; }
+.qn-ok-cell {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+.qn-ok-cell.qn-ok   { color: #059669; }
+.qn-ok-cell.qn-fail { color: #dc2626; }
+.qn-ok   { color: #059669; }
+.qn-fail { color: #dc2626; }
+
+/* Editable cells — text inputs and select for "Conserved?" column */
+.qn-cell-input { padding: 0.14rem 0.12rem; }
+.qn-input {
+  width: 100%;
+  min-width: 0;
+  padding: 0.18rem 0.1rem;
+  border: 1.5px solid rgba(21,48,77,0.18);
+  border-radius: 5px;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-align: center;
+  background: rgba(255,255,255,0.95);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.qn-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(15,118,110,0.22);
+}
+
+.qn-select {
+  width: 100%;
+  min-width: 0;
+  padding: 0.22rem 0.2rem;
+  border: 1.5px solid rgba(21,48,77,0.18);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  background: rgba(255,255,255,0.95);
+  color: var(--ink);
+  cursor: pointer;
+}
+.qn-select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(15,118,110,0.22); }
+
+/* Correct / wrong states */
+.qn-input.qn-correct, .qn-select.qn-correct {
+  background: rgba(209,250,229,0.85);
+  border-color: rgba(52,211,153,0.7);
+  color: #065f46;
+}
+.qn-input.qn-wrong, .qn-select.qn-wrong {
+  background: rgba(254,226,226,0.85);
+  border-color: rgba(252,165,165,0.75);
+  color: #991b1b;
+}
+
+/* Action bar below the table */
+.qn-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.55rem;
+}
+.qn-btn {
+  padding: 0.4rem 0.85rem;
+  border: 1.5px solid var(--accent);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+  background: var(--accent);
+  color: white;
+  transition: filter 0.15s, background 0.15s, color 0.15s;
+}
+.qn-btn:hover { filter: brightness(1.08); }
+.qn-btn:active { filter: brightness(0.95); }
+.qn-btn.secondary {
+  background: rgba(255,255,255,0.85);
+  color: var(--accent);
+}
+.qn-btn.secondary:hover { background: white; }
+
+.qn-score {
+  margin-left: auto;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+.qn-score.complete { color: #059669; }
+.qn-score.partial  { color: #b45309; }
+
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  .hero { flex-direction: column; align-items: flex-start; }
+}

@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Four Fundamental Forces</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../../index.html">← Back to Main Menu</a>
+      <p class="eyebrow">SACE Stage 2 Physics — Light &amp; Atoms 3.4</p>
+      <h1>Four Fundamental Forces</h1>
+      <p class="intro">
+        Every force between particles works by exchanging a carrier particle — a
+        <em>virtual boson</em>. Select a force to see the exchange diagram, step
+        through the interaction, and click any vertex to inspect what is conserved there.
+      </p>
+    </div>
+  </section>
+
+  <section class="layout">
+    <aside class="panel controls">
+
+      <div class="control-group">
+        <label>Force</label>
+        <div class="seg-control cols-4" id="seg-mode">
+          <button class="seg-btn active" data-mode="em"      type="button">EM</button>
+          <button class="seg-btn"        data-mode="weak"    type="button">Weak</button>
+          <button class="seg-btn"        data-mode="strong"  type="button">Strong</button>
+          <button class="seg-btn"        data-mode="gravity" type="button">Gravity</button>
+        </div>
+      </div>
+
+      <div class="sub-toggle-area control-group" id="sub-toggle-area"></div>
+
+      <div class="control-group">
+        <label>Force properties</label>
+        <div class="readout-card">
+          <div class="readout-row">
+            <span class="readout-k">Boson</span>
+            <span class="readout-v" id="rd-boson">γ</span>
+          </div>
+          <div class="readout-row">
+            <span class="readout-k">Boson mass</span>
+            <span class="readout-v" id="rd-mass">0</span>
+          </div>
+          <div class="readout-row">
+            <span class="readout-k">Range</span>
+            <span class="readout-v" id="rd-range">Infinite</span>
+          </div>
+          <div class="readout-row">
+            <span class="readout-k">Relative coupling</span>
+            <span class="readout-v" id="rd-coupling">~10⁻²</span>
+          </div>
+          <div class="readout-row">
+            <span class="readout-k">Couples to</span>
+            <span class="readout-v" id="rd-couples">Electric charge</span>
+          </div>
+          <div class="readout-row">
+            <span class="readout-k">Felt by</span>
+            <span class="readout-v" id="rd-felt">Charged particles</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="gravity-note" id="gravity-note">
+        Graviton: predicted spin-2, not yet observed.<br>
+        Gravity is <em>not</em> part of the Standard Model.
+      </div>
+
+      <div class="control-group">
+        <label>Animation</label>
+        <div class="auto-row">
+          <button class="play-btn ghost" id="btn-step" type="button">Step ▶</button>
+          <button class="play-btn" id="btn-play" type="button">▶ Play</button>
+        </div>
+      </div>
+
+    </aside>
+
+    <section class="panel visual-panel">
+      <div class="canvas-wrap">
+        <canvas id="forces-canvas" width="960" height="600"
+                aria-label="Feynman diagram showing virtual boson exchange between two particles."></canvas>
+        <div class="scene-note" id="scene-note"></div>
+      </div>
+    </section>
+  </section>
+
+</main>
+<script src="script.js"></script>
+</body>
+</html>
