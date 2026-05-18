@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hadron Builder</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../../index.html">← Back to Main Menu</a>
+      <p class="eyebrow">SACE Stage 2 Physics — Light &amp; Atoms 3.4</p>
+      <h1>Hadron Builder</h1>
+      <p class="intro">
+        Drag quarks into the bag and see what you get. Known particles are
+        identified automatically.
+      </p>
+    </div>
+  </section>
+
+  <section class="layout">
+
+    <!-- ── Left panel: palette + readouts ─────────────────────────────── -->
+    <aside class="panel controls">
+
+      <div class="control-group">
+        <label>Quarks</label>
+        <div class="palette-grid" id="palette-quarks"></div>
+      </div>
+
+      <div class="control-group">
+        <label>Antiquarks</label>
+        <div class="palette-grid" id="palette-antiquarks"></div>
+      </div>
+
+      <div class="control-group">
+        <label class="toggle-label">
+          <span>Auto colour</span>
+          <button class="toggle-btn" id="toggle-auto-colour" type="button" role="switch" aria-checked="false">
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </button>
+        </label>
+      </div>
+
+      <details class="control-group readout-details">
+        <summary>Quantum numbers</summary>
+        <div class="readout-card" id="readout-card">
+          <div class="readout-row">
+            <span class="readout-k">Charge Q</span>
+            <span class="readout-v" id="rd-charge">—</span>
+          </div>
+          <div class="readout-row">
+            <span class="readout-k">Baryon B</span>
+            <span class="readout-v" id="rd-baryon">—</span>
+          </div>
+          <div class="readout-row">
+            <span class="readout-k">Strangeness S</span>
+            <span class="readout-v" id="rd-strangeness">—</span>
+          </div>
+          <div class="readout-row">
+            <span class="readout-k">Charm C</span>
+            <span class="readout-v" id="rd-charm">—</span>
+          </div>
+          <div class="readout-row">
+            <span class="readout-k">Bottomness Bn</span>
+            <span class="readout-v" id="rd-bottomness">—</span>
+          </div>
+          <div class="readout-row">
+            <span class="readout-k">Content</span>
+            <span class="readout-v" id="rd-content">—</span>
+          </div>
+        </div>
+      </details>
+
+    </aside>
+
+    <!-- ── Right panel: bag + identification ──────────────────────────── -->
+    <section class="panel visual-panel">
+
+      <div class="bag-area" id="bag-area">
+
+        <div class="bag" id="bag">
+          <div class="bag-slots" id="bag-slots"></div>
+        </div>
+
+        <button class="clear-btn" id="btn-clear" type="button">Clear bag</button>
+
+      </div>
+
+      <!-- Identification / verdict area -->
+      <div class="id-area" id="id-area">
+        <p class="id-placeholder">Place quarks in the bag to identify a hadron.</p>
+      </div>
+
+      <p class="scene-note" id="scene-note"></p>
+
+    </section>
+
+  </section>
+
+</main>
+<script src="../_data/particles.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
