@@ -11,6 +11,8 @@ const state = {
   simSteps: 0,
   pinnedDomainIndex: -1,  // index of domain being click-dragged; -1 when none
   multi: null,     // populated by loadMultiPreset
+  showPolarity: false,
+  chargeLabels: [],  // [{ sprite, parent }] currently in the scene
   lastTimestamp: null,
 };
 
@@ -38,6 +40,7 @@ const controls = {
   valenceNote:      document.getElementById('valence-note'),
   presetSelect:     document.getElementById('preset-select'),
   btnShuffle:       document.getElementById('btn-shuffle'),
+  btnPolarity:      document.getElementById('btn-polarity'),
   builderSection:   document.getElementById('builder-section'),
   bondOrderChips:   Array.from(document.querySelectorAll('[data-order]')),
 };
@@ -67,6 +70,187 @@ const DOMAIN_WEIGHT = {
   bond2:     1.3,
   bond3:     1.5,
 };
+
+// Pauling electronegativities. Used to colour bond halves by polarity when the
+// user enables the toggle; never to label molecules as polar or non-polar.
+const ELECTRONEGATIVITY = {
+  H:  2.20, B:  2.04, C:  2.55, N:  3.04, O:  3.44, F:  3.98,
+  Si: 1.90, P:  2.19, S:  2.58, Cl: 3.16, Br: 2.96, I:  2.66, Xe: 2.60,
+};
+const POLARITY_THRESHOLD = 0.4;   // Δχ below this: treated as nonpolar (grey)
+const POLARITY_SATURATE  = 2.0;   // Δχ at/above this: fully saturated colours
+const DELTA_MINUS_COLOR  = 0xe65c4d; // red, near the more electronegative atom
+const DELTA_PLUS_COLOR   = 0x4d8be6; // blue, near the less electronegative atom
+
+function lerpHex(c1, c2, t) {
+  const r1 = (c1 >> 16) & 0xff, g1 = (c1 >> 8) & 0xff, b1 = c1 & 0xff;
+  const r2 = (c2 >> 16) & 0xff, g2 = (c2 >> 8) & 0xff, b2 = c2 & 0xff;
+  const r = Math.round(r1 + (r2 - r1) * t);
+  const g = Math.round(g1 + (g2 - g1) * t);
+  const b = Math.round(b1 + (b2 - b1) * t);
+  return (r << 16) | (g << 8) | b;
+}
+
+// Returns { aSide, bSide } hex colours, or null when the bond is treated as
+// nonpolar (Δχ too small) or either element is unknown.
+function getBondPolarityColors(elemA, elemB) {
+  const enA = ELECTRONEGATIVITY[elemA];
+  const enB = ELECTRONEGATIVITY[elemB];
+  if (enA === undefined || enB === undefined) return null;
+  const delta = Math.abs(enA - enB);
+  if (delta < POLARITY_THRESHOLD) return null;
+  const t = Math.min(delta / POLARITY_SATURATE, 1);
+  const aIsMinus = enA > enB;
+  const minusCol = lerpHex(BOND_COLOR, DELTA_MINUS_COLOR, t);
+  const plusCol  = lerpHex(BOND_COLOR, DELTA_PLUS_COLOR, t);
+  return aIsMinus
+    ? { aSide: minusCol, bSide: plusCol }
+    : { aSide: plusCol,  bSide: minusCol };
+}
+
+function makeChargeLabel(charge) {
+  // charge: 'plus' or 'minus'
+  const text = charge === 'plus' ? 'δ+' : 'δ−';
+  const colorHex = charge === 'plus' ? DELTA_PLUS_COLOR : DELTA_MINUS_COLOR;
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.font = `bold ${size * 0.5}px "Trebuchet MS", sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 10;
+  ctx.strokeText(text, size / 2, size / 2);
+  const r = (colorHex >> 16) & 0xff;
+  const g = (colorHex >> 8) & 0xff;
+  const b = colorHex & 0xff;
+  ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+  ctx.fillText(text, size / 2, size / 2);
+  const tex = new THREE.CanvasTexture(canvas);
+  const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.renderOrder = 2;
+  sprite.scale.set(0.55, 0.55, 1);
+  return sprite;
+}
+
+// Returns 'plus', 'minus', or null based on net polar-bond contributions.
+//   target identifies the atom:
+//     - single mode: { kind: 'central' } or { kind: 'terminal', domainIdx }
+//     - multi  mode: { kind: 'multi', atomIdx }
+function chargeTendencyFor(target) {
+  let net = 0;
+  const accumulate = (myEN, otherEN) => {
+    if (myEN === undefined || otherEN === undefined) return;
+    const delta = Math.abs(myEN - otherEN);
+    if (delta < POLARITY_THRESHOLD) return;
+    if (myEN > otherEN) net -= 1;
+    else net += 1;
+  };
+  if (target.kind === 'multi') {
+    const m = state.multi;
+    if (!m) return null;
+    const myEN = ELECTRONEGATIVITY[m.atoms[target.atomIdx].element];
+    m.bonds.forEach((b) => {
+      let other = -1;
+      if (b.a === target.atomIdx) other = b.b;
+      else if (b.b === target.atomIdx) other = b.a;
+      if (other < 0) return;
+      accumulate(myEN, ELECTRONEGATIVITY[m.atoms[other].element]);
+    });
+  } else if (target.kind === 'central') {
+    const myEN = ELECTRONEGATIVITY[state.centralElement];
+    state.domains.forEach((d) => {
+      if (d.type !== 'bond') return;
+      accumulate(myEN, ELECTRONEGATIVITY[d.terminalElement]);
+    });
+  } else if (target.kind === 'terminal') {
+    const d = state.domains[target.domainIdx];
+    if (!d || d.type !== 'bond') return null;
+    accumulate(ELECTRONEGATIVITY[d.terminalElement], ELECTRONEGATIVITY[state.centralElement]);
+  }
+  if (net > 0) return 'plus';
+  if (net < 0) return 'minus';
+  return null;
+}
+
+function disposeChargeLabels() {
+  state.chargeLabels.forEach((entry) => {
+    if (entry.sprite.material.map) entry.sprite.material.map.dispose();
+    entry.sprite.material.dispose();
+    entry.parent.remove(entry.sprite);
+  });
+  state.chargeLabels = [];
+}
+
+function attachChargeLabel(parent, charge, localOffset) {
+  const sprite = makeChargeLabel(charge);
+  sprite.position.copy(localOffset);
+  parent.add(sprite);
+  state.chargeLabels.push({ sprite, parent });
+}
+
+function applyChargeLabels() {
+  disposeChargeLabels();
+  if (!state.showPolarity) return;
+  if (state.mode === 'multi' && state.multi) {
+    state.multi.atoms.forEach((atom, i) => {
+      const charge = chargeTendencyFor({ kind: 'multi', atomIdx: i });
+      if (!charge) return;
+      attachChargeLabel(state.multi.meshes.atomGroups[i], charge, new THREE.Vector3(0.55, 0.5, 0));
+    });
+  } else if (state.mode === 'single') {
+    const centralCharge = chargeTendencyFor({ kind: 'central' });
+    if (centralCharge) {
+      attachChargeLabel(moleculeGroup, centralCharge, new THREE.Vector3(0.7, 0.7, 0));
+    }
+    state.domains.forEach((d, i) => {
+      if (d.type !== 'bond') return;
+      const charge = chargeTendencyFor({ kind: 'terminal', domainIdx: i });
+      if (!charge) return;
+      // Place in domain-local frame just past the terminal atom along +Y.
+      attachChargeLabel(state.domainNodes[i], charge, new THREE.Vector3(0.5, BOND_DISTANCE + 0.4, 0));
+    });
+  }
+}
+
+function paintBondHalves(group, colors) {
+  group.traverse((obj) => {
+    if (!obj.isMesh || !obj.userData || !obj.userData.bondHalfRole) return;
+    const target = (obj.userData.bondHalfRole === 'a')
+      ? (colors ? colors.aSide : BOND_COLOR)
+      : (colors ? colors.bSide : BOND_COLOR);
+    obj.material.color.setHex(target);
+  });
+}
+
+function applyBondPolarity() {
+  // Single-mode bonds
+  state.domains.forEach((domain, idx) => {
+    if (domain.type !== 'bond') return;
+    const group = state.domainNodes[idx];
+    if (!group) return;
+    const colors = state.showPolarity
+      ? getBondPolarityColors(state.centralElement, domain.terminalElement)
+      : null;
+    paintBondHalves(group, colors);
+  });
+  // Multi-mode bonds
+  if (state.multi) {
+    state.multi.bonds.forEach((bond, i) => {
+      const group = state.multi.meshes.bondGroups[i];
+      if (!group) return;
+      const elemA = state.multi.atoms[bond.a].element;
+      const elemB = state.multi.atoms[bond.b].element;
+      const colors = state.showPolarity
+        ? getBondPolarityColors(elemA, elemB)
+        : null;
+      paintBondHalves(group, colors);
+    });
+  }
+}
 
 // Common bonding-capacity (sum of bond orders) for each element when it sits
 // as the central atom. Used purely as an advisory; nothing is blocked.
@@ -275,12 +459,26 @@ function smartInitDirections(specs) {
 
 // ---- 6. Object construction ----
 
-function makeBondCylinder(radius, offsetX, offsetZ) {
-  const geo = new THREE.CylinderGeometry(radius, radius, BOND_DISTANCE, 12, 1);
-  const mat = new THREE.MeshStandardMaterial({ color: BOND_COLOR, roughness: 0.7, metalness: 0.0 });
-  const cyl = new THREE.Mesh(geo, mat);
-  cyl.position.set(offsetX || 0, BOND_DISTANCE / 2, offsetZ || 0);
-  return cyl;
+// Add two half-length cylinders covering the local-Y span yStart..yEnd of the
+// bond, each tagged with bondHalfRole so the polarity toggle can recolour them.
+// When both halves share BOND_COLOR the bond reads as one continuous cylinder.
+function addBondHalves(group, yStart, yEnd, radius, offsetX, offsetZ) {
+  const yMid    = (yStart + yEnd) / 2;
+  const halfLen = Math.abs(yEnd - yStart) / 2;
+  const yA      = (yStart + yMid) / 2;
+  const yB      = (yMid   + yEnd) / 2;
+  const matA = new THREE.MeshStandardMaterial({ color: BOND_COLOR, roughness: 0.7, metalness: 0.0 });
+  const matB = new THREE.MeshStandardMaterial({ color: BOND_COLOR, roughness: 0.7, metalness: 0.0 });
+  const geoA = new THREE.CylinderGeometry(radius, radius, halfLen, 12, 1);
+  const geoB = new THREE.CylinderGeometry(radius, radius, halfLen, 12, 1);
+  const cylA = new THREE.Mesh(geoA, matA);
+  const cylB = new THREE.Mesh(geoB, matB);
+  cylA.position.set(offsetX || 0, yA, offsetZ || 0);
+  cylB.position.set(offsetX || 0, yB, offsetZ || 0);
+  cylA.userData.bondHalfRole = 'a';
+  cylB.userData.bondHalfRole = 'b';
+  group.add(cylA);
+  group.add(cylB);
 }
 
 function makeLonePairLobe() {
@@ -324,16 +522,16 @@ function createDomainNode(domain) {
   if (domain.type === 'bond') {
     const order = domain.bondOrder;
     if (order === 1) {
-      group.add(makeBondCylinder(0.06, 0, 0));
+      addBondHalves(group, 0, BOND_DISTANCE, 0.06, 0, 0);
     } else if (order === 2) {
       const off = 0.10;
-      group.add(makeBondCylinder(0.045,  off, 0));
-      group.add(makeBondCylinder(0.045, -off, 0));
+      addBondHalves(group, 0, BOND_DISTANCE, 0.045,  off, 0);
+      addBondHalves(group, 0, BOND_DISTANCE, 0.045, -off, 0);
     } else {
       const r = 0.12;
       for (let k = 0; k < 3; k++) {
         const a = k * (Math.PI * 2 / 3);
-        group.add(makeBondCylinder(0.035, r * Math.cos(a), r * Math.sin(a)));
+        addBondHalves(group, 0, BOND_DISTANCE, 0.035, r * Math.cos(a), r * Math.sin(a));
       }
     }
 
@@ -402,6 +600,8 @@ function renderMolecule() {
     state.domainNodes.push(group);
   });
   updateDomainTransforms();
+  applyBondPolarity();
+  applyChargeLabels();
 }
 
 function updateDomainTransforms() {
@@ -909,6 +1109,8 @@ function loadMultiPreset(name) {
   };
 
   buildMultiMeshes();
+  applyBondPolarity();
+  applyChargeLabels();
   computeMultiPositions();
   updateMultiTransforms();
   state.simulating = true;
@@ -937,17 +1139,18 @@ function buildMultiMeshes() {
   });
   m.bonds.forEach((bd) => {
     const group = new THREE.Group();
+    const halfLen = bd.len / 2;
     if (bd.order === 1) {
-      group.add(makeBondCylinderLen(0.06, bd.len, 0, 0));
+      addBondHalves(group, -halfLen, halfLen, 0.06, 0, 0);
     } else if (bd.order === 2) {
       const off = 0.10;
-      group.add(makeBondCylinderLen(0.045, bd.len, off, 0));
-      group.add(makeBondCylinderLen(0.045, bd.len, -off, 0));
+      addBondHalves(group, -halfLen, halfLen, 0.045,  off, 0);
+      addBondHalves(group, -halfLen, halfLen, 0.045, -off, 0);
     } else {
       const r = 0.12;
       for (let k = 0; k < 3; k++) {
         const a = k * (Math.PI * 2 / 3);
-        group.add(makeBondCylinderLen(0.035, bd.len, r * Math.cos(a), r * Math.sin(a)));
+        addBondHalves(group, -halfLen, halfLen, 0.035, r * Math.cos(a), r * Math.sin(a));
       }
     }
     multiGroup.add(group);
@@ -1538,6 +1741,14 @@ function wireCustomBuilder() {
   controls.btnAddLP.addEventListener('click', addLonePairDomain);
   controls.btnRemoveLast.addEventListener('click', removeLastDomain);
   controls.btnClear.addEventListener('click', clearAllDomains);
+  controls.btnPolarity.addEventListener('click', togglePolarity);
+}
+
+function togglePolarity() {
+  state.showPolarity = !state.showPolarity;
+  controls.btnPolarity.setAttribute('aria-pressed', state.showPolarity ? 'true' : 'false');
+  applyBondPolarity();
+  applyChargeLabels();
 }
 
 // ---- 10. Animation loop ----

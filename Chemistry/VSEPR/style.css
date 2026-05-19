@@ -311,6 +311,64 @@ canvas {
   display: none;
 }
 
+.switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  width: 100%;
+  margin-top: 0.55rem;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid rgba(21, 48, 77, 0.14);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: var(--ink);
+  text-align: left;
+}
+
+.switch:hover {
+  background: rgba(255, 255, 255, 1);
+}
+
+.switch-label {
+  flex: 1;
+}
+
+.switch-track {
+  position: relative;
+  display: inline-block;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background: rgba(21, 48, 77, 0.22);
+  transition: background 0.2s ease;
+  flex-shrink: 0;
+}
+
+.switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: transform 0.2s ease;
+}
+
+.switch[aria-pressed="true"] .switch-track {
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+}
+
+.switch[aria-pressed="true"] .switch-knob {
+  transform: translateX(16px);
+}
+
 .section-divider {
   border: none;
   border-top: 1px solid rgba(21, 48, 77, 0.10);
