@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VSEPR Shape Builder</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <div>
+        <a class="hero-link" href="../../index.html">Back to Main Menu</a>
+        <p class="eyebrow">SACE Stage 1 Chemistry</p>
+        <h1>VSEPR Shape Builder</h1>
+        <p class="intro">
+          Assemble a molecule from a central atom, bonded atoms, and lone pairs, then watch the electron
+          domains repel each other into their equilibrium geometry. What shape does it make?
+        </p>
+      </div>
+    </section>
+
+    <section class="layout">
+      <aside class="panel controls">
+
+        <div class="control-group">
+          <label for="preset-select" class="section-label">Preset</label>
+          <select id="preset-select">
+            <option value="">Custom build…</option>
+            <option value="CH4">CH₄ — methane</option>
+            <option value="NH3">NH₃ — ammonia</option>
+            <option value="H2O">H₂O — water</option>
+            <option value="CO2">CO₂ — carbon dioxide</option>
+            <option value="BF3">BF₃ — boron trifluoride</option>
+            <option value="PCl5">PCl₅ — phosphorus pentachloride</option>
+            <option value="SF4">SF₄ — sulfur tetrafluoride</option>
+            <option value="ClF3">ClF₃ — chlorine trifluoride</option>
+            <option value="XeF2">XeF₂ — xenon difluoride</option>
+            <option value="SF6">SF₆ — sulfur hexafluoride</option>
+            <option value="BrF5">BrF₅ — bromine pentafluoride</option>
+            <option value="XeF4">XeF₄ — xenon tetrafluoride</option>
+            <optgroup label="Multi-centre">
+              <option value="ethane">C₂H₆ — ethane</option>
+              <option value="ethene">C₂H₄ — ethene</option>
+              <option value="ethyne">C₂H₂ — ethyne</option>
+              <option value="propane">C₃H₈ — propane</option>
+            </optgroup>
+          </select>
+          <button id="btn-shuffle" class="ghost-button" type="button">⟲ Shuffle start</button>
+        </div>
+
+        <details class="collapsible" id="builder-section">
+          <summary>Custom Builder</summary>
+          <div class="collapsible-body">
+
+          <span class="builder-label">Central atom</span>
+          <div class="element-grid" id="central-atom-grid">
+            <button class="element-chip active" data-central="C"  type="button">C</button>
+            <button class="element-chip"        data-central="B"  type="button">B</button>
+            <button class="element-chip"        data-central="N"  type="button">N</button>
+            <button class="element-chip"        data-central="O"  type="button">O</button>
+            <button class="element-chip"        data-central="F"  type="button">F</button>
+            <button class="element-chip"        data-central="Si" type="button">Si</button>
+            <button class="element-chip"        data-central="P"  type="button">P</button>
+            <button class="element-chip"        data-central="S"  type="button">S</button>
+            <button class="element-chip"        data-central="Cl" type="button">Cl</button>
+            <button class="element-chip"        data-central="Br" type="button">Br</button>
+            <button class="element-chip"        data-central="I"  type="button">I</button>
+            <button class="element-chip"        data-central="Xe" type="button">Xe</button>
+          </div>
+
+          <span class="builder-label">Terminal atom</span>
+          <div class="element-grid terminal-grid" id="terminal-atom-grid">
+            <button class="element-chip active" data-terminal="H"  type="button">H</button>
+            <button class="element-chip"        data-terminal="F"  type="button">F</button>
+            <button class="element-chip"        data-terminal="Cl" type="button">Cl</button>
+            <button class="element-chip"        data-terminal="O"  type="button">O</button>
+            <button class="element-chip"        data-terminal="Br" type="button">Br</button>
+            <button class="element-chip"        data-terminal="I"  type="button">I</button>
+          </div>
+
+          <span class="builder-label">Bond order</span>
+          <div class="toggle-grid bond-order-grid">
+            <button class="toggle-chip active" data-order="1" type="button">Single</button>
+            <button class="toggle-chip"        data-order="2" type="button">Double</button>
+            <button class="toggle-chip"        data-order="3" type="button">Triple</button>
+          </div>
+
+          <button id="btn-add-bond" class="mode-chip" type="button">+ Add bond</button>
+          <button id="btn-add-lp"   class="mode-chip" type="button">+ Add lone pair</button>
+
+          <p class="domain-status">Domains: <span id="domain-count">0</span> / 6</p>
+          <p id="valence-note" class="valence-note"></p>
+
+          <div class="toggle-grid">
+            <button id="btn-remove-last" class="toggle-chip" type="button">Remove last</button>
+            <button id="btn-clear"       class="toggle-chip" type="button">Clear all</button>
+          </div>
+          </div>
+        </details>
+
+        <details class="collapsible">
+          <summary>Camera</summary>
+          <div class="collapsible-body">
+            <div class="toggle-grid">
+              <button id="btn-front"      class="toggle-chip" type="button">Front</button>
+              <button id="btn-top"        class="toggle-chip" type="button">Top</button>
+              <button id="btn-isometric"  class="toggle-chip" type="button">Isometric</button>
+              <button id="btn-principal"  class="toggle-chip" type="button">Along axis</button>
+            </div>
+          </div>
+        </details>
+
+        <details class="collapsible">
+          <summary>Readouts</summary>
+          <div class="collapsible-body">
+            <div class="readout-grid">
+              <div class="readout-card">
+                <span class="readout-label">Central atom</span>
+                <span id="readout-atom" class="readout-value">C</span>
+              </div>
+              <div class="readout-card">
+                <span class="readout-label">Domains</span>
+                <span id="readout-domains" class="readout-value">None</span>
+              </div>
+              <div class="readout-card">
+                <span class="readout-label">Largest angle</span>
+                <span id="readout-max-angle" class="readout-value">—</span>
+              </div>
+              <div class="readout-card">
+                <span class="readout-label">Smallest angle</span>
+                <span id="readout-min-angle" class="readout-value">—</span>
+              </div>
+              <div class="readout-card" id="readout-angles-card" hidden>
+                <span class="readout-label">Bond angles at selected atom</span>
+                <span id="readout-angles-list" class="readout-value">—</span>
+              </div>
+            </div>
+          </div>
+        </details>
+
+      </aside>
+
+      <section class="panel visual-panel">
+        <div class="canvas-wrap">
+          <div id="three-root" class="three-root" aria-label="3D VSEPR molecule viewer"></div>
+        </div>
+        <div class="scene-note">
+          Drag to rotate the view. Use the mouse wheel to zoom. Build a molecule from the controls on the
+          left and watch the electron domains push each other apart to find the shape.
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script src="../../vendor/three/three.min.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>

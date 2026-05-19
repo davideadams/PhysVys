@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>VSEPR physics check</title>
+  <style>
+    body { font-family: "Consolas", "Courier New", monospace; margin: 1.5rem; background: #fafcff; color: #15304d; }
+    h1 { font-family: "Trebuchet MS", sans-serif; }
+    pre { background: white; padding: 1rem; border: 1px solid #d9e8ff; border-radius: 8px; line-height: 1.45; }
+  </style>
+</head>
+<body>
+  <h1>VSEPR Physics Check</h1>
+  <p>Runs the same physics as <code>script.js</code> against all 12 test cases. Open this file directly in a browser.</p>
+  <pre id="out">Running...</pre>
+  <script>
+    const out = document.getElementById('out');
+    out.textContent = '';
+    console.log = (...args) => { out.textContent += args.join(' ') + '\n'; };
+  </script>
+  <script src="test-physics.js"></script>
+</body>
+</html>
