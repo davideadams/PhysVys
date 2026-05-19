@@ -1,0 +1,1440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Natural Selection with Frogs</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    margin: 0;
+    background: #f4f1ea;
+    color: #222;
+    line-height: 1.4;
+  }
+  header {
+    background: #2d4a2b;
+    color: white;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  header h1 { margin: 0; font-size: 1.3rem; }
+  .hero-link {
+    display: inline-flex; align-items: center; gap: 0.35rem;
+    padding: 0.3rem 0.75rem; border-radius: 999px;
+    text-decoration: none; font-size: 0.85rem; font-weight: 700;
+    color: #2d4a2b; background: rgba(255,255,255,0.88);
+    border: 1px solid rgba(255,255,255,0.4);
+    white-space: nowrap;
+  }
+  .hero-link:hover { background: white; }
+  .year-badge {
+    background: #fff;
+    color: #2d4a2b;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-weight: bold;
+  }
+  main {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 16px;
+  }
+  .step-banner {
+    background: #fff;
+    border-left: 4px solid #2d4a2b;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  .step-banner h2 { margin: 0 0 4px; font-size: 1.05rem; }
+  .step-banner p { margin: 0; font-size: 0.92rem; color: #555; }
+  .envs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  /* When only one biome is active, give it full width */
+  body[data-active-biome="forest"] .envs,
+  body[data-active-biome="pond"] .envs {
+    grid-template-columns: 1fr;
+  }
+  @media (max-width: 800px) {
+    .envs { grid-template-columns: 1fr; }
+  }
+  .env {
+    border-radius: 8px;
+    padding: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    position: relative;
+    min-height: 320px;
+  }
+  .env.pond { background: linear-gradient(135deg, #f5e9a8, #e8d878); }
+  .env.forest { background: linear-gradient(135deg, #a8d4a0, #7fb878); }
+  .env h3 {
+    margin: 0 0 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .counts {
+    font-size: 0.95rem;
+    margin-top: 12px;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-start;
+  }
+  .counts > span { padding: 4px 10px; border-radius: 4px; background: rgba(255,255,255,0.7); font-weight: bold; }
+  .counts .red { color: #b22222; }
+  .counts .green { color: #1e6b1e; }
+  .counts .yellow { color: #a07a00; }
+  .frog-grid {
+    display: grid;
+    gap: 6px;
+    min-height: 200px;
+  }
+  .frog-grid.loose {
+    grid-template-columns: repeat(15, minmax(0, 1fr));
+  }
+  .frog-grid.paired {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 4px;
+    padding: 6px;
+    background: rgba(255,255,255,0.3);
+    border-radius: 6px;
+    cursor: default;
+    transition: all 0.3s;
+    align-items: center;
+  }
+  .pair.active { background: rgba(255,200,0,0.7); box-shadow: 0 0 0 2px #d97700; }
+  .pair.resolved { background: rgba(255,255,255,0.5); }
+  .pair .offspring { opacity: 0; transition: opacity 0.4s; display: flex; justify-content: center; }
+  .pair .offspring.show { opacity: 1; }
+  .pair .offspring svg { width: 100%; height: auto; aspect-ratio: 1; }
+  .frog {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+    display: block;
+    transition: transform 0.4s, opacity 0.4s;
+  }
+  .frog.eaten { transform: scale(0); opacity: 0; }
+  .frog.born { animation: pop 0.4s; }
+  @keyframes pop {
+    0% { transform: scale(0); }
+    60% { transform: scale(1.3); }
+    100% { transform: scale(1); }
+  }
+  .red-frog { color: #c63030; }
+  .green-frog { color: #2e7d2e; }
+  .yellow-frog { color: #e0b020; }
+
+  .action-panel {
+    background: #fff;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .die {
+    width: 80px; height: 80px;
+    background: white;
+    border: 2px solid #333;
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+    font-size: 2.5rem;
+    font-weight: bold;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    user-select: none;
+    position: relative;
+  }
+  .die.rolling { animation: shake 0.4s; }
+  @keyframes shake {
+    0%,100% { transform: rotate(0); }
+    25% { transform: rotate(-15deg) scale(1.1); }
+    75% { transform: rotate(15deg) scale(1.1); }
+  }
+  .colour-die {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2px;
+    width: 80px; height: 80px;
+    padding: 6px;
+  }
+  .colour-die .face {
+    border-radius: 3px;
+    border: 1px solid rgba(0,0,0,0.2);
+  }
+  .colour-die .face.red { background: #c63030; }
+  .colour-die .face.green { background: #2e7d2e; }
+  .colour-die .face.yellow { background: #e0b020; }
+  .colour-die .face.highlighted { box-shadow: 0 0 0 3px #000; transform: scale(1.15); }
+
+  button {
+    background: #2d4a2b;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 0.95rem;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  button:hover:not(:disabled) { background: #3d6a3b; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.secondary { background: #777; }
+  button.secondary:hover:not(:disabled) { background: #555; }
+
+  .lookup-tables {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  @media (max-width: 800px) {
+    .lookup-tables { grid-template-columns: 1fr; }
+  }
+  .table-card {
+    background: #fff;
+    border-radius: 8px;
+    padding: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  .table-card h4 { margin: 0 0 8px; font-size: 0.95rem; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  th, td { padding: 4px 6px; text-align: left; border-bottom: 1px solid #eee; }
+  th { background: #f0ede5; }
+  tr.highlighted { background: #fff3a8 !important; }
+  tr.highlighted td { font-weight: bold; }
+
+  .results {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  @media (max-width: 800px) {
+    .results { grid-template-columns: 1fr; }
+  }
+  .results table input {
+    width: 50px;
+    padding: 2px 4px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    font: inherit;
+    text-align: center;
+  }
+  .results table input.correct { background: #d4f1d4; border-color: #2e7d2e; }
+  .results table input.wrong { background: #f8d4d4; border-color: #c63030; }
+  .results table input[readonly] { cursor: default; color: #333; }
+
+  canvas { background: #fff; border-radius: 4px; display: block; max-width: 100%; }
+
+  dialog {
+    border: none;
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 500px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+  }
+  dialog::backdrop { background: rgba(0,0,0,0.5); }
+  dialog h2 { margin-top: 0; }
+  .predict-row { display: flex; gap: 8px; margin: 12px 0; align-items: center; }
+  .predict-row label { min-width: 80px; }
+  .colour-pick { display: flex; gap: 6px; }
+  .colour-pick button {
+    width: 40px; height: 40px;
+    padding: 0;
+    border: 2px solid transparent;
+  }
+  .colour-pick button.red { background: #c63030; }
+  .colour-pick button.green { background: #2e7d2e; }
+  .colour-pick button.yellow { background: #e0b020; }
+  .colour-pick button.selected { border-color: #000; transform: scale(1.15); }
+
+  .conclusion {
+    background: #fff;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  .conclusion h3 { margin-top: 0; }
+
+  .help-text { font-size: 0.85rem; color: #666; }
+  .speed-controls { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+
+  /* Biome focus — show only the active biome's panels */
+  body[data-active-biome="forest"] [data-biome="pond"] { display: none; }
+  body[data-active-biome="pond"] [data-biome="forest"] { display: none; }
+
+  .preamble-page { line-height: 1.5; }
+  .preamble-page p { margin: 8px 0; }
+  .preamble-page .legend {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    margin: 16px 0;
+    flex-wrap: wrap;
+  }
+  .preamble-page .legend-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.85rem;
+    width: 90px;
+  }
+  .preamble-page .legend-item svg { width: 50px; height: 50px; }
+  .biome-swatch {
+    width: 60px; height: 30px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.2);
+  }
+  .biome-swatch.pond { background: linear-gradient(135deg, #f5e9a8, #e8d878); }
+  .biome-swatch.forest { background: linear-gradient(135deg, #a8d4a0, #7fb878); }
+
+  /* Lookup dialog */
+  #lookupDialog {
+    max-width: 700px;
+    width: 90%;
+    transition: max-width 0.25s;
+  }
+  #lookupDialog.wide {
+    max-width: 980px;
+  }
+  .lookup-ac-row {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+  }
+  .lookup-ac-row > .lookup-step { flex: 1; margin: 12px 0; min-width: 0; }
+  @media (max-width: 700px) {
+    .lookup-ac-row { flex-direction: column; }
+  }
+  .lookup-pair-display {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    background: #f4f1ea;
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 12px;
+  }
+  .lookup-pair-display svg {
+    width: 70px; height: 70px;
+  }
+  .lookup-pair-display .x {
+    font-size: 1.5rem;
+    color: #777;
+  }
+  .lookup-step { margin: 12px 0; }
+  .lookup-step h3 { margin: 0 0 8px; font-size: 1rem; }
+  #lookupDialog table {
+    width: 100%;
+    font-size: 0.9rem;
+  }
+  #lookupDialog table.clickable tr[data-key],
+  #lookupDialog table td.clickable-cell {
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  #lookupDialog table.clickable tr[data-key]:hover {
+    background: #fff8d4;
+  }
+  #lookupDialog td.clickable-cell:hover {
+    background: #fff8d4;
+  }
+  #lookupDialog tr.correct-cell, #lookupDialog td.correct-cell {
+    background: #c8e6c8 !important;
+    animation: flash-correct 0.6s;
+  }
+  #lookupDialog tr.wrong-cell, #lookupDialog td.wrong-cell {
+    background: #f5c8c8 !important;
+    animation: shake-cell 0.4s;
+  }
+  @keyframes flash-correct {
+    0%,100% { background: #c8e6c8; }
+    50% { background: #6ec46e; }
+  }
+  @keyframes shake-cell {
+    0%,100% { transform: translateX(0); }
+    25% { transform: translateX(-4px); }
+    75% { transform: translateX(4px); }
+  }
+  .lookup-hint {
+    color: #b22222;
+    background: #fdf0f0;
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin-top: 8px;
+    min-height: 1.2em;
+    font-size: 0.9rem;
+  }
+  .lookup-hint:empty { display: none; }
+  #lookupDie { display: flex; justify-content: center; margin-top: 12px; }
+  td.dimmed { opacity: 0.35; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="frog" viewBox="0 0 100 100">
+    <!-- Back legs (behind body) -->
+    <ellipse cx="22" cy="68" rx="12" ry="8" fill="currentColor" stroke="#000" stroke-width="1.8"/>
+    <ellipse cx="78" cy="68" rx="12" ry="8" fill="currentColor" stroke="#000" stroke-width="1.8"/>
+
+    <!-- Feet (back) -->
+    <path d="M 10 70 Q 6 73 8 76 Q 10 78 14 76 Q 13 79 16 80 Q 20 80 20 76 Q 23 78 24 75 Q 24 72 21 71 Z"
+          fill="currentColor" stroke="#000" stroke-width="1.6" stroke-linejoin="round"/>
+    <path d="M 90 70 Q 94 73 92 76 Q 90 78 86 76 Q 87 79 84 80 Q 80 80 80 76 Q 77 78 76 75 Q 76 72 79 71 Z"
+          fill="currentColor" stroke="#000" stroke-width="1.6" stroke-linejoin="round"/>
+
+    <!-- Body -->
+    <ellipse cx="50" cy="62" rx="28" ry="22" fill="currentColor" stroke="#000" stroke-width="1.8"/>
+
+    <!-- Belly (fixed pale colour, not tinted) -->
+    <ellipse cx="50" cy="70" rx="20" ry="12" fill="#fdf6e3" stroke="#000" stroke-width="1.4" opacity="0.95"/>
+
+    <!-- Front legs/arms resting in front -->
+    <path d="M 32 78 Q 28 84 32 86 Q 36 87 38 84 Q 40 82 39 78 Z"
+          fill="currentColor" stroke="#000" stroke-width="1.6" stroke-linejoin="round"/>
+    <path d="M 68 78 Q 72 84 68 86 Q 64 87 62 84 Q 60 82 61 78 Z"
+          fill="currentColor" stroke="#000" stroke-width="1.6" stroke-linejoin="round"/>
+
+    <!-- Head -->
+    <ellipse cx="50" cy="38" rx="26" ry="22" fill="currentColor" stroke="#000" stroke-width="1.8"/>
+
+    <!-- Eye sockets (bumps on top of head) -->
+    <circle cx="36" cy="22" r="9" fill="currentColor" stroke="#000" stroke-width="1.8"/>
+    <circle cx="64" cy="22" r="9" fill="currentColor" stroke="#000" stroke-width="1.8"/>
+
+    <!-- Eye whites -->
+    <circle cx="36" cy="22" r="6" fill="#ffffff" stroke="#000" stroke-width="1.4"/>
+    <circle cx="64" cy="22" r="6" fill="#ffffff" stroke="#000" stroke-width="1.4"/>
+
+    <!-- Pupils -->
+    <circle cx="37" cy="23" r="3" fill="#1a1a1a"/>
+    <circle cx="65" cy="23" r="3" fill="#1a1a1a"/>
+
+    <!-- Eye shines -->
+    <circle cx="38" cy="21" r="1" fill="#ffffff"/>
+    <circle cx="66" cy="21" r="1" fill="#ffffff"/>
+
+    <!-- Mouth (gentle smile) -->
+    <path d="M 38 44 Q 50 52 62 44" fill="none" stroke="#3a3a3a" stroke-width="1.8" stroke-linecap="round"/>
+
+    <!-- Nostrils -->
+    <circle cx="46" cy="36" r="0.9" fill="#3a3a3a"/>
+    <circle cx="54" cy="36" r="0.9" fill="#3a3a3a"/>
+  </symbol>
+</svg>
+
+<header>
+  <a class="hero-link" href="../../miscellaneous.html">&#8592; Back</a>
+  <h1>🐸 Natural Selection with Frogs</h1>
+  <div class="year-badge">Year <span id="yearNum">1</span> / 10</div>
+</header>
+
+<main>
+
+  <div class="step-banner">
+    <h2 id="stepTitle">Welcome</h2>
+    <p id="stepDesc">Make your prediction to begin.</p>
+  </div>
+
+  <div class="action-panel" id="actionPanel">
+    <div id="dieContainer"></div>
+    <div id="actionInfo" style="flex:1; min-width:200px"></div>
+    <button id="primaryBtn">Begin</button>
+    <div class="speed-controls">
+      <label class="help-text"><input type="checkbox" id="autoRoll"> Auto-roll this year</label>
+      <button class="secondary" id="autoFinishBtn" style="display:none">Auto-finish all years</button>
+    </div>
+  </div>
+
+  <div class="envs">
+    <div class="env pond" data-biome="pond">
+      <h3><span>🌾 Pond</span></h3>
+      <div class="frog-grid" id="pondGrid"></div>
+      <div class="counts">
+        <span class="red">R: <span id="pondR">10</span></span>
+        <span class="green">G: <span id="pondG">10</span></span>
+        <span class="yellow">Y: <span id="pondY">10</span></span>
+      </div>
+    </div>
+    <div class="env forest" data-biome="forest">
+      <h3><span>🌳 Forest</span></h3>
+      <div class="frog-grid" id="forestGrid"></div>
+      <div class="counts">
+        <span class="red">R: <span id="forestR">10</span></span>
+        <span class="green">G: <span id="forestG">10</span></span>
+        <span class="yellow">Y: <span id="forestY">10</span></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="lookup-tables">
+    <div class="table-card">
+      <h4>Table 1 — Offspring colour from parents</h4>
+      <table id="table1">
+        <thead><tr><th>Parents</th><th>Offspring</th></tr></thead>
+        <tbody>
+          <tr data-key="red-red"><td>red × red</td><td>red</td></tr>
+          <tr data-key="yellow-yellow"><td>yellow × yellow</td><td>yellow</td></tr>
+          <tr data-key="red-yellow"><td>red × yellow</td><td>green</td></tr>
+          <tr data-key="green-red"><td>red × green</td><td>red or green — roll die</td></tr>
+          <tr data-key="green-green"><td>green × green</td><td>red, green or yellow — roll die</td></tr>
+          <tr data-key="green-yellow"><td>green × yellow</td><td>green or yellow — roll die</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="table-card">
+      <h4>Table 2 — Die roll for offspring colour</h4>
+      <table id="table2">
+        <thead><tr><th>Die</th><th>red × green</th><th>green × green</th><th>green × yellow</th></tr></thead>
+        <tbody>
+          <tr data-roll="1"><td>1</td><td>red</td><td>red</td><td>green</td></tr>
+          <tr data-roll="2"><td>2</td><td>red</td><td>red</td><td>green</td></tr>
+          <tr data-roll="3"><td>3</td><td>red</td><td>green</td><td>green</td></tr>
+          <tr data-roll="4"><td>4</td><td>green</td><td>green</td><td>yellow</td></tr>
+          <tr data-roll="5"><td>5</td><td>green</td><td>yellow</td><td>yellow</td></tr>
+          <tr data-roll="6"><td>6</td><td>green</td><td>yellow</td><td>yellow</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="results">
+    <div class="table-card" data-biome="pond">
+      <h4>Pond results — type the year's tallies</h4>
+      <table id="pondTable">
+        <thead><tr><th>Year</th><th>Red</th><th>Green</th><th>Yellow</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="table-card" data-biome="forest">
+      <h4>Forest results — type the year's tallies</h4>
+      <table id="forestTable">
+        <thead><tr><th>Year</th><th>Red</th><th>Green</th><th>Yellow</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="results">
+    <div class="table-card" data-biome="pond">
+      <h4>Pond — frog populations over time</h4>
+      <canvas id="pondChart" width="600" height="240"></canvas>
+    </div>
+    <div class="table-card" data-biome="forest">
+      <h4>Forest — frog populations over time</h4>
+      <canvas id="forestChart" width="600" height="240"></canvas>
+    </div>
+  </div>
+
+  <div class="conclusion" id="conclusion" style="display:none">
+    <h3>🎓 Conclusion</h3>
+    <div id="conclusionBody"></div>
+  </div>
+
+</main>
+
+<dialog id="predictDialog">
+  <div id="preamblePage" class="preamble-page">
+    <h2>🐸 Natural selection with frogs</h2>
+    <p>You're going to model how <strong>natural selection</strong> shapes a population of frogs in two different environments.</p>
+    <p>There are three colours of frog living in each environment. They breed each year, and snakes eat 15 of them each year.</p>
+    <div class="legend">
+      <div class="legend-item">
+        <svg viewBox="0 0 100 100" style="color:#c63030"><use href="#frog"/></svg>
+        <span>Red frog</span>
+      </div>
+      <div class="legend-item">
+        <svg viewBox="0 0 100 100" style="color:#2e7d2e"><use href="#frog"/></svg>
+        <span>Green frog</span>
+      </div>
+      <div class="legend-item">
+        <svg viewBox="0 0 100 100" style="color:#e0b020"><use href="#frog"/></svg>
+        <span>Yellow frog</span>
+      </div>
+    </div>
+    <div class="legend">
+      <div class="legend-item">
+        <div class="biome-swatch forest"></div>
+        <span>🌳 Forest<br>(green leaves)</span>
+      </div>
+      <div class="legend-item">
+        <div class="biome-swatch pond"></div>
+        <span>🌾 Pond<br>(yellow reeds)</span>
+      </div>
+    </div>
+    <p>You can run the model for the forest, the pond, or both. Each year you'll roll dice to pair the frogs up, work out their offspring, and decide which frogs the snakes catch.</p>
+    <button id="preambleNext">Next →</button>
+  </div>
+
+  <div id="biomeChoicePage" style="display:none">
+    <h2>Choose an environment</h2>
+    <p>Which environment do you want to run first? You can run the other one afterwards.</p>
+    <div style="display:flex;gap:12px;justify-content:center;margin:20px 0;flex-wrap:wrap">
+      <button id="chooseForest" style="font-size:1rem;padding:14px 20px">🌳 Start with the Forest</button>
+      <button id="choosePond" style="font-size:1rem;padding:14px 20px">🌾 Start with the Pond</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="biomePredictDialog">
+  <h2 id="biomePredictTitle">Make a prediction</h2>
+  <p id="biomePredictPrompt">Which colour do you think will dominate after 10 years?</p>
+  <div class="predict-row" style="justify-content:center">
+    <div class="colour-pick" id="biomePredictPick">
+      <button class="red" data-colour="red" title="Red"></button>
+      <button class="green" data-colour="green" title="Green"></button>
+      <button class="yellow" data-colour="yellow" title="Yellow"></button>
+    </div>
+  </div>
+  <p class="help-text" style="text-align:center">You'll see your prediction again at the end.</p>
+  <div style="text-align:center">
+    <button id="biomePredictSubmit" disabled>Begin</button>
+  </div>
+</dialog>
+
+<dialog id="lookupDialog">
+  <h2 style="margin-top:0">Work out the offspring colour</h2>
+  <div class="lookup-pair-display" id="lookupPairDisplay"></div>
+
+  <div class="lookup-ac-row">
+  <div class="lookup-step" id="lookupStep1">
+    <h3>Step A — Use Table 1</h3>
+    <p style="margin:0 0 8px;font-size:0.9rem">Click the row that matches these parents.</p>
+    <table class="clickable" id="lookupTable1">
+      <thead><tr><th>Parents</th><th>Offspring</th></tr></thead>
+      <tbody>
+        <tr data-key="red-red"><td>red × red</td><td>red</td></tr>
+        <tr data-key="yellow-yellow"><td>yellow × yellow</td><td>yellow</td></tr>
+        <tr data-key="red-yellow"><td>red × yellow</td><td>green</td></tr>
+        <tr data-key="green-red"><td>red × green</td><td>red or green — roll die</td></tr>
+        <tr data-key="green-green"><td>green × green</td><td>red, green or yellow — roll die</td></tr>
+        <tr data-key="green-yellow"><td>green × yellow</td><td>green or yellow — roll die</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="lookup-step" id="lookupStep3" style="display:none">
+    <h3>Step C — Use Table 2</h3>
+    <p style="margin:0 0 8px;font-size:0.9rem">You rolled a <strong id="rolledNum"></strong>. Click the cell where your roll meets the matching parents column.</p>
+    <table id="lookupTable2">
+      <thead><tr><th>Die</th><th data-col="green-red">red × green</th><th data-col="green-green">green × green</th><th data-col="green-yellow">green × yellow</th></tr></thead>
+      <tbody>
+        <tr data-roll="1"><td>1</td><td data-col="green-red">red</td><td data-col="green-green">red</td><td data-col="green-yellow">green</td></tr>
+        <tr data-roll="2"><td>2</td><td data-col="green-red">red</td><td data-col="green-green">red</td><td data-col="green-yellow">green</td></tr>
+        <tr data-roll="3"><td>3</td><td data-col="green-red">red</td><td data-col="green-green">green</td><td data-col="green-yellow">green</td></tr>
+        <tr data-roll="4"><td>4</td><td data-col="green-red">green</td><td data-col="green-green">green</td><td data-col="green-yellow">yellow</td></tr>
+        <tr data-roll="5"><td>5</td><td data-col="green-red">green</td><td data-col="green-green">yellow</td><td data-col="green-yellow">yellow</td></tr>
+        <tr data-roll="6"><td>6</td><td data-col="green-red">green</td><td data-col="green-green">yellow</td><td data-col="green-yellow">yellow</td></tr>
+      </tbody>
+    </table>
+  </div>
+  </div><!-- /.lookup-ac-row -->
+
+  <div class="lookup-step" id="lookupStep2" style="display:none">
+    <h3>Step B — Roll the die</h3>
+    <p style="margin:0;font-size:0.9rem">More than one colour is possible. Roll to find out.</p>
+    <div id="lookupDie"></div>
+    <div style="text-align:center;margin-top:8px">
+      <button id="rollLookupBtn">Roll die</button>
+    </div>
+  </div>
+
+  <div class="lookup-hint" id="lookupHint"></div>
+</dialog>
+
+<script>
+// ============ STATE ============
+const COLOURS = ['red', 'green', 'yellow'];
+const COLOUR_HEX = { red: '#c63030', green: '#2e7d2e', yellow: '#e0b020' };
+
+const POND_PREDATION = ['red','red','red','green','green','yellow'];   // dice faces 1-6
+const FOREST_PREDATION = ['yellow','yellow','yellow','red','red','green'];
+
+// keys are sorted alphabetically (green < red < yellow)
+const REPRO_TABLE = {
+  'green-red':    ['red','red','red','green','green','green'],
+  'green-green':  ['red','red','green','green','yellow','yellow'],
+  'green-yellow': ['green','green','green','yellow','yellow','yellow'],
+};
+
+let state = {
+  year: 1,
+  currentBiome: 'forest',
+  pond: makeInitial(),
+  forest: makeInitial(),
+  pondHistory: [],
+  forestHistory: [],
+  predictions: { pond: null, forest: null },
+  step: 'predict',
+  pairs: { pond: [], forest: [] },
+  pendingPair: null,
+  pendingPredation: null,
+  predationCount: { pond: 0, forest: 0 },
+  autoFinish: false,
+};
+
+function setActiveBiome(b) {
+  state.currentBiome = b;
+  document.body.dataset.activeBiome = b;
+}
+
+function makeInitial() {
+  const arr = [];
+  for (let i=0; i<10; i++) arr.push('red');
+  for (let i=0; i<10; i++) arr.push('green');
+  for (let i=0; i<10; i++) arr.push('yellow');
+  return arr;
+}
+
+function counts(env) {
+  return COLOURS.reduce((a,c) => (a[c]=env.filter(x=>x===c).length, a), {});
+}
+
+function updateCountsDisplay() {
+  ['pond','forest'].forEach(e => {
+    const c = counts(state[e]);
+    document.getElementById(e+'R').textContent = c.red;
+    document.getElementById(e+'G').textContent = c.green;
+    document.getElementById(e+'Y').textContent = c.yellow;
+  });
+  document.getElementById('yearNum').textContent = state.year;
+}
+
+// ============ RENDER FROGS ============
+function frogSVG(colour, extraClass='') {
+  return `<svg class="frog ${colour}-frog ${extraClass}"><use href="#frog"/></svg>`;
+}
+
+function renderEnvAsLoose(envName) {
+  const grid = document.getElementById(envName+'Grid');
+  grid.className = 'frog-grid loose';
+  grid.innerHTML = state[envName].map(c => frogSVG(c)).join('');
+}
+
+function renderEnvAsPairs(envName) {
+  const grid = document.getElementById(envName+'Grid');
+  grid.className = 'frog-grid paired';
+  const pairs = state.pairs[envName];
+  grid.innerHTML = pairs.map((p, i) => {
+    const frogs = p.parents.map(c => frogSVG(c)).join('');
+    const offspring = p.offspring ? frogSVG(p.offspring, 'born') : '';
+    return `<div class="pair" data-idx="${i}" data-env="${envName}">${frogs}<span class="offspring${p.offspring?' show':''}">${offspring}</span></div>`;
+  }).join('');
+}
+
+// ============ STEP / UI ============
+function setStep(title, desc) {
+  document.getElementById('stepTitle').textContent = title;
+  document.getElementById('stepDesc').textContent = desc;
+}
+
+function setPrimary(label, fn, disabled=false) {
+  const btn = document.getElementById('primaryBtn');
+  btn.textContent = label;
+  btn.disabled = disabled;
+  btn.onclick = fn;
+  btn.style.display = label ? '' : 'none';
+}
+
+function setActionInfo(html) {
+  document.getElementById('actionInfo').innerHTML = html;
+}
+
+function clearDie() { document.getElementById('dieContainer').innerHTML = ''; }
+
+function showNumberDie(value=null) {
+  const c = document.getElementById('dieContainer');
+  c.innerHTML = `<div class="die" id="theDie">${value ?? '?'}</div>`;
+}
+
+function showColourDie(env) {
+  const faces = env === 'pond' ? POND_PREDATION : FOREST_PREDATION;
+  const c = document.getElementById('dieContainer');
+  c.innerHTML = `<div class="colour-die" id="theDie">${
+    faces.map((f,i) => `<div class="face ${f}" data-i="${i}"></div>`).join('')
+  }</div>`;
+}
+
+// ============ DICE ============
+function rollNumber() { return 1 + Math.floor(Math.random()*6); }
+
+async function animateNumberDie(finalValue) {
+  const die = document.getElementById('theDie');
+  if (!die) return;
+  die.classList.add('rolling');
+  for (let i=0; i<6; i++) {
+    die.textContent = 1 + Math.floor(Math.random()*6);
+    await sleep(60);
+  }
+  die.textContent = finalValue;
+  die.classList.remove('rolling');
+}
+
+async function animateColourDie(env, finalIndex) {
+  const die = document.getElementById('theDie');
+  if (!die) return;
+  die.classList.add('rolling');
+  const faces = die.querySelectorAll('.face');
+  for (let i=0; i<8; i++) {
+    faces.forEach(f => f.classList.remove('highlighted'));
+    faces[Math.floor(Math.random()*6)].classList.add('highlighted');
+    await sleep(70);
+  }
+  faces.forEach(f => f.classList.remove('highlighted'));
+  faces[finalIndex].classList.add('highlighted');
+  die.classList.remove('rolling');
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// ============ TABLE HIGHLIGHTING ============
+function highlightTable1(key) {
+  document.querySelectorAll('#table1 tr').forEach(r => r.classList.toggle('highlighted', r.dataset.key === key));
+}
+function highlightTable2(roll) {
+  document.querySelectorAll('#table2 tr').forEach(r => r.classList.toggle('highlighted', r.dataset.roll == roll));
+}
+function clearHighlights() {
+  document.querySelectorAll('#table1 tr, #table2 tr').forEach(r => r.classList.remove('highlighted'));
+}
+
+// ============ FLOW ============
+function start() {
+  setActiveBiome('forest');
+  document.getElementById('predictDialog').showModal();
+  setupIntro();
+  renderEnvAsLoose('pond');
+  renderEnvAsLoose('forest');
+  updateCountsDisplay();
+}
+
+function setupIntro() {
+  const dialog = document.getElementById('predictDialog');
+  document.getElementById('preambleNext').onclick = () => {
+    document.getElementById('preamblePage').style.display = 'none';
+    document.getElementById('biomeChoicePage').style.display = '';
+  };
+  document.getElementById('chooseForest').onclick = () => {
+    dialog.close();
+    startBiome('forest');
+  };
+  document.getElementById('choosePond').onclick = () => {
+    dialog.close();
+    startBiome('pond');
+  };
+}
+
+function startBiome(biome) {
+  // Reset this biome's state
+  state[biome] = makeInitial();
+  state[biome + 'History'] = [];
+  state.year = 1;
+  state.autoFinish = false;
+  state.predictions[biome] = null;
+  // Clear results table for this biome
+  document.querySelector(`#${biome}Table tbody`).innerHTML = '';
+  // Hide conclusion if it was previously shown
+  document.getElementById('conclusion').style.display = 'none';
+  setActiveBiome(biome);
+  renderEnvAsLoose(biome);
+  updateCountsDisplay();
+  drawCharts();
+  showBiomePredict(biome, () => beginYear());
+}
+
+function showBiomePredict(biome, onSubmit) {
+  const dialog = document.getElementById('biomePredictDialog');
+  const submit = document.getElementById('biomePredictSubmit');
+  const label = biome === 'forest' ? '🌳 Forest' : '🌾 Pond';
+  document.getElementById('biomePredictTitle').textContent = `${label} — make a prediction`;
+  document.getElementById('biomePredictPrompt').textContent =
+    `Which colour do you think will dominate in the ${biome} after 10 years?`;
+  // Reset selection
+  document.querySelectorAll('#biomePredictPick button').forEach(b => b.classList.remove('selected'));
+  submit.disabled = true;
+  submit.textContent = `Begin the ${biome} run`;
+  // Hook colour picker
+  document.querySelectorAll('#biomePredictPick button').forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll('#biomePredictPick button').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      state.predictions[biome] = btn.dataset.colour;
+      submit.disabled = false;
+    };
+  });
+  submit.onclick = () => {
+    dialog.close();
+    onSubmit();
+  };
+  dialog.showModal();
+}
+
+function updateAutoControls() {
+  // Forest: from year 3. Pond: from year 2 (students have seen the lookup process before).
+  const threshold = state.currentBiome === 'pond' ? 2 : 3;
+  const show = state.year >= threshold;
+  document.getElementById('autoRoll').parentElement.style.display = show ? '' : 'none';
+  document.getElementById('autoFinishBtn').style.display = show ? '' : 'none';
+}
+
+function beginYear() {
+  const biome = state.currentBiome;
+  const biomeLabel = biome === 'forest' ? '🌳 Forest' : '🌾 Pond';
+  setStep(`${biomeLabel} — Year ${state.year} — Step 1: Pair the frogs`,
+    'There are 30 frogs. Press the button to shuffle them into 15 random pairs to breed.');
+  setActionInfo('<p class="help-text">Press <strong>Shuffle & Pair</strong> to randomly pair up the frogs.</p>');
+  clearDie();
+  setPrimary('Shuffle & Pair', shuffleAndPair);
+  document.getElementById('autoRoll').checked = false;
+  updateAutoControls();
+}
+
+function shuffleAndPair() {
+  setPrimary('', null, true);
+  const envName = state.currentBiome;
+  const shuffled = [...state[envName]].sort(() => Math.random() - 0.5);
+  const pairs = [];
+  for (let i=0; i<shuffled.length; i+=2) {
+    pairs.push({ parents: [shuffled[i], shuffled[i+1]], offspring: null });
+  }
+  state.pairs[envName] = pairs;
+  renderEnvAsPairs(envName);
+  setActionInfo('<p class="help-text">The frogs have paired up. Take a look, then click <strong>Begin Reproduction</strong> when ready.</p>');
+  setPrimary('Begin Reproduction', () => {
+    setPrimary('', null, true);
+    reproducePhase();
+  });
+}
+
+async function reproducePhase() {
+  const envName = state.currentBiome;
+  const biomeLabel = envName === 'forest' ? '🌳 Forest' : '🌾 Pond';
+  setStep(`${biomeLabel} — Year ${state.year} — Step 2: Reproduction`,
+    'Each pair produces one offspring. Use Table 1 to find the colour. If multiple are possible, roll the die and check Table 2.');
+  await processReproductionPairs(envName);
+
+  // Pause for student to see the full population before predation
+  setStep(`${biomeLabel} — Year ${state.year} — Reproduction complete`,
+    `Each pair has produced an offspring. There are now ${state[envName].length} frogs. Ready for the snakes?`);
+  setActionInfo('<p class="help-text">Take a look at the population, then click <strong>Begin Predation</strong> to release the snakes.</p>');
+  setPrimary('Begin Predation', () => {
+    setPrimary('', null, true);
+    predationPhase();
+  });
+}
+
+async function processReproductionPairs(envName) {
+  const pairs = state.pairs[envName];
+  for (let i=0; i<pairs.length; i++) {
+    const pair = pairs[i];
+    const key = pairKey(pair.parents);
+    highlightActivePair(envName, i);
+    highlightTable1(key);
+
+    const auto = state.autoFinish || document.getElementById('autoRoll').checked;
+    let offspring;
+    if (auto) {
+      offspring = REPRO_TABLE[key]
+        ? REPRO_TABLE[key][rollNumber()-1]
+        : deterministicOffspring(pair.parents);
+      await sleep(state.autoFinish ? 0 : 80);
+    } else {
+      offspring = await runLookupModal(pair, key);
+    }
+    pair.offspring = offspring;
+    showOffspring(envName, i, offspring);
+    if (!auto) await sleep(200);
+  }
+  // Apply offspring to environment
+  state[envName] = pairs.flatMap(p => [...p.parents, p.offspring]);
+  updateCountsDisplay();
+  clearHighlights();
+  renderEnvAsLoose(envName);
+}
+
+// ============ LOOKUP MODAL ============
+function runLookupModal(pair, key) {
+  const dialog = document.getElementById('lookupDialog');
+  const step1 = document.getElementById('lookupStep1');
+  const step2 = document.getElementById('lookupStep2');
+  const step3 = document.getElementById('lookupStep3');
+  const hint = document.getElementById('lookupHint');
+
+  // Reset state
+  step1.style.display = '';
+  step2.style.display = 'none';
+  step3.style.display = 'none';
+  dialog.classList.remove('wide');
+  hint.textContent = '';
+  document.querySelectorAll('#lookupDialog tr, #lookupDialog td').forEach(el => {
+    el.classList.remove('correct-cell','wrong-cell','clickable-cell','dimmed');
+  });
+
+  // Show pair
+  document.getElementById('lookupPairDisplay').innerHTML = `
+    <svg class="${pair.parents[0]}-frog" viewBox="0 0 100 100"><use href="#frog"/></svg>
+    <span class="x">×</span>
+    <svg class="${pair.parents[1]}-frog" viewBox="0 0 100 100"><use href="#frog"/></svg>
+  `;
+
+  dialog.showModal();
+
+  return new Promise(resolve => {
+    // ----- Step A: click correct row in Table 1 -----
+    const table1Rows = document.querySelectorAll('#lookupTable1 tbody tr');
+    const onTable1Click = (e) => {
+      const tr = e.currentTarget;
+      if (tr.dataset.key === key) {
+        tr.classList.add('correct-cell');
+        hint.textContent = '';
+        // unbind
+        table1Rows.forEach(r => r.onclick = null);
+        if (REPRO_TABLE[key]) {
+          // needs roll → step B
+          setTimeout(() => {
+            step2.style.display = '';
+            setupRollStep(pair, key, resolve);
+          }, 600);
+        } else {
+          // deterministic → close
+          const offspring = deterministicOffspring(pair.parents);
+          setTimeout(() => {
+            dialog.close();
+            resolve(offspring);
+          }, 700);
+        }
+      } else {
+        tr.classList.add('wrong-cell');
+        const [a, b] = pair.parents;
+        hint.innerHTML = `Not quite — this pair is <strong style="color:${COLOUR_HEX[a]}">${a}</strong> × <strong style="color:${COLOUR_HEX[b]}">${b}</strong>. Find the row that matches.`;
+        setTimeout(() => tr.classList.remove('wrong-cell'), 700);
+      }
+    };
+    table1Rows.forEach(tr => tr.onclick = onTable1Click);
+  });
+}
+
+function setupRollStep(pair, key, resolveOuter) {
+  const rollBtn = document.getElementById('rollLookupBtn');
+  const dieEl = document.getElementById('lookupDie');
+  rollBtn.disabled = false;
+  rollBtn.textContent = 'Roll die';
+  dieEl.innerHTML = `<div class="die" id="modalDieFace">?</div>`;
+
+  rollBtn.onclick = async () => {
+    rollBtn.disabled = true;
+    const value = rollNumber();
+    const face = document.getElementById('modalDieFace');
+    face.classList.add('rolling');
+    for (let i=0; i<6; i++) {
+      face.textContent = 1+Math.floor(Math.random()*6);
+      await sleep(60);
+    }
+    face.textContent = value;
+    face.classList.remove('rolling');
+    await sleep(300);
+    document.getElementById('lookupStep2').style.display = 'none';
+    document.getElementById('lookupStep3').style.display = '';
+    document.getElementById('lookupDialog').classList.add('wide');
+    document.getElementById('rolledNum').textContent = value;
+    setupTable2Step(pair, key, value, resolveOuter);
+  };
+}
+
+function setupTable2Step(pair, key, rolledValue, resolveOuter) {
+  const correctOffspring = REPRO_TABLE[key][rolledValue - 1];
+  const dialog = document.getElementById('lookupDialog');
+  const hint = document.getElementById('lookupHint');
+
+  // Dim non-relevant columns; mark relevant column cells clickable
+  document.querySelectorAll('#lookupTable2 td[data-col], #lookupTable2 th[data-col]').forEach(el => {
+    if (el.dataset.col === key) {
+      if (el.tagName === 'TD') el.classList.add('clickable-cell');
+    } else {
+      el.classList.add('dimmed');
+    }
+  });
+
+  const cells = document.querySelectorAll(`#lookupTable2 td.clickable-cell`);
+  cells.forEach(td => {
+    td.onclick = () => {
+      const tr = td.closest('tr');
+      const rowRoll = parseInt(tr.dataset.roll, 10);
+      if (rowRoll === rolledValue) {
+        td.classList.add('correct-cell');
+        hint.textContent = '';
+        cells.forEach(c => c.onclick = null);
+        setTimeout(() => {
+          dialog.close();
+          resolveOuter(correctOffspring);
+        }, 700);
+      } else {
+        td.classList.add('wrong-cell');
+        hint.innerHTML = `Not quite — you rolled a <strong>${rolledValue}</strong>. Click the cell in row ${rolledValue}.`;
+        setTimeout(() => td.classList.remove('wrong-cell'), 700);
+      }
+    };
+  });
+}
+
+function pairKey(parents) {
+  const sorted = [...parents].sort();
+  return sorted.join('-');
+}
+
+function deterministicOffspring(parents) {
+  const k = pairKey(parents);
+  if (k === 'red-red') return 'red';
+  if (k === 'yellow-yellow') return 'yellow';
+  if (k === 'red-yellow') return 'green';
+  return null;
+}
+
+function highlightActivePair(envName, idx) {
+  document.querySelectorAll(`[data-env="${envName}"].pair`).forEach((el, i) => {
+    el.classList.toggle('active', i === idx);
+  });
+  // scroll into view if needed
+  const el = document.querySelector(`[data-env="${envName}"][data-idx="${idx}"]`);
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function showOffspring(envName, idx, colour) {
+  const pairEl = document.querySelector(`[data-env="${envName}"][data-idx="${idx}"]`);
+  if (!pairEl) return;
+  const off = pairEl.querySelector('.offspring');
+  off.innerHTML = frogSVG(colour, 'born');
+  off.classList.add('show');
+}
+
+
+// ============ PREDATION ============
+async function predationPhase() {
+  const envName = state.currentBiome;
+  const biomeLabel = envName === 'forest' ? '🌳 Forest' : '🌾 Pond';
+  setStep(`${biomeLabel} — Year ${state.year} — Step 3: Predation`,
+    `Snakes eat 15 frogs. Roll the die to see which colour each snake spots.`);
+  state.predationCount[envName] = 0;
+  showColourDie(envName);
+  await runPredation(envName);
+  recordPhase();
+}
+
+async function runPredation(envName) {
+  const auto = () => document.getElementById('autoRoll').checked || state.autoFinish;
+  let eaten = 0;
+  const target = 15;
+
+  while (eaten < target && state[envName].length > 0) {
+    if (counts(state[envName]).red + counts(state[envName]).green + counts(state[envName]).yellow === 0) break;
+
+    setActionInfo(`<p>Snakes have eaten <strong>${eaten}/${target}</strong> in the ${envName}. Roll to spot the next frog.</p>`);
+
+    const doOneRoll = async () => {
+      let idx, colour, attempts = 0;
+      do {
+        idx = Math.floor(Math.random()*6);
+        colour = (envName === 'pond' ? POND_PREDATION : FOREST_PREDATION)[idx];
+        attempts++;
+        if (attempts > 50) return null;
+      } while (!state[envName].includes(colour));
+
+      await animateColourDie(envName, idx);
+      // Remove one frog of that colour from environment
+      const removeIdx = state[envName].indexOf(colour);
+      if (removeIdx >= 0) {
+        state[envName].splice(removeIdx, 1);
+        // Animate removal
+        await animateRemoval(envName, colour);
+      }
+      eaten++;
+      updateCountsDisplay();
+    };
+
+    if (auto()) {
+      await doOneRoll();
+      await sleep(state.autoFinish ? 30 : 80);
+    } else {
+      await new Promise(resolve => {
+        setPrimary('Roll snake die', async () => {
+          setPrimary('Roll snake die', null, true);
+          await doOneRoll();
+          resolve();
+        });
+      });
+    }
+  }
+  setPrimary('', null, true);
+}
+
+async function animateRemoval(envName, colour) {
+  // pick a still-living frog of that colour and mark it eaten — leave the gap
+  const grid = document.getElementById(envName+'Grid');
+  const frogs = grid.querySelectorAll(`.frog.${colour}-frog:not(.eaten)`);
+  if (frogs.length > 0) {
+    frogs[Math.floor(Math.random()*frogs.length)].classList.add('eaten');
+    await sleep(state.autoFinish ? 0 : 200);
+  }
+}
+
+// ============ RECORDING ============
+function recordPhase() {
+  const envName = state.currentBiome;
+  const biomeLabel = envName === 'forest' ? '🌳 Forest' : '🌾 Pond';
+  setStep(`${biomeLabel} — Year ${state.year} — Step 4: Record results`,
+    'Count the surviving frogs and type the totals into the results table. The graph updates once you submit.');
+  setActionInfo('<p class="help-text">Look at the population above and fill in the row for Year ' + state.year + '.</p>');
+  clearDie();
+
+  addResultRow(envName, state.year);
+
+  if (state.autoFinish) {
+    autoFillResults();
+    return;
+  }
+
+  setPrimary('Submit year ' + state.year, submitResults);
+}
+
+function addResultRow(envName, year) {
+  const tbody = document.querySelector(`#${envName}Table tbody`);
+  // Check if already exists
+  if (tbody.querySelector(`tr[data-year="${year}"]`)) return;
+  const tr = document.createElement('tr');
+  tr.dataset.year = year;
+  tr.innerHTML = `<td>${year}</td>` +
+    COLOURS.map(c => `<td><input type="number" min="0" data-env="${envName}" data-colour="${c}" data-year="${year}"></td>`).join('');
+  tbody.appendChild(tr);
+}
+
+function autoFillResults() {
+  const envName = state.currentBiome;
+  const c = counts(state[envName]);
+  COLOURS.forEach(colour => {
+    const inp = document.querySelector(`input[data-env="${envName}"][data-colour="${colour}"][data-year="${state.year}"]`);
+    if (inp) { inp.value = c[colour]; inp.classList.add('correct'); inp.readOnly = true; }
+  });
+  recordHistory();
+  drawCharts();
+  nextYear();
+}
+
+function submitResults() {
+  const envName = state.currentBiome;
+  const c = counts(state[envName]);
+  let allCorrect = true;
+  COLOURS.forEach(colour => {
+    const inp = document.querySelector(`input[data-env="${envName}"][data-colour="${colour}"][data-year="${state.year}"]`);
+    const val = parseInt(inp.value, 10);
+    if (val === c[colour]) {
+      inp.classList.add('correct');
+      inp.classList.remove('wrong');
+    } else {
+      inp.classList.add('wrong');
+      inp.classList.remove('correct');
+      allCorrect = false;
+    }
+  });
+  if (!allCorrect) {
+    setActionInfo('<p style="color:#c63030">Some tallies don\'t match. Recount and try again.</p>');
+    return;
+  }
+  // Lock this year's row
+  COLOURS.forEach(colour => {
+    const inp = document.querySelector(`input[data-env="${envName}"][data-colour="${colour}"][data-year="${state.year}"]`);
+    if (inp) inp.readOnly = true;
+  });
+  recordHistory();
+  drawCharts();
+  nextYear();
+}
+
+function recordHistory() {
+  const envName = state.currentBiome;
+  state[envName + 'History'].push({ year: state.year, ...counts(state[envName]) });
+}
+
+function nextYear() {
+  state.year++;
+  if (state.year > 10 || isMonoculture(state.currentBiome)) {
+    finish();
+  } else {
+    beginYear();
+  }
+}
+
+function isMonoculture(envName) {
+  const c = counts(state[envName]);
+  return (c.red === 0 && c.green === 0) ||
+         (c.red === 0 && c.yellow === 0) ||
+         (c.green === 0 && c.yellow === 0);
+}
+
+// ============ CHARTS ============
+function drawCharts() {
+  drawChart('pondChart', state.pondHistory);
+  drawChart('forestChart', state.forestHistory);
+}
+
+function drawChart(canvasId, history) {
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const padding = { l: 36, r: 16, t: 16, b: 28 };
+  const cw = W - padding.l - padding.r;
+  const ch = H - padding.t - padding.b;
+
+  const maxY = 30;
+  const maxX = Math.max(1, history.length ? history[history.length-1].year : 1);
+
+  // axes
+  ctx.strokeStyle = '#999';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(padding.l, padding.t);
+  ctx.lineTo(padding.l, padding.t + ch);
+  ctx.lineTo(padding.l + cw, padding.t + ch);
+  ctx.stroke();
+
+  // gridlines + y labels
+  ctx.fillStyle = '#666';
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'right';
+  for (let v=0; v<=maxY; v+=5) {
+    const y = padding.t + ch - (v/maxY) * ch;
+    ctx.fillText(v, padding.l - 4, y + 3);
+    ctx.strokeStyle = '#eee';
+    ctx.beginPath();
+    ctx.moveTo(padding.l, y); ctx.lineTo(padding.l + cw, y); ctx.stroke();
+  }
+  ctx.textAlign = 'center';
+  for (let v=1; v<=maxX; v++) {
+    const x = padding.l + (v/maxX) * cw;
+    ctx.fillText(v, x, padding.t + ch + 16);
+  }
+
+  if (history.length === 0) return;
+
+  COLOURS.forEach(colour => {
+    ctx.strokeStyle = COLOUR_HEX[colour];
+    ctx.fillStyle = COLOUR_HEX[colour];
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    history.forEach((pt, i) => {
+      const x = padding.l + (pt.year/maxX) * cw;
+      const y = padding.t + ch - (pt[colour]/maxY) * ch;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    history.forEach(pt => {
+      const x = padding.l + (pt.year/maxX) * cw;
+      const y = padding.t + ch - (pt[colour]/maxY) * ch;
+      ctx.beginPath();
+      ctx.arc(x, y, 3, 0, Math.PI*2); ctx.fill();
+    });
+  });
+}
+
+// ============ FINISH ============
+function finish() {
+  const hasForest = state.forestHistory.length > 0;
+  const hasPond = state.pondHistory.length > 0;
+
+  // Show whichever biomes have data
+  if (hasForest && hasPond) document.body.dataset.activeBiome = 'both';
+  else if (hasForest) document.body.dataset.activeBiome = 'forest';
+  else document.body.dataset.activeBiome = 'pond';
+
+  document.getElementById('yearNum').textContent = '✓';
+  setStep('Simulation complete', 'See your conclusion below.');
+  setPrimary('', null, true);
+  clearDie();
+  setActionInfo('');
+  document.getElementById('autoRoll').parentElement.style.display = 'none';
+  document.getElementById('autoFinishBtn').style.display = 'none';
+
+  const dominant = c => {
+    const max = Math.max(c.red, c.green, c.yellow);
+    return COLOURS.filter(x => c[x] === max).join(' & ');
+  };
+  const checkPred = (env, dom) => {
+    if (!state.predictions[env]) return '';
+    const correct = dom.includes(state.predictions[env]);
+    return ` (You predicted <strong style="color:${COLOUR_HEX[state.predictions[env]]}">${state.predictions[env]}</strong> — ${correct ? '✅ correct!' : '❌ not quite.'})`;
+  };
+  const renderBiomeLine = (envName) => {
+    const c = counts(state[envName]);
+    const dom = dominant(c);
+    const label = envName === 'forest' ? '🌳 Forest' : '🌾 Pond';
+    return `<li><strong>${label}:</strong> dominated by <strong style="color:${COLOUR_HEX[dom.split(' ')[0]] || '#000'}">${dom}</strong> frogs (R:${c.red}, G:${c.green}, Y:${c.yellow}).${checkPred(envName, dom)}</li>`;
+  };
+
+  const yearsLine = [
+    hasForest ? `${state.forestHistory.length} years in the forest` : null,
+    hasPond ? `${state.pondHistory.length} years in the pond` : null,
+  ].filter(Boolean).join(' and ');
+
+  let html = `<p>After ${yearsLine}:</p><ul>`;
+  if (hasForest) html += renderBiomeLine('forest');
+  if (hasPond) html += renderBiomeLine('pond');
+  html += `</ul>`;
+  html += `<p><strong>What happened?</strong> This is a <em>model</em> of <em>natural selection</em>. Look at how the population changed over time — what do you notice about which colours survived, and why might that be?</p>`;
+
+  // Offer the other biome if it hasn't been run yet
+  if (!hasForest) {
+    html += `<p style="margin-top:16px"><button id="runOtherBiome" style="font-size:1rem;padding:12px 18px">🌳 Now run the Forest</button></p>`;
+  } else if (!hasPond) {
+    html += `<p style="margin-top:16px"><button id="runOtherBiome" style="font-size:1rem;padding:12px 18px">🌾 Now run the Pond</button></p>`;
+  } else {
+    html += `<p class="help-text">Because dice rolls are random, your results will differ from your classmates'. Compare and discuss what's similar and what's different.</p>`;
+  }
+
+  document.getElementById('conclusion').style.display = '';
+  document.getElementById('conclusionBody').innerHTML = html;
+
+  const otherBtn = document.getElementById('runOtherBiome');
+  if (otherBtn) {
+    otherBtn.onclick = () => {
+      const other = hasForest ? 'pond' : 'forest';
+      startBiome(other);
+    };
+  }
+}
+
+// ============ AUTO-FINISH ============
+document.getElementById('autoFinishBtn').onclick = () => {
+  state.autoFinish = true;
+  document.getElementById('autoRoll').checked = true;
+};
+
+// ============ GO ============
+drawCharts();
+start();
+</script>
+</body>
+</html>
