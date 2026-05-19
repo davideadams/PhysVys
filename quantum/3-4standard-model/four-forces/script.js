@@ -258,10 +258,15 @@ function strong() {
   // q1 (top) starts R, ends G. q2 (bottom) starts G, ends R.
   // Colour dot info is managed separately in draw code via colourSwap.
 
+  // Both quarks swap colour together at the moment the gluon arrives at q₂
+  // (t=0.65). Before then the pair reads R+G; after, G+R — the visible pair
+  // always sums to R+G, and the swap coincides with the gluon completing
+  // its journey to the bottom quark. Step keyframes below visit the pre-
+  // swap and post-swap states so Step matches what Play shows.
   return {
     segments: [
-      { from: [60, 205],  to: V1,          color: CLR.quarkU, label: 'q₁', tRange: [0, 0.35], colourPre: CLR.colourR, colourPost: CLR.colourG },
-      { from: [60, 395],  to: V2,          color: CLR.quarkU, label: 'q₂', tRange: [0, 0.35], colourPre: CLR.colourG, colourPost: CLR.colourR },
+      { from: [60, 205],  to: V1,          color: CLR.quarkU, label: 'q₁', tRange: [0, 0.35],   colourPre: CLR.colourR, colourPost: CLR.colourG },
+      { from: [60, 395],  to: V2,          color: CLR.quarkU, label: 'q₂', tRange: [0, 0.35],   colourPre: CLR.colourG, colourPost: CLR.colourR },
       { from: V1, to: [900, 205], color: CLR.quarkU, label: 'q₁', tRange: [0.65, 1.0], colourPre: CLR.colourG, colourPost: CLR.colourG },
       { from: V2, to: [900, 395], color: CLR.quarkU, label: 'q₂', tRange: [0.65, 1.0], colourPre: CLR.colourR, colourPost: CLR.colourR },
     ],
@@ -283,7 +288,9 @@ function strong() {
       },
     ],
     sceneNote: 'Gluons carry colour charge — the colour labels swap at each vertex.',
-    keyframes: [0, 0.35, 0.65, 1.0],
+    // Extra keyframe at 0.18 lets Step show the pre-swap R/G moving phase
+    // that Play passes through, so the two views agree on what colours appear.
+    keyframes: [0, 0.18, 0.35, 0.65, 1.0],
   };
 }
 
@@ -503,14 +510,23 @@ function drawBosonLabel(boson, progress) {
   if (progress < 0.5) return;
   const mid = segPoint(boson.from, boson.to, 0.5);
   const dx = boson.to[0] - boson.from[0];
-  const offX = dx > 0 ? 48 : -48;
+  const dy = boson.to[1] - boson.from[1];
+  const len = Math.hypot(dx, dy) || 1;
+  // Offset perpendicular to the boson line so the label sits beside the wavy/
+  // zigzag drawing rather than across it. For a vertical boson (dx=0, dy>0)
+  // this reduces to a horizontal offset to the left, matching the original
+  // placement; for a diagonal boson (e.g. W⁻ in weak-charged mode) the label
+  // moves perpendicular to the slope so it clears the line.
+  const offDist = 52;
+  const ox = (-dy / len) * offDist;
+  const oy = ( dx / len) * offDist;
   ctx.save();
   ctx.font = 'bold 14px "Trebuchet MS", sans-serif';
   ctx.fillStyle = boson.color;
   ctx.shadowColor = 'rgba(0,0,0,0.7)';
   ctx.shadowBlur = 6;
   ctx.textAlign = 'center';
-  ctx.fillText(boson.label, mid[0] + offX, mid[1] + 5);
+  ctx.fillText(boson.label, mid[0] + ox, mid[1] + oy + 5);
   ctx.restore();
 }
 
@@ -537,7 +553,13 @@ function drawParticleLabel(x, y, label, color, side) {
   ctx.shadowColor = 'rgba(0,0,0,0.8)';
   ctx.shadowBlur = 7;
   ctx.textAlign = side === 'right' ? 'left' : 'right';
-  ctx.fillText(label, x + (side === 'right' ? 10 : -10), y + 5);
+  // Offset the label clear of the line in BOTH axes — sideways past the
+  // endpoint, AND above/below the line — so the line stroke never runs
+  // through the glyph. Pick above/below by canvas half so labels stay on
+  // the outside of the diagram, well clear of the central boson exchange.
+  const hOff = side === 'right' ? 14 : -14;
+  const vOff = y < H / 2 ? -10 : 18;
+  ctx.fillText(label, x + hOff, y + vOff);
   ctx.restore();
 }
 
@@ -569,13 +591,48 @@ function drawTimeAxis() {
   ctx.restore();
 }
 
-// Inspect overlay drawn on canvas
+// Wrap a string to lines that fit within maxWidth, using the ctx's current
+// font for measurement. Splits on whitespace; respects existing words.
+function wrapText(ctx, text, maxWidth) {
+  const words = text.split(/\s+/);
+  const out = [];
+  let line = '';
+  for (const w of words) {
+    const test = line ? line + ' ' + w : w;
+    if (ctx.measureText(test).width > maxWidth && line) {
+      out.push(line);
+      line = w;
+    } else {
+      line = test;
+    }
+  }
+  if (line) out.push(line);
+  return out;
+}
+
+// Inspect overlay drawn on canvas — wraps long lines so they don't spill
+// past the box edge.
 function drawInspectOverlay(vx, vy, text) {
-  const lines = text.split('\n');
+  const rawLines = text.split('\n');
   const pad = 12;
   const lineH = 19;
-  const boxW = 300;
-  const boxH = lines.length * lineH + pad * 2;
+  const boxW = 320;
+  const innerW = boxW - pad * 2;
+
+  // Pre-wrap every raw line under its own font (header is bold) so the box
+  // height can be computed accurately.
+  const wrapped = [];
+  rawLines.forEach((line, i) => {
+    const isHeader = i === 0;
+    ctx.save();
+    ctx.font = isHeader
+      ? 'bold 13px "Trebuchet MS", sans-serif'
+      : '12.5px "Trebuchet MS", sans-serif';
+    wrapText(ctx, line, innerW).forEach(t => wrapped.push({ text: t, isHeader }));
+    ctx.restore();
+  });
+
+  const boxH = wrapped.length * lineH + pad * 2;
 
   // Position: prefer right of vertex, flip if off-screen
   let bx = vx + 20;
@@ -592,15 +649,13 @@ function drawInspectOverlay(vx, vy, text) {
   ctx.fill();
   ctx.stroke();
 
-  ctx.font = '13px "Trebuchet MS", sans-serif';
   ctx.textAlign = 'left';
-  lines.forEach((line, i) => {
-    const isHeader = i === 0;
-    ctx.fillStyle = isHeader ? '#fbbf24' : '#cbd5e1';
-    ctx.font = isHeader
+  wrapped.forEach((line, i) => {
+    ctx.fillStyle = line.isHeader ? '#fbbf24' : '#cbd5e1';
+    ctx.font = line.isHeader
       ? 'bold 13px "Trebuchet MS", sans-serif'
       : '12.5px "Trebuchet MS", sans-serif';
-    ctx.fillText(line, bx + pad, by + pad + lineH * i + 13);
+    ctx.fillText(line.text, bx + pad, by + pad + lineH * i + 13);
   });
   ctx.restore();
 }
@@ -657,9 +712,12 @@ function drawFrame() {
     const p = segProgress(seg.tRange, t);
     drawFermionSegment(seg, p);
 
-    // Colour dot for strong mode
+    // Colour dot for strong mode — both quarks swap together at the moment
+    // the gluon reaches the bottom quark (t=0.65). Before that the pair is
+    // R+G; after, G+R. (The reverse-direction gluon to the top quark isn't
+    // drawn, so the swap reads as a single visible exchange event.)
     if (seg.colourPre) {
-      const vtxT = 0.35;  // vertex time for strong
+      const vtxT = 0.65;
       const colour = t < vtxT ? seg.colourPre : seg.colourPost;
       const headP = Math.min(p, 1);
       const head = segPoint(seg.from, seg.to, headP);
@@ -673,14 +731,16 @@ function drawFrame() {
     }
   });
 
-  // Particle labels at track start and end
+  // Particle labels at track start and end. Incoming labels sit in the left
+  // margin (before the start) so they don't overlap the line going rightward;
+  // outgoing labels sit to the right of the endpoint (past the arrowhead).
   cfg.segments.forEach(seg => {
     const p = segProgress(seg.tRange, t);
     if (p > 0.05) {
       const [ts] = seg.tRange;
       const isOutgoing = ts > 0.4;
       if (!isOutgoing) {
-        drawParticleLabel(seg.from[0], seg.from[1], seg.label, seg.color, 'right');
+        drawParticleLabel(seg.from[0], seg.from[1], seg.label, seg.color, 'left');
       } else if (p > 0.85) {
         drawParticleLabel(seg.to[0], seg.to[1], seg.label, seg.color, 'right');
       }
