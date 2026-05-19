@@ -3,181 +3,114 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SACE Stage 2 Physics Simulations</title>
+  <title>Physics &amp; Chemistry Simulations</title>
   <link rel="stylesheet" href="menu.css">
+  <style>
+    .subject-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1rem;
+    }
+
+    .subject-card {
+      display: flex;
+      flex-direction: column;
+      padding: 1.6rem 1.5rem;
+      text-decoration: none;
+      color: inherit;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .subject-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 32px 72px rgba(19, 48, 77, 0.2);
+    }
+
+    .subject-card .subject-label {
+      margin: 0 0 0.4rem;
+      font-size: 0.85rem;
+      font-weight: 700;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      color: var(--accent-strong);
+    }
+
+    .subject-card h2 {
+      font-size: clamp(1.5rem, 3vw, 2.2rem);
+      line-height: 1.05;
+      margin: 0 0 0.65rem;
+    }
+
+    .subject-card .subject-desc {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+      line-height: 1.45;
+      flex: 1;
+    }
+
+    .subject-card .subject-cta {
+      display: inline-block;
+      margin-top: 1.4rem;
+      padding: 0.55rem 1.1rem;
+      border-radius: 999px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: var(--accent);
+      background: rgba(15, 118, 110, 0.1);
+      transition: background 0.12s;
+    }
+
+    .subject-card:hover .subject-cta {
+      background: rgba(15, 118, 110, 0.18);
+    }
+
+    @media (max-width: 900px) {
+      .subject-grid { grid-template-columns: 1fr; }
+    }
+  </style>
 </head>
 <body>
   <main class="page">
     <section class="hero panel">
-      <p class="eyebrow">SACE Stage 2 Physics</p>
-      <h1>Interactive Simulation Menu</h1>
+      <p class="eyebrow">SACE Simulations</p>
+      <h1>Interactive Simulations</h1>
       <p class="intro">
-        A growing set of classroom-ready HTML models for Stage 2 Physics, organised by topic and subtopic
-        so students and teachers can jump straight to the right idea.
+        Classroom-ready HTML models for SACE Physics and Chemistry, organised by subject.
       </p>
     </section>
 
-    <section class="topic-grid">
-      <article class="topic-card panel">
-        <div class="topic-header">
-          <p class="topic-label">Topic 1</p>
-          <h2>Motion and Relativity</h2>
-        </div>
+    <section class="subject-grid" style="margin-top: 1rem;">
+      <a class="subject-card panel" href="physics.html">
+        <p class="subject-label">Stage 2</p>
+        <h2>Physics</h2>
+        <p class="subject-desc">
+          Motion and Relativity, Electricity and Magnetism, Light and Atoms.
+          Three topics with over 60 interactive models.
+        </p>
+        <span class="subject-cta">Browse Physics &#8594;</span>
+      </a>
 
-        <details class="subtopic-block current-block">
-          <summary><h3>1.1 Projectile Motion</h3></summary>
-          <div class="link-list">
-            <a class="app-link" href="motion/1-1projectile-motion/trajectory-explorer/index.html">Trajectory Explorer<span class="app-desc">Adjust launch speed, angle and height to shape a projectile's flight path.</span></a>
-            <a class="app-link" href="motion/1-1projectile-motion/velocity-components/index.html">Independence of Velocity Components<span class="app-desc">Compare the horizontal and vertical motion of a projectile side by side.</span></a>
-            <a class="app-link" href="motion/1-1projectile-motion/air-resistance/index.html">Effect of Air Resistance<span class="app-desc">Add drag to a projectile and see how the trajectory changes.</span></a>
-            <a class="app-link" href="motion/1-1projectile-motion/terminal-velocity/index.html">Terminal Velocity<span class="app-desc">Drop an object through air and watch speed settle as drag grows.</span></a>
-            <a class="app-link" href="motion/1-1projectile-motion/gorillas/index.html">Gorillas<span class="app-desc">Classic artillery game — set angle and power to land a banana on target.</span></a>
-          </div>
-        </details>
+      <a class="subject-card panel" href="Chemistry/index.html">
+        <p class="subject-label">Stage 2</p>
+        <h2>Chemistry</h2>
+        <p class="subject-desc">
+          Acid&#8211;base titration procedure and molecular geometry.
+          Simulations for lab technique and bonding theory.
+        </p>
+        <span class="subject-cta">Browse Chemistry &#8594;</span>
+      </a>
 
-        <details class="subtopic-block current-block">
-          <summary><h3>1.2 Forces and Momentum</h3></summary>
-          <div class="link-list">
-            <a class="app-link" href="motion/1-2forces-momentum/impulse/index.html">Impulse &amp; Δp<span class="app-desc">Apply a force for a chosen time and track the change in momentum.</span></a>
-            <a class="app-link" href="motion/1-2forces-momentum/2d-collisions/index.html">2D Collisions<span class="app-desc">Set up two pucks colliding at an angle and check momentum conservation.</span></a>
-            <a class="app-link" href="motion/1-2forces-momentum/2d-explosions/index.html">2D Explosions<span class="app-desc">Split a stationary object into fragments and analyse the resulting momenta.</span></a>
-            <a class="app-link" href="motion/1-2forces-momentum/propulsion/index.html">Propulsion<span class="app-desc">Eject mass from a craft and observe the recoil that drives it forward.</span></a>
-            <a class="app-link" href="motion/1-2forces-momentum/crokinole/index.html">Crokinole<span class="app-desc">Flick discs on a board — a playful sandbox for 2D elastic collisions.</span></a>
-          </div>
-        </details>
-
-        <details class="subtopic-block current-block">
-          <summary><h3>1.3 Circular Motion and Gravitation</h3></summary>
-          <div class="link-list">
-            <a class="app-link" href="motion/1-3circular-gravitation/uniform-circular-motion/index.html">Uniform Circular Motion<span class="app-desc">Spin an object in a circle and inspect its velocity and centripetal force.</span></a>
-            <a class="app-link" href="motion/1-3circular-gravitation/banked-curves/index.html">Banked Curves<span class="app-desc">Adjust bank angle, speed and friction for a car rounding a curve.</span></a>
-            <a class="app-link" href="motion/1-3circular-gravitation/newtonian-gravitation/index.html">Newtonian Gravitation<span class="app-desc">Vary masses and separation to explore the inverse-square gravitational force.</span></a>
-            <a class="app-link" href="motion/1-3circular-gravitation/satellites/index.html">Satellites<span class="app-desc">Launch satellites at different altitudes and speeds to see the orbits that result.</span></a>
-            <a class="app-link" href="motion/1-3circular-gravitation/keplers-laws/index.html">Kepler's Laws<span class="app-desc">Explore orbital shape, period and swept areas for planets around a star.</span></a>
-          </div>
-        </details>
-
-        <details class="subtopic-block current-block">
-          <summary><h3>1.4 Relativity</h3></summary>
-          <div class="link-list">
-            <a class="app-link" href="motion/1-4relativity/galilean-relativity/index.html">Galilean Relativity<span class="app-desc">Switch between reference frames to see how classical velocities add.</span></a>
-            <a class="app-link" href="motion/1-4relativity/relativity-of-simultaneity/index.html">Relativity of Simultaneity<span class="app-desc">Trigger events from different frames and compare when each observer sees them.</span></a>
-            <a class="app-link" href="motion/1-4relativity/length-contraction/index.html">Length Contraction &amp; Time Dilation<span class="app-desc">Dial up the speed of a moving object and watch its clocks and rulers.</span></a>
-            <a class="app-link" href="motion/1-4relativity/relativistic-momentum/index.html">Relativistic Momentum<span class="app-desc">Graph momentum against speed as particles approach the speed of light.</span></a>
-            <a class="app-link" href="motion/1-4relativity/muon-decay/index.html">Muon Decay Experiment<span class="app-desc">Count cosmic-ray muons arriving at sea level and compare to classical predictions.</span></a>
-          </div>
-        </details>
-      </article>
-
-      <article class="topic-card panel">
-        <div class="topic-header">
-          <p class="topic-label">Topic 2</p>
-          <h2>Electricity and Magnetism</h2>
-        </div>
-
-        <details class="subtopic-block current-block">
-          <summary><h3>2.1 Electric Fields</h3></summary>
-          <div class="link-list">
-            <a class="app-link" href="electromagnetism/2-1electric-fields/coulombs-law/index.html">Coulomb's Law Explorer<span class="app-desc">Vary charge and separation to measure the force between two point charges.</span></a>
-            <a class="app-link" href="electromagnetism/2-1electric-fields/superposition/index.html">Superposition of Forces<span class="app-desc">Place multiple charges and read off the net force on a chosen test charge.</span></a>
-            <a class="app-link" href="electromagnetism/2-1electric-fields/electric-field-visualiser/index.html">Electric Field Visualiser<span class="app-desc">Arrange charges and see the resulting field lines and vector map.</span></a>
-            <a class="app-link" href="electromagnetism/2-1electric-fields/field-strength-distance/index.html">Field Strength vs Distance<span class="app-desc">Plot how E falls off with distance from a point charge or charged plate.</span></a>
-            <a class="app-link" href="electromagnetism/2-1electric-fields/hollow-conductors/index.html">Hollow Conductors<span class="app-desc">Probe the field inside and outside charged conductors of different shapes.</span></a>
-          </div>
-        </details>
-
-        <details class="subtopic-block current-block">
-          <summary><h3>2.2 Charged Particles in Electric Fields</h3></summary>
-          <div class="link-list">
-            <a class="app-link" href="electromagnetism/2-2charged-particles-e-fields/particle-deflection/index.html">Particle Deflection<span class="app-desc">Fire charged particles between parallel plates and steer them with the field.</span></a>
-            <a class="app-link" href="electromagnetism/2-2charged-particles-e-fields/millikan-oil-drop/index.html">Millikan's Oil Drop<span class="app-desc">Balance tiny charged droplets between gravity and an adjustable electric field.</span></a>
-          </div>
-        </details>
-
-        <details class="subtopic-block current-block">
-          <summary><h3>2.3 Magnetic Fields</h3></summary>
-          <div class="link-list">
-            <a class="app-link" href="electromagnetism/2-3magnetic-fields/straight-conductor/index.html">Straight Conductor &amp; Right-Hand Rule<span class="app-desc">Orbit a 3D wire to see the circular field loops and probe the field at any point.</span></a>
-            <a class="app-link" href="electromagnetism/2-3magnetic-fields/dipoles-and-solenoids/index.html">Dipoles &amp; Solenoids<span class="app-desc">Compare the field around a bar magnet with that of a current-carrying solenoid.</span></a>
-          </div>
-        </details>
-
-        <details class="subtopic-block current-block">
-          <summary><h3>2.4 Charged Particles in Magnetic Fields</h3></summary>
-          <div class="link-list">
-            <a class="app-link" href="electromagnetism/2-4charged-particles-b-fields/force-on-conductor/index.html">Force on a Current-Carrying Conductor<span class="app-desc">Tilt a wire in a uniform field and watch F = BIℓ sin θ vanish at parallel.</span></a>
-            <a class="app-link" href="electromagnetism/2-4charged-particles-b-fields/two-parallel-wires/index.html">Two Parallel Wires<span class="app-desc">Superpose the fields of two long wires; parallel currents attract, antiparallel repel.</span></a>
-            <a class="app-link" href="electromagnetism/2-4charged-particles-b-fields/particle-in-b-field/index.html">Charged Particle in a Uniform B Field<span class="app-desc">Fire a charge into a uniform field and watch it loop with radius r = mv / |q|B.</span></a>
-            <a class="app-link" href="electromagnetism/2-4charged-particles-b-fields/cyclotron/index.html">Cyclotron<span class="app-desc">Tune the oscillator to f = qB/2πm and accelerate the particle to the dee rim.</span></a>
-            <a class="app-link" href="electromagnetism/2-4charged-particles-b-fields/thomson-em/index.html">Thomson's e/m Determination<span class="app-desc">Cross E and B fields in a Teltron tube; record null voltages to find v, then deflect onto the plate edge to find m.</span></a>
-            <a class="app-link" href="electromagnetism/2-4charged-particles-b-fields/magnetism-from-relativity/index.html">Magnetism from Relativity<span class="app-desc">Switch frames to see the magnetic force on a charge become an electric force from length contraction.</span></a>
-          </div>
-        </details>
-
-        <details class="subtopic-block current-block">
-          <summary><h3>2.5 Induction</h3></summary>
-          <div class="link-list">
-            <a class="app-link" href="electromagnetism/2-5induction/magnetic-flux-explorer/index.html">Magnetic Flux Explorer<span class="app-desc">Tilt and resize a loop in a uniform field to watch Φ = BA cos θ rise and fall.</span></a>
-            <a class="app-link" href="electromagnetism/2-5induction/faraday-lenz/index.html">Faraday &amp; Lenz<span class="app-desc">Slide a bar magnet through a coil; watch Φ, ε and the galvanometer respond.</span></a>
-            <a class="app-link" href="electromagnetism/2-5induction/ac-generator/index.html">AC Generator<span class="app-desc">Spin an N-turn coil in a uniform field and trace ε = NBAω sin ωt on a scope.</span></a>
-            <a class="app-link" href="electromagnetism/2-5induction/transformer/index.html">Transformer<span class="app-desc">Set the turns on linked input and output coils to see V_output / V_input = N_output / N_input.</span></a>
-            <a class="app-link" href="electromagnetism/2-5induction/eddy-currents-braking/index.html">Eddy Currents &amp; Magnetic Braking<span class="app-desc">Drop a plate through a magnet's gap; eddy currents brake it. Slot the plate, or scan a coin with a metal detector.</span></a>
-          </div>
-        </details>
-      </article>
-
-      <article class="topic-card panel">
-        <div class="topic-header">
-          <p class="topic-label">Topic 3</p>
-          <h2>Light and Atoms</h2>
-        </div>
-
-        <details class="subtopic-block current-block">
-          <summary><h3>3.1 Wave Behaviour of Light</h3></summary>
-          <div class="link-list">
-            <a class="app-link" href="quantum/3-1wave-behaviour-of-light/two-source-interference/index.html">Two-Source Interference<span class="app-desc">Two coherent point sources radiate overlapping wavefronts; trace antinodal and nodal lines from path difference p.</span></a>
-            <a class="app-link" href="quantum/3-1wave-behaviour-of-light/double-slit/index.html">Double Slit<span class="app-desc">Plane wave hits two slits; Huygens secondary waves overlap on the way to the screen. Derivation-triangle overlay for d sin θ = mλ. Bullets and electrons modes for Feynman's three-way comparison.</span></a>
-            <a class="app-link" href="quantum/3-1wave-behaviour-of-light/diffraction-grating/index.html">Diffraction Grating<span class="app-desc">N evenly-spaced slits; principal maxima sharpen as N grows. Switch to white light and watch each order fan into a spectrum.</span></a>
-            <a class="app-link" href="quantum/3-1wave-behaviour-of-light/polarisation/index.html">Polarisation<span class="app-desc">Send unpolarised light through up to three rotatable polarisers; Malus's Law gives the transmitted intensity at each axis.</span></a>
-          </div>
-        </details>
-
-        <details class="subtopic-block current-block">
-          <summary><h3>3.2 Wave-Particle Duality</h3></summary>
-          <div class="link-list">
-            <a class="app-link" href="quantum/3-1wave-behaviour-of-light/double-slit/index.html?mode=electrons">Double Slit: Bullets, Waves, Electrons<span class="app-desc">Feynman's three-way comparison — same geometry, three regimes. Toggle a which-path detector to collapse the electron pattern.</span></a>
-            <a class="app-link" href="quantum/3-2wave-particle-duality/photoelectric-effect/index.html">Photoelectric Effect<span class="app-desc">Simulated PE apparatus: lamp, evacuated tube, ammeter. Pick a cathode metal, dial λ and the plate voltage, watch photons and photoelectrons, read the stopping voltage off the meter.</span></a>
-            <a class="app-link" href="quantum/3-2wave-particle-duality/electron-diffraction/index.html">Electron Diffraction<span class="app-desc">Accelerate electrons through V into a polycrystalline target; single electrons flash on the phosphor and rings appear. Identify two unknown samples from their ring spacings.</span></a>
-            <a class="app-link" href="quantum/3-2wave-particle-duality/bremsstrahlung/index.html">Bremsstrahlung<span class="app-desc">A single electron approaches a single target atom; the nucleus deflects it and an x-ray is emitted. Each path produces a different photon energy — the spectrometer strip sorts them.</span></a>
-          </div>
-        </details>
-
-        <details class="subtopic-block current-block">
-          <summary><h3>3.3 Structure of the Atom</h3></summary>
-          <div class="link-list">
-            <a class="app-link" href="quantum/3-3atomic-structure/black-body-radiation/index.html">Black Body Radiation<span class="app-desc">Drag the temperature slider from a dim stove element to a blue-white star and watch the colour and spectral peak shift. Toggle the classical Rayleigh–Jeans prediction to see the Ultraviolet Catastrophe — the divergence that forced Planck to quantise energy.</span></a>
-            <a class="app-link" href="quantum/3-3atomic-structure/x-ray-tube/index.html">X-Ray Tube<span class="app-desc">Accelerate electrons into a metal target and inspect the x-ray spectrum produced.</span></a>
-            <a class="app-link" href="quantum/3-3atomic-structure/rutherford-scattering/index.html">Rutherford Scattering<span class="app-desc">Fire α particles at a single atom; compare what the Thomson plum-pudding and Rutherford nuclear models predict for the trajectories and scattering-angle distribution.</span></a>
-            <a class="app-link" href="quantum/3-3atomic-structure/bohr-hydrogen/index.html">Bohr Model of Hydrogen<span class="app-desc">Drag the electron up the energy-level diagram to excite the atom; watch it cascade back down. Emission and absorption modes share an accumulating spectrum strip.</span></a>
-            <a class="app-link" href="quantum/3-3atomic-structure/fluorescence-phosphorescence/index.html">Fluorescence &amp; Phosphorescence<span class="app-desc">Fire a UV photon at a molecule and watch it re-emit a lower-energy visible photon. Fluorescence is near-instant; phosphorescence traps the electron in a metastable state first, then emits after a tunable delay.</span></a>
-            <a class="app-link" href="quantum/3-3atomic-structure/fraunhofer-lines/index.html">Fraunhofer Lines<span class="app-desc">Read the dark absorption lines in the Sun's spectrum. Toggle candidate elements to overlay their known emission patterns and identify which ones are present in the photosphere.</span></a>
-            <a class="app-link" href="quantum/3-3atomic-structure/atomic-spectra/index.html">Atomic Spectra<span class="app-desc">Reference tool: select any element and view its emission and absorption spectra side by side. Scroll to zoom, drag to pan, or jump to a region of interest with the preset buttons.</span></a>
-            <a class="app-link" href="quantum/3-3atomic-structure/hene-laser/index.html">HeNe Laser<span class="app-desc">Watch how population inversion and stimulated emission combine to produce a coherent beam. Cascade mode shows the photon avalanche; Full Sim traces the discharge, resonant He–Ne energy transfer, and photon bouncing between mirrors.</span></a>
-          </div>
-        </details>
-
-        <details class="subtopic-block current-block">
-          <summary><h3>3.4 Standard Model</h3></summary>
-          <div class="link-list">
-            <a class="app-link" href="quantum/3-4standard-model/four-forces/index.html">Four Fundamental Forces<span class="app-desc">Virtual boson exchange in EM, Weak, Strong, and Gravity. Step through the Feynman diagram, then click any vertex to inspect what is conserved there.</span></a>
-            <a class="app-link" href="quantum/3-4standard-model/decay-checker/index.html">Decay Checker<span class="app-desc">Build a particle decay and check it against charge, baryon number, lepton number, and energy conservation. Fix-it mode loads a pre-built reaction with one wrong particle; Free build lets you assemble any reaction from scratch.</span></a>
-            <a class="app-link" href="quantum/3-4standard-model/hadron-builder/index.html">Hadron Builder<span class="app-desc">Drag quarks into the bag to construct mesons and baryons. Cycle the colour charge on each quark to explore colour neutrality — the bag glows white when the colour cancels. All combinations are accepted; known particles are identified automatically with mass and lifetime.</span></a>
-          </div>
-        </details>
-      </article>
+      <a class="subject-card panel" href="miscellaneous.html">
+        <p class="subject-label">Stage 1 &amp; Other</p>
+        <h2>Miscellaneous</h2>
+        <p class="subject-desc">
+          Simulations that don't belong to a single Stage 2 topic &#8212;
+          Stage 1 content and cross-topic demonstrations.
+        </p>
+        <span class="subject-cta">Browse Miscellaneous &#8594;</span>
+      </a>
     </section>
   </main>
 </body>
 </html>
-
-

@@ -3,227 +3,53 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Acid–Base Titration</title>
-  <style>
-    :root {
-      --bg-top: #f4f1ea;
-      --bg-bottom: #e8e0d0;
-      --paper: rgba(255, 255, 255, 0.85);
-      --rule: rgba(70, 50, 30, 0.12);
-      --ink: #3d2f1f;
-      --muted: #7a6851;
-      --accent: #8b5a3c;
-      --accent-strong: #a6704a;
-      --shadow: 0 24px 60px rgba(60, 40, 20, 0.18);
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      min-height: 100vh;
-      font-family: "Trebuchet MS", "Gill Sans", "Segoe UI", sans-serif;
-      color: var(--ink);
-      background:
-        radial-gradient(circle at top left, rgba(255,255,255,0.85), transparent 30%),
-        linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
-    }
-    .page {
-      width: min(1500px, calc(100% - 2rem));
-      margin: 0 auto;
-      padding: 1.25rem 0 0;
-    }
-    .hero { margin-bottom: 0.85rem; }
-    .hero-link {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.4rem;
-      margin-bottom: 0.6rem;
-      padding: 0.45rem 0.8rem;
-      border-radius: 999px;
-      text-decoration: none;
-      font-size: 0.9rem;
-      font-weight: 700;
-      color: var(--ink);
-      background: rgba(255,255,255,0.9);
-      border: 1px solid var(--rule);
-    }
-    .hero-link:hover { background: white; }
-    .eyebrow {
-      margin: 0 0 0.3rem;
-      color: var(--accent-strong);
-      font-size: 0.85rem;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-    }
-    h1 {
-      margin: 0;
-      font-size: clamp(1.6rem, 3.5vw, 2.4rem);
-      line-height: 1;
-      color: var(--ink);
-    }
-
-    /* ── Tab strip ─────────────────────────────────────── */
-    .tabs {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.4rem;
-      margin: 0.9rem 0 0.6rem;
-      padding: 0.35rem;
-      background: var(--paper);
-      border: 1px solid var(--rule);
-      border-radius: 12px;
-      box-shadow: var(--shadow);
-    }
-    .tab {
-      flex: 1 1 auto;
-      min-width: 140px;
-      padding: 0.7rem 1rem;
-      border: 1px solid transparent;
-      border-radius: 9px;
-      background: transparent;
-      font-family: inherit;
-      font-size: 0.95rem;
-      font-weight: 700;
-      color: var(--muted);
-      cursor: pointer;
-      text-align: center;
-      transition: background 0.12s, color 0.12s, border-color 0.12s;
-    }
-    .tab .step {
-      display: block;
-      font-size: 0.7rem;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--accent-strong);
-      margin-bottom: 0.15rem;
-      opacity: 0.8;
-    }
-    .tab:hover { background: rgba(255,255,255,0.65); color: var(--ink); }
-    .tab.active {
-      background: white;
-      color: var(--ink);
-      border-color: var(--rule);
-      box-shadow: 0 2px 8px rgba(60,40,20,0.08);
-    }
-    .tab.active .step { opacity: 1; }
-
-    /* ── Frames ────────────────────────────────────────── */
-    .frame-wrap { position: relative; }
-    .stage-frame {
-      width: 100%;
-      height: calc(100vh - 180px);
-      min-height: 800px;
-      border: 0;
-      background: transparent;
-      display: none;
-    }
-    .stage-frame.active { display: block; }
-
-    @media (max-width: 720px) {
-      .tab { min-width: 0; padding: 0.55rem 0.6rem; font-size: 0.85rem; }
-      .tab .step { font-size: 0.62rem; }
-      .stage-frame { height: calc(100vh - 220px); }
-    }
-  </style>
+  <title>SACE Stage 2 Chemistry Simulations</title>
+  <link rel="stylesheet" href="../menu.css">
 </head>
 <body>
-<main class="page">
+  <main class="page">
+    <section class="hero panel">
+      <a class="hero-link" href="../index.html">&#8592; Back to Main Menu</a>
+      <p class="eyebrow">SACE Stage 2 Chemistry</p>
+      <h1>Interactive Simulation Menu</h1>
+      <p class="intro">
+        Classroom-ready HTML models for Stage 2 Chemistry.
+      </p>
+    </section>
 
-  <section class="hero">
-    <a class="hero-link" href="../index.html">← Back to Main Menu</a>
-    <p class="eyebrow">Chemistry</p>
-    <h1>Acid–Base Titration</h1>
-  </section>
+    <section class="topic-grid" style="grid-template-columns: repeat(2, minmax(0, 1fr));">
 
-  <nav class="tabs" role="tablist" id="tabs">
-    <button class="tab active" role="tab" data-frame="frame-standard"
-            aria-controls="frame-standard" aria-selected="true">
-      <span class="step">Step 1</span>Standard Solution
-    </button>
-    <button class="tab" role="tab" data-frame="frame-rinsing"
-            aria-controls="frame-rinsing" aria-selected="false">
-      <span class="step">Step 2</span>Rinsing &amp; Pipetting
-    </button>
-    <button class="tab" role="tab" data-frame="frame-titration"
-            aria-controls="frame-titration" aria-selected="false">
-      <span class="step">Step 3</span>Titration
-    </button>
-    <button class="tab" role="tab" data-frame="frame-calc"
-            aria-controls="frame-calc" aria-selected="false">
-      <span class="step">Step 4</span>Calculations
-    </button>
-  </nav>
+      <article class="topic-card panel">
+        <div class="topic-header">
+          <h2>Acid&#8211;Base Titration</h2>
+        </div>
 
-  <div class="frame-wrap">
-    <iframe id="frame-standard" class="stage-frame active"
-            src="stage-a-standard/index.html"
-            title="Making a Standard Solution"></iframe>
-    <iframe id="frame-rinsing" class="stage-frame"
-            src="stage-b-rinsing/index.html"
-            title="Rinsing &amp; Pipetting"></iframe>
-    <iframe id="frame-titration" class="stage-frame"
-            src="stage-c-titration/index.html"
-            title="Titration"></iframe>
-    <iframe id="frame-calc" class="stage-frame"
-            src="stage-e-calculations/index.html"
-            title="Check Your Calculations"></iframe>
-  </div>
+        <details class="subtopic-block current-block" open>
+          <summary><h3>Full Procedure</h3></summary>
+          <div class="link-list">
+            <a class="app-link" href="titration/index.html">Acid&#8211;Base Titration
+              <span class="app-desc">Step through the full titration procedure: prepare a standard solution, rinse and pipette, perform the titration, then check your calculations.</span>
+            </a>
+          </div>
+        </details>
+      </article>
 
-</main>
+      <article class="topic-card panel">
+        <div class="topic-header">
+          <h2>Molecular Geometry</h2>
+        </div>
 
-<script>
-  // Hide redundant inner hero-link / page padding inside each iframe so the
-  // wrapper hero is the single navigation point. Also lifts the inner page
-  // padding-top, since the wrapper already provides spacing.
-  function tweakInnerFrame(frame) {
-    try {
-      const doc = frame.contentDocument;
-      if (!doc) return;
-      const css = `
-        .hero-link { display: none !important; }
-        .page { padding-top: 0.5rem !important; }
-        .hero { margin-bottom: 0.6rem !important; }
-      `;
-      const style = doc.createElement('style');
-      style.textContent = css;
-      doc.head.appendChild(style);
-    } catch (_) { /* cross-origin: ignore */ }
-  }
-  document.querySelectorAll('.stage-frame').forEach(f => {
-    f.addEventListener('load', () => tweakInnerFrame(f));
-    // If already loaded (cached), tweak now.
-    if (f.contentDocument && f.contentDocument.readyState === 'complete') {
-      tweakInnerFrame(f);
-    }
-  });
+        <details class="subtopic-block current-block" open>
+          <summary><h3>VSEPR Theory</h3></summary>
+          <div class="link-list">
+            <a class="app-link" href="VSEPR/index.html">VSEPR Model Builder
+              <span class="app-desc">Construct molecules and explore how electron-pair repulsion determines bond angles and 3D shape.</span>
+            </a>
+          </div>
+        </details>
+      </article>
 
-  // Tab switching — hide/show iframes; iframes keep their state across
-  // switches because they're never removed from the DOM. We also post a
-  // 'tab-inactive' / 'tab-active' message so stages can pause anything that
-  // shouldn't keep running while hidden (e.g. a continuous pour in Stage C).
-  const tabs   = document.querySelectorAll('.tab');
-  const frames = document.querySelectorAll('.stage-frame');
-  function postToFrame(frame, type) {
-    try { frame.contentWindow.postMessage({ type }, location.origin); }
-    catch (_) {}
-  }
-  tabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-      const target = tab.dataset.frame;
-      tabs.forEach(t => {
-        t.classList.toggle('active', t === tab);
-        t.setAttribute('aria-selected', t === tab ? 'true' : 'false');
-      });
-      frames.forEach(f => {
-        const wasActive = f.classList.contains('active');
-        const willBeActive = f.id === target;
-        f.classList.toggle('active', willBeActive);
-        if (wasActive && !willBeActive) postToFrame(f, 'tab-inactive');
-        if (!wasActive && willBeActive) postToFrame(f, 'tab-active');
-      });
-    });
-  });
-</script>
+    </section>
+  </main>
 </body>
 </html>
