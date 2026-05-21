@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fibre Optic — Total Internal Reflection</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../miscellaneous.html">← Back</a>
+      <p class="eyebrow">Optics — Total Internal Reflection</p>
+      <h1>Fibre Optic Cable</h1>
+      <p class="intro">
+        Light launched into a glass fibre bounces off the inner walls. When the angle of incidence exceeds the
+        critical angle <em>θ<sub>c</sub> = arcsin(1/n)</em>, the wall is a perfect mirror — that's
+        <strong>total internal reflection</strong>. Bend the fibre too sharply and rays hit the wall too steeply;
+        they leak out instead. Drag the handles to reshape the cable, and try changing <em>n</em> and the
+        wavelength (a touch of dispersion is baked in: <em>n</em> drifts slightly with λ).
+      </p>
+    </div>
+  </section>
+
+  <section class="layout">
+    <aside class="panel controls">
+
+      <div class="control-group">
+        <label>Fibre — refractive index <span class="muted">at 589 nm</span></label>
+        <div class="slider-row">
+          <input type="range" id="slider-n" min="1.30" max="2.00" step="0.01" value="1.50">
+          <input type="number" class="num-input" id="val-n" min="1.30" max="2.00" step="0.01" value="1.50">
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Wavelength</label>
+        <div class="slider-row">
+          <input type="range" id="slider-lambda" min="380" max="750" step="1" value="550">
+          <input type="number" class="num-input" id="val-lambda" min="380" max="750" step="1" value="550">
+          <span class="slider-unit">nm</span>
+        </div>
+        <div class="lambda-bar" aria-hidden="true"><div id="lambda-marker"></div></div>
+      </div>
+
+      <div class="control-group">
+        <label>Entry angle <span class="muted">from fibre axis</span></label>
+        <div class="slider-row">
+          <input type="range" id="slider-angle" min="-85" max="85" step="0.5" value="8">
+          <input type="number" class="num-input" id="val-angle" min="-85" max="85" step="0.5" value="8">
+          <span class="slider-unit">°</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Shape</label>
+        <div class="auto-row">
+          <button id="btn-add"    class="play-btn" type="button">+ Handle</button>
+          <button id="btn-remove" class="play-btn ghost" type="button">− Handle</button>
+        </div>
+        <div class="auto-row" style="margin-top:0.4rem">
+          <button id="btn-preset-straight" class="play-btn ghost" type="button">Straight</button>
+          <button id="btn-preset-sbend"    class="play-btn ghost" type="button">S-bend</button>
+          <button id="btn-preset-loop"     class="play-btn ghost" type="button">Loop</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Show / hide</label>
+        <div class="vector-toggles">
+          <button class="vec-btn active" id="btn-handles" type="button">
+            <span class="vec-dot" style="background:#facc15"></span>Drag handles
+          </button>
+          <button class="vec-btn active" id="btn-absorb" type="button">
+            <span class="vec-dot" style="background:#1f2937"></span>Far end absorbs light
+          </button>
+          <button class="vec-btn" id="btn-normals" type="button">
+            <span class="vec-dot" style="background:#a78bfa"></span>Wall normal at last bounce
+          </button>
+          <button class="vec-btn active" id="btn-bouncelabel" type="button">
+            <span class="vec-dot" style="background:#7dd3fc"></span>Angle label at last bounce
+          </button>
+          <button class="vec-btn active" id="btn-pulse" type="button">
+            <span class="vec-dot" style="background:#0d9488"></span>Animate travelling pulse
+          </button>
+        </div>
+      </div>
+
+      <div class="explain-card">
+        <div class="readout-hd">Live readouts</div>
+        <div class="readout-row"><span>n(λ)</span><span id="rd-n">—</span></div>
+        <div class="readout-row"><span>Critical angle θ<sub>c</sub></span><span id="rd-crit">—</span></div>
+        <div class="readout-row"><span>Last θ<sub>i</sub></span><span id="rd-incidence">—</span></div>
+        <div class="readout-row"><span>Bounces</span><span id="rd-bounces">—</span></div>
+        <div class="readout-row"><span>Tightest bend radius</span><span id="rd-bend">—</span></div>
+        <div class="readout-row"><span>Light reaching exit</span><span id="rd-exit">—</span></div>
+      </div>
+
+      <div class="explain-card" id="status-card">
+        <div class="readout-hd" id="status-title">—</div>
+        <div id="status-body" style="font-size:0.85rem;color:#475569">—</div>
+      </div>
+
+    </aside>
+
+    <section class="panel visual-panel">
+      <div class="canvas-wrap">
+        <canvas id="fibre-canvas" width="960" height="600"
+                aria-label="Side view of a flexible fibre optic cable with a light ray traced through it"></canvas>
+        <div class="scene-note">Drag any yellow handle to reshape the cable</div>
+      </div>
+    </section>
+  </section>
+</main>
+
+<script src="script.js"></script>
+</body>
+</html>
