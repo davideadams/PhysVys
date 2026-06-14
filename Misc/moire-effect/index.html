@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Moiré Effect</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../miscellaneous.html">← Back</a>
+      <p class="eyebrow">Patterns &amp; Interference</p>
+      <h1>Moiré Effect</h1>
+      <p class="intro">
+        Two near-identical periodic patterns stacked together create large, slow fringes — the same
+        idea as audio beats, but in space. Choose a pattern, then nudge layer B's spacing or rotation
+        and watch the Moiré pitch explode. The predicted fringe spacing is shown live: for a small
+        rotation θ between equal grids, <em>d<sub>M</sub> = d / (2 sin(θ/2))</em>; for parallel grids
+        of slightly different spacings, <em>d<sub>M</sub> = d<sub>1</sub>d<sub>2</sub> / |d<sub>1</sub>−d<sub>2</sub>|</em>.
+      </p>
+    </div>
+  </section>
+
+  <section class="layout">
+    <aside class="panel controls">
+
+      <div class="control-group">
+        <label>Pattern</label>
+        <div class="pattern-grid">
+          <button class="play-btn active" data-pattern="lines"    type="button">Lines</button>
+          <button class="play-btn"        data-pattern="dots"     type="button">Dots</button>
+          <button class="play-btn"        data-pattern="circles"  type="button">Circles</button>
+          <button class="play-btn"        data-pattern="radial"   type="button">Radial</button>
+          <button class="play-btn"        data-pattern="triangle" type="button">Triangle</button>
+          <button class="play-btn"        data-pattern="hex"      type="button">Hexagon</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Layer A — spacing</label>
+        <div class="slider-row">
+          <input type="range"  id="slider-dA" min="6" max="60" step="0.5" value="18">
+          <input type="number" id="val-dA"    class="num-input" min="6" max="60" step="0.5" value="18">
+          <span class="slider-unit">px</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Layer B — spacing</label>
+        <div class="slider-row">
+          <input type="range"  id="slider-dB" min="6" max="60" step="0.5" value="18">
+          <input type="number" id="val-dB"    class="num-input" min="6" max="60" step="0.5" value="18">
+          <span class="slider-unit">px</span>
+        </div>
+        <div class="auto-row" style="margin-top:0.4rem">
+          <button id="btn-match" class="play-btn ghost" type="button">Match A</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Layer B — rotation</label>
+        <div class="slider-row">
+          <input type="range"  id="slider-theta" min="-90" max="90" step="0.1" value="3">
+          <input type="number" id="val-theta"    class="num-input" min="-90" max="90" step="0.1" value="3">
+          <span class="slider-unit">°</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Line / dot thickness <span class="muted">% of spacing</span></label>
+        <div class="slider-row">
+          <input type="range"  id="slider-thk" min="5" max="60" step="1" value="25">
+          <input type="number" id="val-thk"    class="num-input" min="5" max="60" step="1" value="25">
+          <span class="slider-unit">%</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Layers visible</label>
+        <div class="vector-toggles">
+          <button class="vec-btn active" id="btn-show-A" type="button">
+            <span class="vec-dot" style="background:#0a1628"></span>Layer A
+          </button>
+          <button class="vec-btn active" id="btn-show-B" type="button">
+            <span class="vec-dot" style="background:#c2185b"></span>Layer B
+          </button>
+          <button class="vec-btn" id="btn-colour" type="button">
+            <span class="vec-dot" style="background:linear-gradient(45deg,#0a1628 50%,#c2185b 50%)"></span>Colour the two layers
+          </button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Presets</label>
+        <div class="auto-row">
+          <button id="preset-rot"     class="play-btn ghost" type="button">Rotation beats</button>
+          <button id="preset-space"   class="play-btn ghost" type="button">Spacing beats</button>
+          <button id="preset-circle"  class="play-btn ghost" type="button">Circle offset</button>
+          <button id="preset-reset"   class="play-btn ghost" type="button">Reset offset</button>
+        </div>
+      </div>
+
+      <div class="explain-card">
+        <div class="readout-hd">Readout</div>
+        <div class="readout-row"><span>Rotation θ</span><span id="ro-theta">3.0°</span></div>
+        <div class="readout-row"><span>Δd = |d<sub>A</sub>−d<sub>B</sub>|</span><span id="ro-dd">0.0 px</span></div>
+        <div class="readout-row"><span>Predicted d<sub>M</sub> (rotation)</span><span id="ro-dm-rot">—</span></div>
+        <div class="readout-row"><span>Predicted d<sub>M</sub> (spacing)</span><span id="ro-dm-sp">—</span></div>
+        <div class="readout-row"><span>Layer B offset</span><span id="ro-offset">(0, 0)</span></div>
+      </div>
+
+      <div class="explain-card" id="audio-card">
+        <strong>Audio analogy.</strong> Two tones at <em>f<sub>1</sub></em> and <em>f<sub>2</sub></em>
+        produce beats at <em>|f<sub>1</sub>−f<sub>2</sub>|</em>. Spatial frequency
+        <em>k = 1/d</em>, so two grids with spacings <em>d<sub>1</sub>, d<sub>2</sub></em> beat at
+        <em>1/d<sub>M</sub> = |1/d<sub>1</sub> − 1/d<sub>2</sub>|</em>.
+      </div>
+
+    </aside>
+
+    <section class="panel visual-panel">
+      <div class="canvas-wrap">
+        <canvas id="moire-canvas"></canvas>
+        <div class="scene-note">Drag to shift layer B&nbsp;&nbsp;·&nbsp;&nbsp;Shift + drag to rotate</div>
+      </div>
+    </section>
+  </section>
+
+</main>
+<script src="script.js"></script>
+</body>
+</html>
