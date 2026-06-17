@@ -47,6 +47,8 @@ const state = {
   particle: 'proton',
   B:        0.5,             // tesla
   V:        15,              // gap voltage in kV
+  ctrl:     'V',             // 'V' = set voltage, 'N' = set turn count (derives V)
+  N:        8,               // target turn count when ctrl === 'N'
   fGameMHz: 10.0,            // user's oscillator frequency in MHz (game mode)
   fieldDir: 'in',            // 'in' (⊗) or 'out' (⊙)
   playing:  false,           // start paused; user clicks Start
@@ -124,34 +126,45 @@ function gapEx(tCanvas) {
   return Emax * Math.cos(2 * Math.PI * fCanvas * tCanvas);
 }
 
+/* When the user is in 'set N' mode, the voltage is derived: pick V so that
+   N gap crossings bring the particle to exactly the rim radius, giving
+   N·qV = (qBR_rim)²/(2m) and r_N = R_rim exactly (no overshoot). */
+function deriveVFromN() {
+  const p = partInfo();
+  const R_rim_m = (DEE_R - 6) / PX_PER_M;
+  const KE = Math.pow(Math.abs(p.q) * state.B * R_rim_m, 2) / (2 * p.m);
+  const V_volts = KE / (Math.abs(p.q) * state.N);
+  state.V = V_volts / 1000;          // kV
+}
+
 /* ── Reset / launch ─────────────────────────────────────────── */
-/* Predict the y-extent of the spiral so we can launch the particle from a
-   y that vertically centres the whole trajectory.  Each pair of semicircles
-   drifts the particle by 2(r_k − r_{k+1}); because r_k = r₁·√k the drift
-   never cancels, so a particle launched at CY ends up biased toward the dee
-   that hosts the larger semicircles.  We track the apex of every semicircle
-   (which is at y = CY − 2·S_k where S_k is the alternating sum of radii)
-   and pick the start y such that the apex envelope is symmetric about CY. */
+/* Choose the launch y so the spiral exits the rim at the dee's horizontal
+   equator (y = CY), making the extraction point V-invariant: changing V
+   alters the number of turns but not where the beam emerges.  Each
+   semicircle k has radius r_k = √k · r₁ and centre on the gap edge; N is
+   the first k with r_N > R_rim.  The escape arc (centred at (dee_cx, y_c_N),
+   radius r_N) intersects the rim circle (centred at (dee_cx, CY), radius
+   R_rim) where 2h·(y − CY) = h² − r_N² + R_rim², so setting y_exit = CY
+   gives h² = r_N² − R_rim².  Pick sign of h opposite to sgnTerm_N so the
+   arc entry stays inside the dee.  Then y_start = y_c_N + S_{N−1} + S_N. */
 function predictYStart() {
   const p = partInfo();
   if (!p || !Number.isFinite(p.q) || p.q === 0) return CY;
   const dKE   = Math.abs(p.q) * state.V * 1e3;     // J gained per gap crossing
-  const rimPx = DEE_R - 6;
-  let S = 0, sgnTerm = +1;
-  let minDelta = 0, maxDelta = 0;                  // y excursions from start
-  for (let k = 1; k <= 500; k++) {
-    const v   = Math.sqrt(2 * k * dKE / p.m);
-    const r   = (p.m * v / (Math.abs(p.q) * state.B)) * PX_PER_M;
+  const R_rim = DEE_R - 6;
+  let S_prev = 0, S = 0, sgnTerm = +1;
+  for (let k = 1; k <= 200000; k++) {
+    const v = Math.sqrt(2 * k * dKE / p.m);
+    const r = (p.m * v / (Math.abs(p.q) * state.B)) * PX_PER_M;
+    S_prev = S;
     S += sgnTerm * r;
-    let apex = -2 * S;                              // y of this semi's apex
-    let escaped = false;
-    if (Math.abs(apex) > rimPx) { apex = Math.sign(apex) * rimPx; escaped = true; }
-    if (k % 2 === 1) minDelta = Math.min(minDelta, apex);   // right-dee top
-    else             maxDelta = Math.max(maxDelta, apex);   // left-dee bottom
-    if (escaped) break;
+    if (r > R_rim) {
+      const h = -sgnTerm * Math.sqrt(r * r - R_rim * R_rim);
+      return CY + h + S_prev + S;
+    }
     sgnTerm = -sgnTerm;
   }
-  return CY - (minDelta + maxDelta) / 2;
+  return CY;
 }
 
 function resetParticle() {
@@ -160,8 +173,8 @@ function resetParticle() {
   // E-field force will push the particle, so the first half-step traverses
   // the full gap and gives a clean acceleration.  With gapSign = +1 the field
   // points in +x, so force on a positive charge is in +x → start on the left
-  // edge of the gap.  y is offset from CY by predictYStart() so the spiral
-  // lands centred on the canvas regardless of (B, V, m, q).
+  // edge of the gap.  y comes from predictYStart() which back-solves the
+  // launch height so the spiral exits the rim at y = CY (independent of V).
   const sgn = Math.sign(p.q) || +1;
   particle = {
     // Sit at the gap edge against the like-charged dee so the very first
@@ -540,6 +553,8 @@ function updateReadouts() {
   }
   document.getElementById('rd-r').textContent  = particle ? fmtLength(radiusM()) : '—';
   document.getElementById('rd-streak').textContent = state.mode === 'game' ? state.streak.toFixed(0) : '—';
+  const vDer = document.getElementById('rd-V-derived');
+  if (vDer) vDer.textContent = state.V.toFixed(2) + ' kV';
 }
 
 /* ── Time loop ─────────────────────────────────────────────── */
@@ -594,10 +609,36 @@ document.querySelectorAll('#seg-particle .seg-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
     state.particle = btn.dataset.val;
     setActive('#seg-particle', btn);
+    if (state.ctrl === 'N') { deriveVFromN(); syncVSlider(); }
     resetParticle();
     state.playing = false;
     updatePlayBtn();
     updateReadouts();
+  });
+});
+
+function syncVSlider() {
+  const el = document.getElementById('slider-V');
+  const vl = document.getElementById('val-V');
+  el.value = state.V;
+  vl.value = state.V.toFixed(2);
+}
+
+function applyCtrl(mode) {
+  state.ctrl = mode;
+  document.getElementById('ctrl-V').classList.toggle('is-hidden', mode !== 'V');
+  document.getElementById('ctrl-N').classList.toggle('is-hidden', mode !== 'N');
+  if (mode === 'N') { deriveVFromN(); syncVSlider(); }
+  resetParticle();
+  state.playing = false;
+  updatePlayBtn();
+  updateReadouts();
+}
+
+document.querySelectorAll('#seg-ctrl .seg-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    applyCtrl(btn.dataset.val);
+    setActive('#seg-ctrl', btn);
   });
 });
 document.querySelectorAll('#seg-field .seg-btn').forEach((btn) => {
@@ -638,8 +679,12 @@ function wireSlider(id, valId, store, digits = 1) {
     apply(v);
   });
 }
-wireSlider('slider-B', 'val-B', (v) => { state.B = v; }, 2);
+wireSlider('slider-B', 'val-B', (v) => {
+  state.B = v;
+  if (state.ctrl === 'N') { deriveVFromN(); syncVSlider(); }
+}, 2);
 wireSlider('slider-V', 'val-V', (v) => { state.V = v; }, 0);
+wireSlider('slider-N', 'val-N', (v) => { state.N = v; deriveVFromN(); syncVSlider(); }, 0);
 wireSlider('slider-f', 'val-f', (v) => { state.fGameMHz = v; }, 1);
 
 document.getElementById('btn-play').addEventListener('click', () => {

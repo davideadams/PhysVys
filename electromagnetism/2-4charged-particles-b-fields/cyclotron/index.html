@@ -56,11 +56,28 @@
       </div>
 
       <div class="control-group">
+        <label>Control</label>
+        <div class="seg-control cols-2" id="seg-ctrl">
+          <button class="seg-btn active" data-val="V" type="button">Set V</button>
+          <button class="seg-btn"        data-val="N" type="button">Set N</button>
+        </div>
+      </div>
+
+      <div class="control-group" id="ctrl-V">
         <label>Gap voltage <span class="muted">V</span></label>
         <div class="slider-row">
           <input type="range" id="slider-V" min="5" max="40" step="1" value="15">
           <input type="number" class="slider-val" id="val-V" min="5" max="40" step="1" value="15"><span class="slider-unit">kV</span>
         </div>
+      </div>
+
+      <div class="control-group is-hidden" id="ctrl-N">
+        <label>Number of turns <span class="muted">N</span></label>
+        <div class="slider-row">
+          <input type="range" id="slider-N" min="2" max="30" step="1" value="8">
+          <input type="number" class="slider-val" id="val-N" min="2" max="30" step="1" value="8"><span class="slider-unit">turns</span>
+        </div>
+        <div class="muted" style="margin-top:4px;font-size:0.85em;">Derived V: <span id="rd-V-derived">—</span></div>
       </div>
 
       <div class="control-group" id="game-only">
