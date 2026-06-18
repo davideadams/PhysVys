@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Light Clock</title>
+  <link rel="stylesheet" href="style.css">
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [['\\(', '\\)'], ['$', '$']] },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script defer src="../../../vendor/mathjax/es5/tex-svg.js"></script>
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../../physics.html">← Back to Main Menu</a>
+      <p class="eyebrow">SACE Stage 2 Physics — Motion 1.4</p>
+      <h1>Light Clock</h1>
+      <p class="intro">
+        A photon bouncing between two parallel mirrors makes the perfect clock — one
+        <em>tick</em> per round trip. Compare the same clock in its <em>rest frame</em>
+        and a <em>lab frame</em> where it moves at velocity \(v\). The lab observer must
+        accept the photon traces a longer diagonal path — and since the speed of light
+        is the same in every frame, the moving clock must tick slower by a factor
+        \(\gamma = 1/\sqrt{1-v^{2}/c^{2}}\).
+      </p>
+    </div>
+    <div class="hero-actions">
+      <button id="btn-play"  class="toggle-button secondary-button" type="button">Pause</button>
+      <button id="btn-reset" class="toggle-button secondary-button" type="button">Reset</button>
+    </div>
+  </section>
+
+  <section class="layout">
+    <!-- ── Sidebar ──────────────────────────────────────────── -->
+    <aside class="panel controls">
+      <h2>Controls</h2>
+
+      <!-- Frame -->
+      <div class="control-group">
+        <label>Reference frame</label>
+        <div class="seg-control cols-2" id="seg-frame">
+          <button class="seg-btn active" data-val="mirror" type="button">Mirror frame</button>
+          <button class="seg-btn"        data-val="lab"    type="button">Lab frame</button>
+        </div>
+      </div>
+
+      <!-- Speed slider -->
+      <div class="control-group">
+        <label>Clock speed \(v/c\)</label>
+        <div class="slider-row">
+          <input type="range" id="slider-beta" min="0.10" max="0.99" step="0.01" value="0.80">
+          <input type="number" class="num-input" id="val-beta" min="0.10" max="0.99" step="0.01" value="0.80">
+        </div>
+      </div>
+
+      <!-- Overlay toggles -->
+      <div class="control-group">
+        <label>Overlays</label>
+        <div class="toggle-row">
+          <label class="check-row">
+            <input type="checkbox" id="chk-labels" checked>
+            <span>Path labels</span>
+          </label>
+          <label class="check-row">
+            <input type="checkbox" id="chk-trail" checked>
+            <span>Photon trail</span>
+          </label>
+          <label class="check-row">
+            <input type="checkbox" id="chk-pin">
+            <span>Pin tent overlays</span>
+          </label>
+          <label class="check-row">
+            <input type="checkbox" id="chk-derivation">
+            <span>Show derivation</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Readouts -->
+      <div class="readout-grid">
+        <div class="readout-card">
+          <span class="readout-label">Speed \(v/c\)</span>
+          <span class="readout-value" id="ro-beta">—</span>
+        </div>
+        <div class="readout-card">
+          <span class="readout-label">Lorentz factor \(\gamma\)</span>
+          <span class="readout-value" id="ro-gamma">—</span>
+        </div>
+        <div class="readout-card">
+          <span class="readout-label" id="ro-period-label">Tick period (this frame)</span>
+          <span class="readout-value" id="ro-period">—</span>
+        </div>
+        <div class="readout-card">
+          <span class="readout-label" id="ro-ticks-label">Ticks elapsed</span>
+          <span class="readout-value" id="ro-ticks">—</span>
+        </div>
+      </div>
+
+      <!-- Why card — mirror frame -->
+      <div class="why-card" data-frame="mirror">
+        <strong>Mirror frame:</strong> You're sitting next to the clock. The photon
+        travels straight up, distance \(L\), then straight back down.
+        One full tick takes the <em>proper</em> time
+        \(T_0 = 2L/c\).
+      </div>
+
+      <!-- Why card — lab frame -->
+      <div class="why-card hidden" data-frame="lab">
+        <strong>Lab frame:</strong> The clock drifts past you at velocity \(v\). The
+        photon still moves at \(c\), but its path is now a diagonal "tent" — one full
+        tick takes the <em>dilated</em> time
+        \(t = \gamma T_0\), longer than \(T_0\).
+      </div>
+    </aside>
+
+    <!-- ── Canvas ────────────────────────────────────────────── -->
+    <section class="panel visual-panel">
+      <div class="canvas-wrap">
+        <canvas id="sim-canvas" width="960" height="560"
+                aria-label="Light clock simulation"></canvas>
+      </div>
+
+      <!-- Derivation panel -->
+      <div class="derivation-panel hidden" id="derivation-panel">
+        <h3>Deriving time dilation from the light clock</h3>
+        <ol class="derivation-steps">
+          <li>
+            <strong>Mirror frame.</strong> The photon makes one round trip — up \(L\),
+            back down \(L\) — in proper time
+            \(T_0 = \dfrac{2L}{c}\).
+          </li>
+          <li>
+            <strong>Lab frame.</strong> In time \(t\), the clock moves a horizontal
+            distance \(vt\). The photon traces two diagonal segments forming a tent
+            of base \(vt\) and height \(L\) — but the postulate of relativity insists
+            the photon's speed is still \(c\), so each diagonal has length
+            \(\dfrac{ct}{2}\).
+          </li>
+          <li>
+            <strong>Pythagoras on one diagonal:</strong>
+            \(\left(\dfrac{ct}{2}\right)^{2} = L^{2} + \left(\dfrac{vt}{2}\right)^{2}\).
+          </li>
+          <li>
+            <strong>Solve for \(t\).</strong> Expand the squares and rearrange:
+            <div class="eqn-stack">
+              <div>\(\dfrac{c^{2}t^{2}}{4} = L^{2} + \dfrac{v^{2}t^{2}}{4}\)</div>
+              <div>\(\dfrac{c^{2}t^{2}}{4} - \dfrac{v^{2}t^{2}}{4} = L^{2}\)</div>
+              <div>\(\dfrac{t^{2}}{4}\!\left(c^{2} - v^{2}\right) = L^{2}\)</div>
+              <div>\(t^{2} = \dfrac{4L^{2}}{c^{2} - v^{2}}\)</div>
+              <div>\(t = \dfrac{2L}{\sqrt{c^{2} - v^{2}}}\)</div>
+              <div>Factor \(c\) out of the surd:</div>
+              <div>\(t = \dfrac{2L}{c\sqrt{1 - v^{2}/c^{2}}} = \dfrac{2L/c}{\sqrt{1 - v^{2}/c^{2}}}\)</div>
+            </div>
+          </li>
+          <li>
+            Recognise \(T_0 = 2L/c\) and \(\gamma = 1/\sqrt{1-v^{2}/c^{2}}\):
+            \(\;\boxed{\,t = \gamma\,T_0\,}\). The moving clock ticks slower.
+          </li>
+        </ol>
+      </div>
+    </section>
+  </section>
+</main>
+<script src="script.js"></script>
+</body>
+</html>
