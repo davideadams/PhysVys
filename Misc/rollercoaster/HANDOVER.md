@@ -42,7 +42,9 @@ These were chosen explicitly by the teacher. Treat them as fixed.
 | Game loop | **Sandbox first.** Scenarios/challenges only if the sandbox works well. |
 | Train controls | **All four**: car count / mass, lift-hill speed, drag-to-place start position, brake pieces. |
 | Circuit rules | **Both** closed circuits *and* out-and-back shuttle tracks with a launch. |
-| Art style | **Chunky RCT1-flavoured, drawn procedurally on canvas.** Not true pixel art (asset burden), not clean flat vector (not game-like enough). Teacher has seen and approved the current ground rendering. |
+| Art style | **Chunky RCT1-flavoured, drawn procedurally on canvas.** Not true pixel art (asset burden), not clean flat vector (not game-like enough). Teacher has seen and approved it. |
+| Construction UI | **RCT's model, not a flat palette.** Orthogonal Direction / Slope / Roll rows, a preview, and an explicit *Build this*. Slope buttons choose the slope you want to be **travelling at**, and the transition piece is inserted for you. Icons are vector, drawn at the true geometry (turn arcs use the real radii; slope arrows the real 27° and 56°). |
+| Banking | **One angle, 45°, turns only.** The lesson is the comparison with a flat turn, not realism. |
 | Scale | **1 tile = 4 m square, 1 height step = 1 m.** Confirmed after being offered a 2 m step. Gives a 40 m lift hill at 40 steps and a realistic ~100 km/h top speed. |
 | Page layout | **Full-bleed canvas.** The standard two-column PhysVys sim shell was explicitly rejected here: "the other PhysVys sims were a bit of a mislead there". Minimalist UI — view controls across the top, graph/table as toggleable overlay windows, grid and ride canvas taking most of the page. |
 
@@ -55,23 +57,27 @@ Five files, plain `<script>` tags — **no ES modules**, so the page works from
 
 ```
 index.html   markup: canvas, top bar, status bar, floating windows
-test.html    geometry self-test — open it in a browser after touching iso/track
+test.html    self-test — OPEN IT IN A BROWSER after touching geometry or physics
 style.css    full-bleed game chrome (NOT the standard PhysVys sim stylesheet)
 iso.js       isometric projection, camera, ground + sky + compass rendering
-track.js     piece catalogue, build head, circuit validation  (no camera knowledge)
-render.js    depth-sorted draw list: rails, sleepers, supports, head, ghost
+track.js     piece catalogue, build head, arc-length path, collision, A* finisher
+physics.js   train simulation, energy accounting, g-forces, the car frame
+prefabs.js   ready-built coasters; the page loads one so it can be tested at once
+render.js    depth-sorted draw list: rails, sleepers, supports, train, head, ghost
+energy.js    energy bars, energy-against-distance graph, ride report
+icons.js     inline SVG for the construction window
 ui.js        generic floating-window system
-build.js     build palette UI: selection, placement, undo, lift toggle
+build.js     construction window: direction/slope/roll selection, placement, undo
 script.js    canvas sizing, camera interaction, render loop, wiring
 ```
 
-Load order matters (`track.js` uses `RC.inBounds` and `RC.TILE_M` from `iso.js`;
-`script.js` uses `RC.ghostDef` from `build.js`). See the script tags in
-`index.html`.
+Load order matters and is set by the script tags in `index.html`:
+`iso → track → physics → prefabs → render → ui → icons → energy → build → script`.
+`track.js` needs `RC.inBounds`/`RC.TILE_M` from `iso.js`; `render.js` needs
+`RC.carFrame` from `physics.js`; `script.js` needs `RC.ghostDef` from `build.js`.
 
 This is a deliberate deviation from the repo's "three files per sim" convention,
-agreed with the teacher up front because of the size of this build. Phase 4
-should add `physics.js` rather than growing `script.js` without bound.
+agreed with the teacher up front because of the size of this build.
 
 ### The rotation design (load-bearing — read before editing `iso.js`)
 
@@ -150,11 +156,57 @@ on the toggle, and Escape-closes-topmost. No per-window JavaScript.
 
 `.readout-row` is already defined in `style.css` for the energy/report windows.
 
+### The car frame — where a lot of correctness lives
+
+`RC.carFrame(p)` returns an orthonormal `{f, r, u}` triad: forward along the
+track's **full 3D tangent**, right horizontal (before banking), up perpendicular
+to the track surface. `RC.frameAtPoint(pts, idx)` is the same thing for a point
+in the path array, which is what the renderer uses.
+
+Three separate things read it, which is why it's worth guarding:
+
+- **Car rendering** — cars pitch with the slope and roll with the bank because
+  their box is built on these axes.
+- **Track rendering** — rails, sleepers and chain dogs are offset along `r` and
+  `u`, so banked track rolls. Support bents meet the track on those axes but
+  drop **vertically**; supports don't lean.
+- **G-forces** — the specific force is projected onto the triad. This is why
+  banking needed no changes to the force maths at all.
+
+It is computed in **metres**, not in mixed tile/level coordinates. A tile is 4 m
+across and a level is 1 m tall, so computing the tangent in raw coordinates would
+flatten every pitch angle by a factor of four — cars would tilt, just visibly too
+little, which reads as a styling choice rather than a bug.
+
+Sign convention, verified by test: a right turn from heading `+i` curves towards
+`+j`, so `+j` is the rider's right and `r` must come out as `(0,1,0)` when `f` is
+`(1,0,0)`. Getting this backwards labels every lateral g reading with the wrong
+side and nothing else in the sim notices, because the car box is symmetric.
+
+### Energy accounting
+
+The invariant the whole sim exists to teach, asserted by several tests:
+
+```
+KE + PE + thermal  ==  E0 + motor work
+```
+
+Gravity needs no bookkeeping — it just trades PE for KE. Everything else must
+bank its energy explicitly:
+
+- friction and brakes → `eThermal`
+- chain lift and launch → `eMotor` (the kinetic energy they restore)
+- **stopping the train dead** → `eThermal`. Hitting the end of an open track, or
+  berthing at the station, would otherwise silently delete kinetic energy at
+  exactly the moment a student is checking conservation.
+
+If a display and the physics ever disagree, the physics is right.
+
 ---
 
 ## Build phases
 
-- [x] **Phase 1 — Isometric world, camera, ground.** 20×20 slab, four-way rotation,
+- [x] **Phase 1 — Isometric world, camera, ground.** 40×40 slab, four-way rotation,
       cursor-pinned zoom, drag pan, hover tile pick, compass, sky with drifting
       clouds, dirt-sided slab, deterministic grass tufts. Teacher has approved the
       look.
@@ -170,32 +222,80 @@ on the toggle, and Escape-closes-topmost. No per-window JavaScript.
       way the arc's exit lands on a tile edge midpoint. Shipped: flat, gentle,
       steep, all four transitions each way, four quarter turns, station, brake,
       launch, chain-lift flag, undo, clear, circuit/shuttle status.
-      *Not yet done:* sloped turns, the vertical loop, and piece-vs-piece collision
-      (only bounds and ground level are checked, so track can currently be built
-      through itself).
-- [ ] **Phase 3 — Track rendering with depth sorting.** `render.js` already has the
-      depth-sorted draw list and support struts; this phase is the **artwork** —
-      chunky RCT-style rails, proper sleepers, support bents rather than single
-      struts. The sorting structure should not need changing.
-- [ ] **Phase 4 — Physics and train.** `physics.js`. Bead on a wire along arc
-      length `s`, semi-implicit Euler with substeps. See **Physics design** below.
-- [ ] **Phase 5 — Energy analysis.** Stacked KE/GPE/thermal bars with the total
-      line drawn at `initial + motor input`; energy-vs-distance plot; live
-      `h / v / KE / GPE / total` at the train; ride-stats report on circuit
-      completion (max speed, max height, max g, ride time, warnings). All as
-      floating windows.
-- [ ] **Phase 6 — Train config, friction, loop.** Car count/mass, lift speed,
-      drag-to-place start, brake pieces, friction/drag toggle + sliders, vertical
-      loop prefab.
-- [ ] **Phase 7 — Prefabs, polish, menu link.** Ship with a working demo coaster
-      loaded and paused (see Conventions). Scenery. Add the "Energy" topic card to
-      `miscellaneous.html`.
+- [x] **Phase 3 — Track rendering.** Chunky rails over a spine, sleepers coloured
+      by piece type, chain dogs on lift hills, station platforms, support bents
+      with zig-zag cross-bracing. Spaced evenly in **metres** off the arc-length
+      path rather than per piece, which otherwise bunches them on turns.
+      Piece-vs-piece collision landed here too: track may cross itself but not run
+      through itself, needing 3 levels of clearance. Only piece *interiors*
+      (t 0.2–0.8) are tested and the piece at the head is skipped — without both,
+      ordinary S-bends and U-turns get refused.
+- [x] **Phase 4 — Physics and train.** `physics.js`. Bead on a wire along the
+      arc-length table, fixed 1/240 s substeps, semi-implicit Euler. See
+      **Physics design** below — it is all built as described.
+- [x] **Phase 5 — Energy analysis.** `energy.js`. Bars for KE/PE/heat plus a
+      stacked total, with a dashed line at *supplied*; energy-against-distance
+      graph; ride report. The bar scale is held for a whole run and only grows —
+      rescaling per frame would make both bars appear to change as energy moves
+      between them, which is the exact misreading the display exists to prevent.
+- [x] **Vertical and lateral g** (added after phase 5, at the teacher's request).
+      Proper decomposition onto the car frame, live in the Energy window and
+      summarised in the report, with a plain-English verdict.
+- [x] **Banked turns at 45°** (added after phase 5). Turns can be flat or banked,
+      chosen from the Roll row. See **Banking** below for why it was cheap.
+- [x] **Menu link and prefab.** "Energy" topic card in `miscellaneous.html`;
+      `prefabs.js` loads *First Drop* on startup so the page is testable
+      immediately.
+- [ ] **Phase 6 — Train config and friction.** Everything below already works in
+      `physics.js` and has **no UI to reach it**: `friction` (the Heat bar is inert
+      without it), `cars`, `liftSpeed`, `brakeSpeed`, `launchSpeed`, `mu`, `kDrag`.
+      Also wanted: drag-to-place the train's start position, and the **vertical
+      loop** piece. Start here — it is mostly UI over finished physics.
+- [ ] **Phase 7 — Polish.** Scenery, more prefabs, and whatever the classroom
+      turns up.
+
+### Deliberately not built
+
+- **Sloped turns.** Turns are level-only, which is why the palette greys them out
+  on a gradient — you can't spiral. Adding them re-opens the piece catalogue in
+  the way banking was designed to avoid. The energy lesson works without them.
+- **Scenarios/challenges.** Sandbox first was the agreed order; only worth doing
+  once the sandbox has been used in class.
 
 ---
 
-## Physics design (decided, not yet built)
+## Banking
 
-- All pieces sample down to one arc-length table `s → (x, y, z, curvature)`.
+One angle, 45°, on turns only. The teacher's framing: *"a banked curve at a given
+speed is usually more tolerable than a flat curve"* — the thing RCT teaches by
+feel. The report and the About text both point at the comparison.
+
+What kept it cheap: **the bank rolls in and out within the turn piece itself**, so
+both ends stay level. Bank therefore never becomes part of the node state, no
+transition pieces are needed, and the catalogue doesn't multiply — it's a
+per-piece flag exactly like the chain lift. The RCT-faithful alternative (bank as
+a fourth node dimension with explicit transitions) roughly triples the piece
+count for a difference students would not see.
+
+The g-force maths needed **no changes at all**, because banking is a roll of the
+car frame and the forces were already a projection onto that frame.
+
+Numbers worth knowing: on a 6 m turn at 10 m/s, flat gives 1.70 g sideways;
+banked gives 0.49 g sideways and 1.91 g vertical. The *total* force is unchanged —
+banking redirects it, it does not reduce it, and a test asserts that. At the ideal
+speed `v = √(rg)` lateral cancels entirely and vertical is exactly `1/cos 45°`,
+which is the banked-curve relationship from
+`motion/1-3circular-gravitation/banked-curves/` arrived at by building.
+
+---
+
+## Physics design (all built as described)
+
+- All pieces sample down to one arc-length table (`RC.trackPath()`), cached
+  against `RC.version` which every edit bumps. Each point carries `s` in metres,
+  `dzds` (the sine of the pitch), the **curvature vector** `kx/ky/kz` and `bank`.
+  Curvature is a vector, not a magnitude: the direction is what distinguishes a
+  rider pressed into their seat from one thrown sideways.
 - `dv/dt = -g·⟨dz/ds⟩ - friction`.
 - **The train is not a point mass.** Model `N` cars spread along `s` sharing one
   `v`; the tangential force uses the **mean slope across the cars** and GPE uses
@@ -209,10 +309,14 @@ on the toggle, and Escape-closes-topmost. No per-window JavaScript.
 - **Never clamp `v` at zero.** Valleying and roll-back then fall out of the
   integration for free, with no special-casing. Detect sustained oscillation and
   report "the train valleys here".
-- Loops: evaluate `N = m(v²/r + g·cosθ)` per frame. `N < 0` raises a **warning**
-  only. Per the settled decisions, the train never derails.
+- Negative vertical g raises a **warning** only. Per the settled decisions, the
+  train never derails.
 - Energy datum is ground level. Keep the readouts computed from the exact
   quantities, not from anything the renderer approximates.
+- Completing a lap is a **flag, not the end of the run**. The train carries on,
+  the station brakes it at 5 m/s², and the ride ends when it reaches the berth it
+  started from. Below a crawl the station's drive tyres are treated as seeing it
+  home, or a train that brakes early would stall short and hang the run.
 
 ---
 
@@ -223,16 +327,17 @@ Repo-wide conventions from the root `TODO.md` that apply here:
 - **No emojis anywhere.** UI glyphs like `▶ ■ ⟲ ⟳ ← −` are fine; pictographic
   emojis are not. This is a hard rule.
 - **Defaults must give a sensible result on first load** — a teacher opening the
-  link should see something useful without touching anything. For this sim that
-  means shipping a prefab coaster, loaded and paused, in phase 7.
+  link should see something useful without touching anything. Done: `prefabs.js`
+  loads *First Drop*, paused, on startup. If you change the piece catalogue or the
+  turn geometry, the prefab tests will tell you if it stops closing.
 - **Don't spoonfeed the punchline.** Intro copy, menu description and any scene
   note set up the phenomenon and the controls, never the result the sim exists to
   reveal.
 - **Slider + editable textbox** is the standard control pattern: every
   `<input type="range">` showing a number is paired with an
   `<input type="number" class="num-input">`, two-way bound and clamped. Note the
-  full-bleed stylesheet here does not yet define `.num-input` — copy it from
-  `Misc/moire-effect/style.css` when phase 6 adds sliders.
+  full-bleed stylesheet here does **not** define `.num-input` — copy it from
+  `Misc/moire-effect/style.css` when phase 6 adds the friction and train sliders.
 - Sim-local conventions: no ES modules; everything on `window.RC`; the standard
   PhysVys two-column shell does **not** apply to this sim.
 
@@ -240,14 +345,31 @@ Repo-wide conventions from the root `TODO.md` that apply here:
 
 ## State of verification — read this
 
-**Nothing in this sim has been run in a browser yet.** The machine it was built on
-had no working Chrome extension and no Node install, so:
+**The build machine has no JS runtime and no working browser automation.** Every
+line here was written without being executed by its author. What stands in for
+that:
 
-- The projection algebra was verified **by hand**: `rot`/`unrot` round trips,
-  `rotTile`/`rot` corner agreement, and `screenToWorld` inverting `toScreen`, for
-  all four rotations. That part is trustworthy.
-- The DOM, CSS, event wiring and window system have **never been observed
-  working**. Treat phase 1 as "written and reasoned about", not "tested".
+- **`test.html`** — the whole reason it exists. Open it in a browser; everything
+  should say PASS. It covers the projection round-trips, the piece-geometry
+  invariant, collision, the A* finisher, energy conservation, g-forces, banking
+  and the prefabs. **Add to it as you add anything with a number in it.**
+- **The teacher has been checking each phase visually** as it shipped, and has
+  approved the ground artwork, the track, the construction window and the ride.
+
+Bugs the tests and hand-tracing caught that a glance at the running sim would
+not have — worth reading as a list of what to be suspicious of:
+
+- Ground cache built without devicePixelRatio (blurry on HiDPI only).
+- Ground cache unbounded — would have wanted ~333 MB at 40×40, max zoom, dpr 2.
+- Windows positioned from the right became over-constrained once dragged.
+- Cars built from a horizontal tangent, so they never pitched on slopes.
+- Rails painting over the cars, because each segment sorted independently.
+- **Energy silently deleted** when a train stopped dead at a track end.
+- **`carFrame`'s right vector pointed left**, so every lateral g would have been
+  labelled with the wrong side — invisible, because the car box is symmetric.
+
+Git note: the repo normalises LF→CRLF on checkout, so `git` prints line-ending
+warnings on every add. They're harmless.
 
 **First thing a new session should do is open `test.html` and then `index.html` in
 a browser**, before building anything on top of them. Three bugs were already
