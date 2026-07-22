@@ -158,6 +158,30 @@
         'rgba(255,255,255,0.85)', 2, 'rgba(255,255,255,0.16)');
     }
 
+    // The head arrow and the ghost preview join the depth-sorted list so
+    // they're occluded by any track standing in front of them.
+    const head = RC.track.head;
+    const ghostDef = RC.ghostDef();
+    const extras = [];
+
+    if (head) {
+      extras.push({
+        type: 'custom',
+        depth: RC.depth(head.i + 0.5, head.j + 0.5, head.k, cam.rot) + 0.5,
+        draw: (c, cm, v) => RC.drawHead(c, cm, v, head)
+      });
+    }
+    if (ghostDef && head) {
+      const ok = RC.canPlace(ghostDef, head).ok;
+      const mid = RC.centreline(ghostDef, head, 0.5);
+      extras.push({
+        type: 'custom',
+        depth: RC.depth(mid.x, mid.y, mid.z, cam.rot) + 0.6,
+        draw: (c, cm, v) => RC.drawGhost(c, cm, v, ghostDef, head, ok)
+      });
+    }
+
+    RC.drawTrack(ctx, cam, view, extras);
     RC.drawCompass(ctx, cam, view);
   }
 
@@ -169,7 +193,11 @@
     requestAnimationFrame(frame);
   }
 
+  RC.requestRender = function () { state.dirty = true; };
+
   RC.initWindows();
+  RC.resetTrack();
+  RC.initBuild();
   resize();
   requestAnimationFrame(frame);
 })();

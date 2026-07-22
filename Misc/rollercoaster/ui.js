@@ -13,6 +13,10 @@
     const top = Math.min(Math.max(MARGIN, r.top), Math.max(MARGIN, maxTop));
     win.style.left = left + 'px';
     win.style.top = top + 'px';
+    // Windows may be positioned from the right in markup; once we start
+    // driving `left` those must be released or the box is over-constrained.
+    win.style.right = 'auto';
+    win.style.bottom = 'auto';
   }
 
   /* Windows stack in click order, so the last one touched sits on top. */

@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Rollercoaster Builder — self-test</title>
+  <style>
+    body { font-family: "Trebuchet MS", "Segoe UI", sans-serif; margin: 2rem; color: #15304d; background: #f4f9ff; }
+    h1 { font-size: 1.4rem; margin: 0 0 0.2rem; }
+    .sub { color: #55708d; margin: 0 0 1.2rem; font-size: 0.9rem; }
+    #summary { padding: 0.7rem 1rem; border-radius: 10px; font-weight: 700; margin-bottom: 1rem; }
+    .allpass { background: #d6f5e8; color: #0f5132; border: 1px solid #0d9488; }
+    .anyfail { background: #fde2e2; color: #7a1f1f; border: 1px solid #c62828; }
+    ul { list-style: none; padding: 0; margin: 0; }
+    li { padding: 0.35rem 0.6rem; border-bottom: 1px solid rgba(21,48,77,0.1); font-size: 0.88rem; }
+    .pass::before { content: "PASS"; color: #0d9488; font-weight: 700; margin-right: 0.6rem; }
+    .fail::before { content: "FAIL"; color: #c62828; font-weight: 700; margin-right: 0.6rem; }
+    .fail { background: #fff4f4; }
+    .detail { display: block; color: #7a1f1f; font-size: 0.8rem; margin-left: 3.2rem; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>Rollercoaster Builder — geometry self-test</h1>
+  <p class="sub">
+    Checks the projection and track geometry. Open this after changing
+    <code>iso.js</code> or <code>track.js</code>. Everything should say PASS.
+  </p>
+  <div id="summary">Running…</div>
+  <ul id="results"></ul>
+
+<script src="iso.js"></script>
+<script src="track.js"></script>
+<script>
+(function () {
+  const RC = window.RC;
+  const results = [];
+  const EPS = 1e-9;
+
+  function check(name, fn) {
+    try {
+      const problem = fn();
+      results.push({ name, ok: !problem, detail: problem || '' });
+    } catch (err) {
+      results.push({ name, ok: false, detail: err.message + '\n' + err.stack });
+    }
+  }
+
+  const near = (a, b, eps) => Math.abs(a - b) <= (eps || 1e-9);
+
+  /* ---- projection ---------------------------------------------------- */
+  check('rot / unrot round-trip, all rotations, continuous coords', () => {
+    for (let r = 0; r < 4; r++) {
+      for (let i = 0; i <= RC.GRID; i += 2.5) {
+        for (let j = 0; j <= RC.GRID; j += 2.5) {
+          const [a, b] = RC.rot(i, j, r);
+          const [i2, j2] = RC.unrot(a, b, r);
+          if (!near(i2, i) || !near(j2, j)) return `rot ${r}: (${i},${j}) -> (${i2},${j2})`;
+        }
+      }
+    }
+  });
+
+  check('rotTile agrees with rot on tile corners', () => {
+    for (let r = 0; r < 4; r++) {
+      for (let i = 0; i < RC.GRID; i++) {
+        for (let j = 0; j < RC.GRID; j++) {
+          const [ra, rb] = RC.rotTile(i, j, r);
+          const corners = [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]].map(c => RC.rot(c[0], c[1], r));
+          const as = corners.map(c => c[0]), bs = corners.map(c => c[1]);
+          if (Math.min(...as) !== ra || Math.max(...as) !== ra + 1 ||
+              Math.min(...bs) !== rb || Math.max(...bs) !== rb + 1) {
+            return `rot ${r}, tile (${i},${j}): rotTile=(${ra},${rb}) but corners span a[${Math.min(...as)},${Math.max(...as)}] b[${Math.min(...bs)},${Math.max(...bs)}]`;
+          }
+        }
+      }
+    }
+  });
+
+  check('screenToWorld inverts toScreen at ground level', () => {
+    const view = { w: 1280, h: 720, dpr: 1 };
+    const cam = { zoom: 1.37, panX: -40, panY: 25, rot: 0 };
+    for (let r = 0; r < 4; r++) {
+      cam.rot = r;
+      for (let i = 0; i <= RC.GRID; i += 3) {
+        for (let j = 0; j <= RC.GRID; j += 3) {
+          const s = RC.toScreen(i, j, 0, cam, view);
+          const [i2, j2] = RC.screenToWorld(s.x, s.y, cam, view);
+          if (!near(i2, i, 1e-6) || !near(j2, j, 1e-6)) {
+            return `rot ${r}: (${i},${j}) -> screen -> (${i2.toFixed(4)},${j2.toFixed(4)})`;
+          }
+        }
+      }
+    }
+  });
+
+  /* ---- piece geometry -------------------------------------------------
+     The critical invariant: a piece's declared exit node must sit exactly
+     where its drawn centreline ends. If these drift, track looks connected
+     but the physics path has gaps in it. */
+  check('exit node matches centreline end, every piece, every direction', () => {
+    for (const def of RC.PIECES) {
+      for (let dir = 0; dir < 4; dir++) {
+        const node = { i: 9, j: 9, dir, k: 12, g: def.gIn };
+        const exit = RC.exitNode(def, node);
+        const end = RC.centreline(def, node, 1);
+        const ep = RC.entryPoint(exit);
+        if (!near(ep.x, end.x, 1e-9) || !near(ep.y, end.y, 1e-9)) {
+          return `${def.id} dir ${dir}: centreline ends (${end.x},${end.y}) but exit entry point is (${ep.x},${ep.y})`;
+        }
+        if (!near(exit.k, end.z, 1e-9)) {
+          return `${def.id} dir ${dir}: exit k=${exit.k} but centreline z=${end.z}`;
+        }
+      }
+    }
+  });
+
+  check('centreline starts at the entry node', () => {
+    for (const def of RC.PIECES) {
+      for (let dir = 0; dir < 4; dir++) {
+        const node = { i: 7, j: 5, dir, k: 4, g: def.gIn };
+        const start = RC.centreline(def, node, 0);
+        const ep = RC.entryPoint(node);
+        if (!near(start.x, ep.x) || !near(start.y, ep.y) || !near(start.z, node.k)) {
+          return `${def.id} dir ${dir}: starts (${start.x},${start.y},${start.z}) not (${ep.x},${ep.y},${node.k})`;
+        }
+      }
+    }
+  });
+
+  check('every piece has an integer height change', () => {
+    for (const def of RC.PIECES) {
+      if (!Number.isInteger(def.dH)) return `${def.id} dH = ${def.dH}`;
+    }
+  });
+
+  check('turn exit nodes land on integer tiles', () => {
+    for (const def of RC.PIECES) {
+      if (def.kind !== 'turn') continue;
+      for (let dir = 0; dir < 4; dir++) {
+        const node = { i: 9, j: 9, dir, k: 0, g: 0 };
+        const e = RC.exitNode(def, node);
+        if (!Number.isInteger(e.i) || !Number.isInteger(e.j)) {
+          return `${def.id} dir ${dir}: exit tile (${e.i},${e.j})`;
+        }
+      }
+    }
+  });
+
+  check('slope is continuous across a piece (ends match gIn/gOut)', () => {
+    const h = 1e-5;
+    for (const def of RC.PIECES) {
+      if (def.kind !== 'straight') continue;
+      const node = { i: 9, j: 9, dir: 0, k: 20, g: def.gIn };
+      // dz/dt at the ends, converted to levels per tile.
+      const z0 = RC.centreline(def, node, 0).z;
+      const z1 = RC.centreline(def, node, h).z;
+      const za = RC.centreline(def, node, 1 - h).z;
+      const zb = RC.centreline(def, node, 1).z;
+      const gStart = (z1 - z0) / h / def.L;
+      const gEnd = (zb - za) / h / def.L;
+      if (!near(gStart, def.gIn, 1e-3)) return `${def.id}: entry slope ${gStart.toFixed(4)} != ${def.gIn}`;
+      if (!near(gEnd, def.gOut, 1e-3)) return `${def.id}: exit slope ${gEnd.toFixed(4)} != ${def.gOut}`;
+    }
+  });
+
+  check('centreline height is monotonic within a piece', () => {
+    for (const def of RC.PIECES) {
+      if (def.dH === 0) continue;
+      const node = { i: 9, j: 9, dir: 0, k: 20, g: def.gIn };
+      const sign = Math.sign(def.dH);
+      let prev = RC.centreline(def, node, 0).z;
+      for (let s = 1; s <= 40; s++) {
+        const z = RC.centreline(def, node, s / 40).z;
+        if ((z - prev) * sign < -1e-9) return `${def.id} dips at t=${(s / 40).toFixed(2)}`;
+        prev = z;
+      }
+    }
+  });
+
+  /* ---- building -------------------------------------------------------- */
+  check('four same-radius turns return to the starting node', () => {
+    for (const id of ['turn-left-tight', 'turn-right-tight', 'turn-left-wide', 'turn-right-wide']) {
+      RC.track.pieces = [];
+      RC.track.start = { i: 9, j: 9, dir: 0, k: 0, g: 0 };
+      RC.track.head = Object.assign({}, RC.track.start);
+      for (let n = 0; n < 4; n++) {
+        if (!RC.place(id)) return `${id}: placement ${n + 1} was rejected`;
+      }
+      if (!RC.sameNode(RC.track.head, RC.track.start)) {
+        const h = RC.track.head, s = RC.track.start;
+        return `${id}: ended at (${h.i},${h.j},dir ${h.dir},k ${h.k}) not (${s.i},${s.j},dir ${s.dir},k ${s.k})`;
+      }
+    }
+  });
+
+  check('a hill returns to its starting height', () => {
+    RC.track.pieces = [];
+    RC.track.start = { i: 2, j: 9, dir: 0, k: 0, g: 0 };
+    RC.track.head = Object.assign({}, RC.track.start);
+    const seq = ['flat-to-gentle-up', 'gentle-up', 'gentle-up-to-flat', 'flat',
+                 'flat-to-gentle-down', 'gentle-down', 'gentle-down-to-flat'];
+    for (const id of seq) {
+      if (!RC.place(id)) return `${id} was rejected (head slope ${RC.track.head.g})`;
+    }
+    if (RC.track.head.k !== 0) return `ended at height ${RC.track.head.k}, expected 0`;
+    if (RC.track.head.g !== 0) return `ended on slope ${RC.track.head.g}, expected flat`;
+  });
+
+  check('a full rectangular circuit closes and is reported as closed', () => {
+    RC.resetTrack();                       // 3 station pieces from (4,9) heading +i
+    const straights = 4;
+    for (let side = 0; side < 4; side++) {
+      const n = side === 0 ? straights : straights + 3;
+      for (let s = 0; s < n; s++) {
+        if (!RC.place('flat')) return `side ${side}: flat piece rejected`;
+      }
+      if (!RC.place('turn-right-wide')) return `side ${side}: turn rejected`;
+    }
+    const st = RC.circuitStatus();
+    if (st.kind !== 'closed') {
+      const h = RC.track.head, s = RC.track.start;
+      return `status "${st.kind}" — head (${h.i},${h.j},dir ${h.dir},k ${h.k}) vs start (${s.i},${s.j},dir ${s.dir},k ${s.k})`;
+    }
+  });
+
+  check('undo restores the previous head exactly', () => {
+    RC.resetTrack();
+    const before = Object.assign({}, RC.track.head);
+    RC.place('flat-to-gentle-up');
+    RC.place('gentle-up');
+    RC.undo();
+    RC.undo();
+    if (!RC.sameNode(RC.track.head, before)) {
+      const h = RC.track.head;
+      return `head (${h.i},${h.j},dir ${h.dir},k ${h.k},g ${h.g}) != (${before.i},${before.j},dir ${before.dir},k ${before.k},g ${before.g})`;
+    }
+    if (RC.track.pieces.length !== 3) return `${RC.track.pieces.length} pieces left, expected 3 station pieces`;
+  });
+
+  check('pieces are refused when their entry slope does not match', () => {
+    RC.resetTrack();                        // head is flat
+    if (RC.canPlace(RC.pieceDef('gentle-up'), RC.track.head).ok) {
+      return 'gentle-up was allowed straight off a flat head';
+    }
+    if (RC.canPlace(RC.pieceDef('steep-up'), RC.track.head).ok) {
+      return 'steep-up was allowed straight off a flat head';
+    }
+    if (!RC.canPlace(RC.pieceDef('flat-to-gentle-up'), RC.track.head).ok) {
+      return 'flat-to-gentle-up was refused from a flat head';
+    }
+  });
+
+  check('track cannot be built below ground or off the park', () => {
+    RC.resetTrack();
+    RC.place('flat-to-gentle-down');
+    if (RC.track.pieces.length !== 3) return 'a downhill piece was accepted at ground level';
+    RC.resetTrack();
+    let placed = 0;
+    for (let n = 0; n < 40; n++) if (RC.place('flat')) placed++;
+    if (placed >= 40) return 'ran off the edge of the park without being stopped';
+  });
+
+  check('a placed piece reports a sensible length', () => {
+    const flat = RC.pieceDef('flat');
+    if (!near(RC.pieceLength(flat), RC.TILE_M, 1e-6)) {
+      return `flat piece is ${RC.pieceLength(flat)} m, expected ${RC.TILE_M}`;
+    }
+    const wide = RC.pieceDef('turn-right-wide');
+    const expect = 2.5 * RC.TILE_M * Math.PI / 2;
+    if (!near(RC.pieceLength(wide), expect, 1e-6)) {
+      return `wide turn is ${RC.pieceLength(wide)} m, expected ${expect.toFixed(3)}`;
+    }
+  });
+
+  /* ---- report ---------------------------------------------------------- */
+  const ul = document.getElementById('results');
+  let failed = 0;
+  for (const r of results) {
+    if (!r.ok) failed++;
+    const li = document.createElement('li');
+    li.className = r.ok ? 'pass' : 'fail';
+    li.textContent = r.name;
+    if (!r.ok) {
+      const d = document.createElement('span');
+      d.className = 'detail';
+      d.textContent = r.detail;
+      li.appendChild(d);
+    }
+    ul.appendChild(li);
+  }
+  const sum = document.getElementById('summary');
+  sum.className = failed ? 'anyfail' : 'allpass';
+  sum.textContent = failed
+    ? `${failed} of ${results.length} checks FAILED`
+    : `All ${results.length} checks passed`;
+
+  RC.resetTrack();
+})();
+</script>
+</body>
+</html>

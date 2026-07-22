@@ -180,6 +180,98 @@ html, body {
 .window-body p:last-child { margin-bottom: 0; }
 .window-body .hint { color: var(--muted); font-size: 0.82rem; }
 
+/* ---- build palette --------------------------------------------------- */
+.head-card {
+  padding: 0.4rem 0.55rem;
+  margin-bottom: 0.7rem;
+  border-radius: 9px;
+  background: rgba(13, 148, 136, 0.09);
+  font-size: 0.8rem;
+}
+
+.pal-group { margin-bottom: 0.7rem; }
+.pal-group:last-child { margin-bottom: 0; }
+
+.pal-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0.3rem;
+}
+
+.pal-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.28rem;
+}
+
+.pal-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-height: 44px;
+  padding: 0.3rem 0.15rem;
+  border: 1.5px solid var(--chrome-border);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.75);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  overflow: hidden;
+  transition: background 0.12s, border-color 0.12s, opacity 0.12s;
+}
+.pal-btn:hover:not(:disabled) { background: white; border-color: var(--accent); }
+.pal-btn.selected { border-color: var(--accent); background: rgba(13,148,136,0.12); }
+.pal-btn:disabled { opacity: 0.28; cursor: default; }
+
+.pal-glyph { font-size: 0.95rem; line-height: 1.1; font-weight: 700; }
+.pal-name {
+  font-size: 0.54rem;
+  line-height: 1.05;
+  text-align: center;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.pal-btn.flash-ok { background: rgba(13,148,136,0.35); }
+.pal-btn.flash-bad { background: rgba(198,40,40,0.28); }
+
+.pal-wide {
+  flex: 1 1 auto;
+  padding: 0.42rem 0.5rem;
+  border: 1.5px solid var(--chrome-border);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.75);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.pal-wide:hover:not(:disabled) { background: white; }
+.pal-wide.active { background: var(--accent); border-color: var(--accent); color: white; }
+.pal-wide:disabled { opacity: 0.35; cursor: default; }
+
+.auto-row { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+
+.build-msg {
+  min-height: 1.1em;
+  margin-top: 0.5rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #b04a2f;
+}
+
+#ro-circuit.ok { color: var(--accent); }
+.statusbar b { color: var(--ink); }
+
 /* Shared readout vocabulary, for the energy/report windows in later phases. */
 .readout-row {
   display: flex;
