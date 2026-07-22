@@ -7,63 +7,61 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<main class="page">
 
-  <section class="hero">
-    <div>
-      <a class="hero-link" href="../../miscellaneous.html">← Back</a>
-      <p class="eyebrow">Energy</p>
-      <h1>Rollercoaster Builder</h1>
-      <p class="intro">
-        Build a coaster piece by piece, send a train around it, and watch the energy move.
-        Every metre the train climbs is gravitational potential energy bought with kinetic
-        energy — <em>E<sub>p</sub> = mgh</em> and <em>E<sub>k</sub> = ½mv²</em> trading back and
-        forth along the track. The chain lift is the only thing adding energy to the ride.
-      </p>
-    </div>
-  </section>
+<canvas id="park-canvas"></canvas>
 
-  <section class="layout">
-    <aside class="panel controls">
+<header class="topbar">
+  <a class="tb-link" href="../../miscellaneous.html" title="Back to Miscellaneous Simulations">←</a>
+  <span class="tb-title">Rollercoaster Builder</span>
 
-      <div class="control-group">
-        <label>View</label>
-        <div class="auto-row">
-          <button id="btn-rot-ccw" class="play-btn ghost" type="button" title="Rotate view left">⟲</button>
-          <button id="btn-rot-cw"  class="play-btn ghost" type="button" title="Rotate view right">⟳</button>
-          <button id="btn-zoom-out" class="play-btn ghost" type="button" title="Zoom out">−</button>
-          <button id="btn-zoom-in"  class="play-btn ghost" type="button" title="Zoom in">+</button>
-        </div>
-        <div class="auto-row" style="margin-top:0.4rem">
-          <button id="btn-view-reset" class="play-btn ghost" type="button">Reset view</button>
-        </div>
-      </div>
+  <div class="tb-sep"></div>
 
-      <div class="explain-card">
-        <div class="readout-hd">Scene</div>
-        <div class="readout-row"><span>Tile under cursor</span><span id="ro-tile">—</span></div>
-        <div class="readout-row"><span>Ground size</span><span id="ro-extent">—</span></div>
-        <div class="readout-row"><span>Tile</span><span id="ro-tilesize">—</span></div>
-      </div>
+  <div class="tb-group" role="group" aria-label="View">
+    <button class="tb-btn" id="btn-rot-ccw" type="button" title="Rotate view left">⟲</button>
+    <button class="tb-btn" id="btn-rot-cw"  type="button" title="Rotate view right">⟳</button>
+    <button class="tb-btn" id="btn-zoom-out" type="button" title="Zoom out">−</button>
+    <button class="tb-btn" id="btn-zoom-in"  type="button" title="Zoom in">+</button>
+    <button class="tb-btn" id="btn-view-reset" type="button" title="Reset view">Reset</button>
+  </div>
 
-      <div class="explain-card">
-        <strong>Scale.</strong> One tile is 4&nbsp;m square and one height step is 1&nbsp;m, so a
-        lift hill of 10 steps is a 10&nbsp;m climb. Heights are measured from ground level.
-      </div>
+  <div class="tb-spacer"></div>
 
-    </aside>
+  <div class="tb-group" role="group" aria-label="Windows">
+    <button class="tb-btn" data-window="win-about" type="button">About</button>
+  </div>
+</header>
 
-    <section class="panel visual-panel">
-      <div class="canvas-wrap">
-        <canvas id="park-canvas"></canvas>
-        <div class="scene-note">Drag to pan&nbsp;&nbsp;·&nbsp;&nbsp;Scroll to zoom&nbsp;&nbsp;·&nbsp;&nbsp;⟲ ⟳ to rotate</div>
-      </div>
-    </section>
-  </section>
+<div class="statusbar" id="statusbar">
+  <span id="ro-tile">—</span>
+  <span class="sb-sep"></span>
+  <span id="ro-scale"></span>
+</div>
 
-</main>
+<!-- Floating windows. Drag by the header; toggled from the top bar. -->
+<section class="window" id="win-about" hidden style="left: 24px; top: 76px; width: 380px;">
+  <div class="window-hd">
+    <span>About this simulation</span>
+    <button class="window-x" type="button" aria-label="Close">×</button>
+  </div>
+  <div class="window-body">
+    <p>
+      Build a coaster piece by piece, send a train around it, and watch the energy move.
+      Every metre the train climbs is gravitational potential energy bought with kinetic
+      energy — <em>E<sub>p</sub> = mgh</em> and <em>E<sub>k</sub> = ½mv²</em> trading back
+      and forth along the track. The chain lift is the only thing adding energy to the ride.
+    </p>
+    <p class="hint">
+      <strong>Scale.</strong> One tile is 4&nbsp;m square and one height step is 1&nbsp;m, so a
+      lift hill of 10 steps is a 10&nbsp;m climb. Heights are measured from ground level.
+    </p>
+    <p class="hint">
+      <strong>View.</strong> Drag to pan, scroll to zoom, ⟲ ⟳ to rotate the park.
+    </p>
+  </div>
+</section>
 
 <script src="iso.js"></script>
+<script src="ui.js"></script>
 <script src="script.js"></script>
 </body>
 </html>

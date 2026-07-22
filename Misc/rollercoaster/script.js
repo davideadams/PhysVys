@@ -20,13 +20,14 @@
 
   /* ---- sizing ---------------------------------------------------------- */
   function resize() {
-    const rect = canvas.getBoundingClientRect();
+    const w = window.innerWidth;
+    const h = window.innerHeight;
     const dpr = window.devicePixelRatio || 1;
-    state.view.w = rect.width;
-    state.view.h = rect.height;
+    state.view.w = w;
+    state.view.h = h;
     state.view.dpr = dpr;
-    canvas.width = Math.round(rect.width * dpr);
-    canvas.height = Math.round(rect.height * dpr);
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     state.dirty = true;
   }
@@ -135,15 +136,15 @@
 
   /* ---- readouts -------------------------------------------------------- */
   const roTile = document.getElementById('ro-tile');
-  const roExtent = document.getElementById('ro-extent');
-  const roTileSize = document.getElementById('ro-tilesize');
+  const roScale = document.getElementById('ro-scale');
 
   function readTile() {
-    roTile.textContent = state.hover ? `(${state.hover.i}, ${state.hover.j})` : '—';
+    roTile.textContent = state.hover
+      ? `tile (${state.hover.i}, ${state.hover.j})`
+      : `${RC.GRID} × ${RC.GRID} tiles`;
   }
 
-  roExtent.textContent = `${RC.GRID} × ${RC.GRID} tiles (${RC.GRID * RC.TILE_M} m)`;
-  roTileSize.textContent = `${RC.TILE_M} m · step ${RC.LEVEL_M} m`;
+  roScale.textContent = `1 tile = ${RC.TILE_M} m · 1 step = ${RC.LEVEL_M} m`;
   readTile();
 
   /* ---- render ---------------------------------------------------------- */
@@ -168,6 +169,7 @@
     requestAnimationFrame(frame);
   }
 
+  RC.initWindows();
   resize();
   requestAnimationFrame(frame);
 })();

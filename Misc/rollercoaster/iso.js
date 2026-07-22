@@ -223,26 +223,34 @@
     return { cv, ox, oy };
   }
 
-  let cacheOx = 0, cacheOy = 0, cacheDpr = 1;
+  let cacheOx = 0, cacheOy = 0, cacheScale = 1;
+
+  /* The cache covers the whole map, so its cost grows as scale^2: at zoom 2.5
+     on a dpr-2 display an uncapped cache would be ~6400x3300 (84 MB). Cap the
+     render scale and let the blit upscale past it — mild softening at extreme
+     zoom in exchange for bounded memory. */
+  const CACHE_SCALE_MAX = 2.5;
 
   RC.drawGround = function (ctx, cam, view) {
     const dpr = view.dpr || 1;
-    const key = cam.rot + '|' + cam.zoom.toFixed(3) + '|' + dpr;
+    const scale = Math.min(cam.zoom * dpr, CACHE_SCALE_MAX);
+    const key = cam.rot + '|' + scale.toFixed(3);
     if (key !== groundKey) {
-      const built = buildGround(cam.zoom * dpr, cam.rot);
+      const built = buildGround(scale, cam.rot);
       cacheOx = built.ox;
       cacheOy = built.oy;
-      cacheDpr = dpr;
+      cacheScale = scale;
       groundKey = key;
     }
-    // The context is already scaled by dpr, so the blit is expressed in CSS
-    // px: cache pixels divided by dpr land one-to-one on device pixels.
+    // The cache holds (world px * cacheScale); the screen wants (world px *
+    // zoom) in CSS px, the context handling dpr on top. So convert by k.
+    const k = cam.zoom / cacheScale;
     ctx.drawImage(
       groundCache,
-      view.w / 2 + cam.panX - cacheOx / cacheDpr,
-      view.h / 2 + cam.panY - cacheOy / cacheDpr,
-      groundCache.width / cacheDpr,
-      groundCache.height / cacheDpr
+      view.w / 2 + cam.panX - cacheOx * k,
+      view.h / 2 + cam.panY - cacheOy * k,
+      groundCache.width * k,
+      groundCache.height * k
     );
   };
 
