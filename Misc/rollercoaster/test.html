@@ -16,15 +16,46 @@
     .fail::before { content: "FAIL"; color: #c62828; font-weight: 700; margin-right: 0.6rem; }
     .fail { background: #fff4f4; }
     .detail { display: block; color: #7a1f1f; font-size: 0.8rem; margin-left: 3.2rem; white-space: pre-wrap; }
+    #failures { margin-bottom: 1rem; }
+    #failures[hidden] { display: none; }
+    .fail-hd { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.4rem; }
+    .fail-hd h2 { font-size: 1rem; margin: 0; color: #7a1f1f; }
+    #copy-fails {
+      font: inherit; font-size: 0.8rem; font-weight: 700; cursor: pointer;
+      padding: 0.3rem 0.7rem; border-radius: 8px; border: 1px solid #c62828;
+      background: #fff; color: #7a1f1f;
+    }
+    #copy-fails:hover { background: #fde2e2; }
+    #fail-text {
+      width: 100%; min-height: 8rem; box-sizing: border-box; resize: vertical;
+      font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+      font-size: 0.78rem; line-height: 1.45; color: #3a1414;
+      background: #fff6f6; border: 1px solid #e6b0b0; border-radius: 8px;
+      padding: 0.6rem 0.7rem; white-space: pre;
+    }
   </style>
 </head>
 <body>
-  <h1>Rollercoaster Builder — geometry self-test</h1>
+  <h1>Rollercoaster Builder — self-test</h1>
   <p class="sub">
-    Checks the projection and track geometry. Open this after changing
-    <code>iso.js</code> or <code>track.js</code>. Everything should say PASS.
+    Checks the projection, track geometry, physics, g-forces, banking, loops
+    and prefabs. Open this after changing any of the <code>.js</code> files.
+    Everything should say PASS; if anything fails, a copyable summary appears
+    below to paste back into the conversation.
   </p>
   <div id="summary">Running…</div>
+
+  <div id="failures" hidden>
+    <div class="fail-hd">
+      <h2>Failures</h2>
+      <button id="copy-fails" type="button">Copy to clipboard</button>
+    </div>
+    <p class="sub" style="margin:0 0 0.4rem">
+      Paste this back into the conversation so the failing checks can be fixed.
+    </p>
+    <textarea id="fail-text" readonly spellcheck="false"></textarea>
+  </div>
+
   <ul id="results"></ul>
 
 <script src="iso.js"></script>
@@ -1556,6 +1587,44 @@
   sum.textContent = failed
     ? `${failed} of ${results.length} checks FAILED`
     : `All ${results.length} checks passed`;
+
+  /* A copyable block naming every failing check and its detail, so the
+     results can be pasted straight back into the conversation. */
+  if (failed) {
+    const lines = [`Rollercoaster self-test: ${failed} of ${results.length} checks FAILED`, ''];
+    for (const r of results) {
+      if (r.ok) continue;
+      lines.push(`FAIL: ${r.name}`);
+      if (r.detail) {
+        for (const dl of String(r.detail).split('\n')) lines.push('    ' + dl);
+      }
+      lines.push('');
+    }
+    const text = lines.join('\n').trimEnd();
+
+    const panel = document.getElementById('failures');
+    const area = document.getElementById('fail-text');
+    panel.hidden = false;
+    area.value = text;
+    area.rows = Math.min(20, failed * 3 + 2);
+
+    const btn = document.getElementById('copy-fails');
+    btn.addEventListener('click', async () => {
+      let copied = false;
+      try {
+        await navigator.clipboard.writeText(text);
+        copied = true;
+      } catch (e) {
+        // Clipboard API is blocked on file:// in some browsers; fall back to
+        // selecting the text so the user can copy it by hand.
+        area.focus();
+        area.select();
+        try { copied = document.execCommand('copy'); } catch (e2) { copied = false; }
+      }
+      btn.textContent = copied ? 'Copied' : 'Press Ctrl+C to copy';
+      setTimeout(() => { btn.textContent = 'Copy to clipboard'; }, 2000);
+    });
+  }
 
   RC.resetTrack();
 })();
