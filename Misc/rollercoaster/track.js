@@ -253,7 +253,9 @@
   RC.resetTrack = function () {
     const t = RC.track;
     t.pieces = [];
-    t.start = { i: 4, j: 9, dir: 0, k: 0, g: FLAT };
+    // Near the middle of the park, so it's on screen at the default zoom and
+    // there's room to build in every direction.
+    t.start = { i: 16, j: 19, dir: 0, k: 0, g: FLAT };
     t.head = Object.assign({}, t.start);
     for (let n = 0; n < 3; n++) RC.place('station');
     return t;

@@ -101,8 +101,9 @@ x = (a - b) * TW / 2
 y = (a + b - GRID) * TH / 2 - k * LEVEL_PX
 ```
 
-Constants in `iso.js`: `GRID = 20` tiles, `TW = 64`, `TH = 32`, `LEVEL_PX = 10`,
-`SLAB = 20` (px thickness of the dirt sides), `TILE_M = 4`, `LEVEL_M = 1`.
+Constants in `iso.js`: `GRID = 40` tiles (a 160 m square park), `TW = 64`,
+`TH = 32`, `LEVEL_PX = 10`, `SLAB = 20` (px thickness of the dirt sides),
+`TILE_M = 4`, `LEVEL_M = 1`.
 
 Camera (`RC.camera`) is `{ zoom, panX, panY, rot }`. Pan is in screen px, applied
 after the zoom scale. Zoom is snapped to 0.02 steps so a continuous wheel gesture
@@ -114,18 +115,22 @@ doesn't thrash the ground cache.
 viewer, drawn later. Phase 3 needs this to interleave ground, support struts,
 track segments and the train in one painter's-algorithm sweep.
 
-### Ground cache
+### Ground rendering
 
-The ground never changes, so it renders once into an offscreen canvas keyed on
-`(rot, scale)` and is blitted thereafter; panning is free.
+Only the tiles actually on screen are drawn, batched into a handful of `Path2D`s
+— two checker fills, two strokes, one tuft fill, two slab faces — so the cost is
+about 4 draw calls no matter how many tiles are visible.
 
-The cache covers the **whole map**, so its memory cost grows as `scale²`. It is
-built at `min(zoom * dpr, CACHE_SCALE_MAX)` with `CACHE_SCALE_MAX = 2.5` —
-uncapped, a dpr-2 display at max zoom would have allocated ~84 MB. The blit
-converts with `k = zoom / cacheScale`. Consequence: mild softening above that
-scale. If crispness at high zoom matters more than the cache, the clean
-replacement is per-frame viewport-culled tile drawing, which is bounded by screen
-size rather than map size.
+This replaced an offscreen whole-map cache. The cache was fine at 20×20, but its
+memory grows as `(GRID * scale)²`, and doubling the park to 40×40 would have
+wanted **~333 MB** at maximum zoom on a dpr-2 display. Viewport culling is bounded
+by screen size rather than park size, stays crisp at every zoom, and removes the
+cache-invalidation problem. Don't reintroduce a full-map cache.
+
+Helpers that exist for this: `RC.viewToScreen` (project already-rotated view
+coordinates straight to screen, avoiding four `rot` calls per tile) and
+`RC.unrotTile` (view tile index back to world tile index, for the checker parity
+and the tuft hash).
 
 ### Window system (`ui.js`)
 

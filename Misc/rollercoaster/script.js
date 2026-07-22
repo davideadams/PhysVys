@@ -6,7 +6,8 @@
   const ctx = canvas.getContext('2d');
   const cam = RC.camera;
 
-  const ZOOM_MIN = 0.5, ZOOM_MAX = 2.5;
+  // Lower bound chosen so the whole 40x40 park fits on a typical screen.
+  const ZOOM_MIN = 0.3, ZOOM_MAX = 2.5;
 
   const state = {
     view: { w: 960, h: 600, dpr: 1 },

@@ -3,7 +3,7 @@
 (function () {
   const RC = window.RC || (window.RC = {});
 
-  const GRID = 20;      // tiles per side
+  const GRID = 40;      // tiles per side (160 m square)
   const TILE_M = 4;     // metres per tile
   const LEVEL_M = 1;    // metres per height level
   const TW = 64;        // tile width in px at zoom 1
@@ -103,22 +103,23 @@
   };
 
   /* ---- ground ---------------------------------------------------------
-     The ground never changes, so it is rendered once into an offscreen
-     canvas and blitted. The cache is keyed on rotation and zoom; panning
-     just moves the blit. */
+     Only the tiles actually on screen are drawn, and they are batched into a
+     handful of Path2Ds so the cost is ~4 draw calls regardless of how many
+     tiles that is.
+
+     This replaced a whole-map offscreen cache. The cache was fine at a 20x20
+     park but its memory grows as (GRID * scale)^2, and at 40x40 it would have
+     wanted ~333 MB at maximum zoom on a dpr-2 display. Culling to the viewport
+     is bounded by screen size instead of park size, stays crisp at every zoom,
+     and removes the cache-invalidation problem entirely. */
   const GRASS_A = '#4f9c3d';
   const GRASS_B = '#57a844';
   const GRASS_EDGE = 'rgba(20, 60, 20, 0.10)';
   const TUFT = 'rgba(32, 84, 30, 0.34)';
   const DIRT_LIGHT = '#8a6a3f';
   const DIRT_DARK = '#6b5231';
-  const DIRT_TOP = '#7a5c37';
 
-  let groundCache = null;
-  let groundKey = '';
-
-  /* Deterministic per-tile pseudo-random, so grass tufts don't crawl
-     around when the cache is rebuilt. */
+  /* Deterministic per-tile pseudo-random, so grass tufts stay put. */
   function hash2(i, j) {
     let h = (i * 374761393 + j * 668265263) >>> 0;
     h = (h ^ (h >>> 13)) >>> 0;
@@ -126,135 +127,129 @@
     return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
   }
 
-  /* Built at zoom * devicePixelRatio so the grass stays crisp on HiDPI
-     displays; drawGround scales the blit back down by dpr. */
-  function buildGround(z, rot) {
-    const pad = 4;
-    const w = Math.ceil(GRID * TW * z) + pad * 2;
-    const h = Math.ceil(GRID * TH * z + SLAB * z) + pad * 2;
-    const ox = w / 2;                       // where world x = 0 lands
-    const oy = GRID * TH * z / 2 + pad;     // where world y = 0 lands
-
-    const cv = document.createElement('canvas');
-    cv.width = w;
-    cv.height = h;
-    const g = cv.getContext('2d');
-
-    const P = (a, b, k) => {
-      const p = RC.projView(a, b, k);
-      return { x: p.x * z + ox, y: p.y * z + oy };
+  /* Project already-rotated view coordinates straight to screen. Saves
+     rotating all four corners of every tile. */
+  RC.viewToScreen = function (a, b, k, cam, view) {
+    const p = RC.projView(a, b, k);
+    return {
+      x: p.x * cam.zoom + cam.panX + view.w / 2,
+      y: p.y * cam.zoom + cam.panY + view.h / 2
     };
-
-    // Tiles are emitted in view-space order so the perimeter dirt faces of
-    // near tiles paint over the far ones.
-    const tiles = [];
-    for (let i = 0; i < GRID; i++) {
-      for (let j = 0; j < GRID; j++) {
-        const [ra, rb] = RC.rotTile(i, j, rot);
-        tiles.push({ i, j, ra, rb });
-      }
-    }
-    tiles.sort((p, q) => (p.ra + p.rb) - (q.ra + q.rb));
-
-    for (const t of tiles) {
-      const { i, j, ra, rb } = t;
-      const c0 = P(ra, rb, 0);
-      const c1 = P(ra + 1, rb, 0);
-      const c2 = P(ra + 1, rb + 1, 0);
-      const c3 = P(ra, rb + 1, 0);
-
-      g.beginPath();
-      g.moveTo(c0.x, c0.y);
-      g.lineTo(c1.x, c1.y);
-      g.lineTo(c2.x, c2.y);
-      g.lineTo(c3.x, c3.y);
-      g.closePath();
-      g.fillStyle = ((i + j) & 1) ? GRASS_A : GRASS_B;
-      g.fill();
-      g.strokeStyle = GRASS_EDGE;
-      g.lineWidth = 1;
-      g.stroke();
-
-      // A few tufts so the grass doesn't read as flat colour.
-      const n = 2 + Math.floor(hash2(i, j) * 3);
-      g.fillStyle = TUFT;
-      for (let t2 = 0; t2 < n; t2++) {
-        const fa = 0.18 + hash2(i * 31 + t2, j) * 0.64;
-        const fb = 0.18 + hash2(i, j * 31 + t2) * 0.64;
-        const p = P(ra + fa, rb + fb, 0);
-        const s = Math.max(1, 1.6 * z);
-        g.fillRect(p.x - s / 2, p.y - s / 2, s, s * 0.8);
-      }
-
-      // Perimeter slab faces: the +a and +b edges of the outermost tiles
-      // in view space are the ones facing the camera.
-      const drop = SLAB * z;
-      if (ra === GRID - 1) {
-        const a0 = P(ra + 1, rb, 0), a1 = P(ra + 1, rb + 1, 0);
-        g.beginPath();
-        g.moveTo(a0.x, a0.y);
-        g.lineTo(a1.x, a1.y);
-        g.lineTo(a1.x, a1.y + drop);
-        g.lineTo(a0.x, a0.y + drop);
-        g.closePath();
-        g.fillStyle = DIRT_LIGHT;
-        g.fill();
-      }
-      if (rb === GRID - 1) {
-        const b0 = P(ra, rb + 1, 0), b1 = P(ra + 1, rb + 1, 0);
-        g.beginPath();
-        g.moveTo(b0.x, b0.y);
-        g.lineTo(b1.x, b1.y);
-        g.lineTo(b1.x, b1.y + drop);
-        g.lineTo(b0.x, b0.y + drop);
-        g.closePath();
-        g.fillStyle = DIRT_DARK;
-        g.fill();
-      }
-      if (ra === GRID - 1 && rb === GRID - 1) {
-        // Bottom corner cap, so the two faces meet cleanly.
-        const c = P(ra + 1, rb + 1, 0);
-        g.fillStyle = DIRT_TOP;
-        g.fillRect(c.x - 1, c.y, 2, drop);
-      }
-    }
-
-    groundCache = cv;
-    return { cv, ox, oy };
-  }
-
-  let cacheOx = 0, cacheOy = 0, cacheScale = 1;
-
-  /* The cache covers the whole map, so its cost grows as scale^2: at zoom 2.5
-     on a dpr-2 display an uncapped cache would be ~6400x3300 (84 MB). Cap the
-     render scale and let the blit upscale past it — mild softening at extreme
-     zoom in exchange for bounded memory. */
-  const CACHE_SCALE_MAX = 2.5;
-
-  RC.drawGround = function (ctx, cam, view) {
-    const dpr = view.dpr || 1;
-    const scale = Math.min(cam.zoom * dpr, CACHE_SCALE_MAX);
-    const key = cam.rot + '|' + scale.toFixed(3);
-    if (key !== groundKey) {
-      const built = buildGround(scale, cam.rot);
-      cacheOx = built.ox;
-      cacheOy = built.oy;
-      cacheScale = scale;
-      groundKey = key;
-    }
-    // The cache holds (world px * cacheScale); the screen wants (world px *
-    // zoom) in CSS px, the context handling dpr on top. So convert by k.
-    const k = cam.zoom / cacheScale;
-    ctx.drawImage(
-      groundCache,
-      view.w / 2 + cam.panX - cacheOx * k,
-      view.h / 2 + cam.panY - cacheOy * k,
-      groundCache.width * k,
-      groundCache.height * k
-    );
   };
 
-  RC.invalidateGround = function () { groundKey = ''; };
+  /* Inverse of RC.rotTile: view tile index -> world tile index. */
+  RC.unrotTile = function (ra, rb, rot) {
+    const M = GRID - 1;
+    switch (rot & 3) {
+      case 1:  return [M - rb, ra];
+      case 2:  return [M - ra, M - rb];
+      case 3:  return [rb, M - ra];
+      default: return [ra, rb];
+    }
+  };
+
+  /* Range of view tiles touching the screen. The visible region is a rotated
+     rectangle in tile space, so its bounding box is a superset — a couple of
+     extra rows is much cheaper than getting the geometry exactly right. */
+  function visibleRange(cam, view) {
+    let aMin = Infinity, aMax = -Infinity, bMin = Infinity, bMax = -Infinity;
+    const corners = [[0, 0], [view.w, 0], [0, view.h], [view.w, view.h]];
+    for (const [sx, sy] of corners) {
+      const u = (sx - view.w / 2 - cam.panX) / cam.zoom;
+      const v = (sy - view.h / 2 - cam.panY) / cam.zoom;
+      const ab = 2 * v / TH + GRID;
+      const dab = 2 * u / TW;
+      const a = (ab + dab) / 2, b = (ab - dab) / 2;
+      if (a < aMin) aMin = a;
+      if (a > aMax) aMax = a;
+      if (b < bMin) bMin = b;
+      if (b > bMax) bMax = b;
+    }
+    return {
+      a0: Math.max(0, Math.floor(aMin) - 2),
+      a1: Math.min(GRID - 1, Math.ceil(aMax) + 2),
+      b0: Math.max(0, Math.floor(bMin) - 2),
+      b1: Math.min(GRID - 1, Math.ceil(bMax) + 2)
+    };
+  }
+
+  RC.drawGround = function (ctx, cam, view) {
+    const r = visibleRange(cam, view);
+    if (r.a1 < r.a0 || r.b1 < r.b0) return;   // park entirely off screen
+
+    const P = (a, b) => RC.viewToScreen(a, b, 0, cam, view);
+    const checkerA = new Path2D();
+    const checkerB = new Path2D();
+    const faceLight = new Path2D();
+    const faceDark = new Path2D();
+    const tufts = new Path2D();
+
+    const showTufts = cam.zoom >= 0.6;   // sub-pixel below this
+    const tuftSize = Math.max(1, 1.6 * cam.zoom);
+    const drop = SLAB * cam.zoom;
+
+    for (let ra = r.a0; ra <= r.a1; ra++) {
+      for (let rb = r.b0; rb <= r.b1; rb++) {
+        const c0 = P(ra, rb), c1 = P(ra + 1, rb);
+        const c2 = P(ra + 1, rb + 1), c3 = P(ra, rb + 1);
+
+        const [i, j] = RC.unrotTile(ra, rb, cam.rot);
+        const path = ((i + j) & 1) ? checkerA : checkerB;
+        path.moveTo(c0.x, c0.y);
+        path.lineTo(c1.x, c1.y);
+        path.lineTo(c2.x, c2.y);
+        path.lineTo(c3.x, c3.y);
+        path.closePath();
+
+        if (showTufts) {
+          const n = 2 + Math.floor(hash2(i, j) * 3);
+          for (let t = 0; t < n; t++) {
+            const fa = 0.18 + hash2(i * 31 + t, j) * 0.64;
+            const fb = 0.18 + hash2(i, j * 31 + t) * 0.64;
+            const p = P(ra + fa, rb + fb);
+            tufts.rect(p.x - tuftSize / 2, p.y - tuftSize / 2, tuftSize, tuftSize * 0.8);
+          }
+        }
+
+        // The +a and +b edges of the outermost view tiles face the camera,
+        // giving the park its slab of earth.
+        if (ra === GRID - 1) {
+          faceLight.moveTo(c1.x, c1.y);
+          faceLight.lineTo(c2.x, c2.y);
+          faceLight.lineTo(c2.x, c2.y + drop);
+          faceLight.lineTo(c1.x, c1.y + drop);
+          faceLight.closePath();
+        }
+        if (rb === GRID - 1) {
+          faceDark.moveTo(c3.x, c3.y);
+          faceDark.lineTo(c2.x, c2.y);
+          faceDark.lineTo(c2.x, c2.y + drop);
+          faceDark.lineTo(c3.x, c3.y + drop);
+          faceDark.closePath();
+        }
+      }
+    }
+
+    ctx.fillStyle = GRASS_A;
+    ctx.fill(checkerA);
+    ctx.fillStyle = GRASS_B;
+    ctx.fill(checkerB);
+
+    ctx.strokeStyle = GRASS_EDGE;
+    ctx.lineWidth = 1;
+    ctx.stroke(checkerA);
+    ctx.stroke(checkerB);
+
+    if (showTufts) {
+      ctx.fillStyle = TUFT;
+      ctx.fill(tufts);
+    }
+
+    ctx.fillStyle = DIRT_LIGHT;
+    ctx.fill(faceLight);
+    ctx.fillStyle = DIRT_DARK;
+    ctx.fill(faceDark);
+  };
 
   /* ---- sky ------------------------------------------------------------ */
   const CLOUDS = [
