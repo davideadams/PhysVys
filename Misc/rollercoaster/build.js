@@ -134,6 +134,15 @@
     const undoBtn = document.getElementById('btn-undo');
     if (undoBtn) undoBtn.disabled = RC.track.pieces.length === 0;
 
+    const finishBtn = document.getElementById('btn-finish');
+    if (finishBtn) {
+      const done = RC.sameNode(RC.track.head, RC.track.start);
+      finishBtn.disabled = done || RC.track.pieces.length === 0;
+      finishBtn.title = done
+        ? 'The circuit is already complete'
+        : 'Join the track back to the station with plain filler track';
+    }
+
     // Head + circuit readouts.
     const st = RC.circuitStatus();
     const roHead = document.getElementById('ro-head');
@@ -162,6 +171,25 @@
 
     const undo = document.getElementById('btn-undo');
     if (undo) undo.addEventListener('click', () => { RC.undo(); refresh(); });
+
+    const finish = document.getElementById('btn-finish');
+    if (finish) finish.addEventListener('click', () => {
+      finish.disabled = true;
+      finish.textContent = 'Working…';
+      // Yield a frame so the button actually repaints before the search runs.
+      requestAnimationFrame(() => {
+        const t0 = performance.now();
+        const res = RC.completeTrack();
+        const ms = performance.now() - t0;
+        finish.textContent = 'Finish track';
+        if (res.ok) {
+          setStatus(`Joined up with ${res.added} pieces (${ms.toFixed(0)} ms)`);
+        } else {
+          setStatus(res.why);
+        }
+        refresh();
+      });
+    });
 
     const clear = document.getElementById('btn-clear');
     if (clear) clear.addEventListener('click', () => {

@@ -309,19 +309,44 @@
     return cells;
   }
 
-  function collides(def, head) {
-    const mine = interiorCells(def, head);
+  /* Occupancy of the existing track, tile -> [{z, pi}], cached against the
+     version counter. Rebuilding this per collision test made the palette
+     O(pieces^2) on every refresh and would have made the route search below
+     unusable. */
+  let occCache = null, occCacheVersion = -1;
+
+  function occupancy() {
+    if (occCache && occCacheVersion === RC.version) return occCache;
+    const m = new Map();
     const pieces = RC.track.pieces;
-    for (let pi = 0; pi < pieces.length - 1; pi++) {   // skip the piece at the head
-      const other = pieces[pi];
-      const theirs = interiorCells(BY_ID.get(other.defId), other.node);
-      for (const a of mine) {
-        for (const b of theirs) {
-          if (a.i === b.i && a.j === b.j && Math.abs(a.z - b.z) < CLEARANCE) return true;
-        }
+    for (let pi = 0; pi < pieces.length; pi++) {
+      for (const c of interiorCells(BY_ID.get(pieces[pi].defId), pieces[pi].node)) {
+        const key = c.i + ',' + c.j;
+        let arr = m.get(key);
+        if (!arr) { arr = []; m.set(key, arr); }
+        arr.push({ z: c.z, pi });
+      }
+    }
+    occCache = m;
+    occCacheVersion = RC.version;
+    return m;
+  }
+
+  function collidesWith(def, node, occ, skipPi) {
+    for (const c of interiorCells(def, node)) {
+      const arr = occ.get(c.i + ',' + c.j);
+      if (!arr) continue;
+      for (const e of arr) {
+        if (e.pi === skipPi) continue;
+        if (Math.abs(e.z - c.z) < CLEARANCE) return true;
       }
     }
     return false;
+  }
+
+  function collides(def, head) {
+    // The piece at the head legitimately shares its joint tile.
+    return collidesWith(def, head, occupancy(), RC.track.pieces.length - 1);
   }
 
   /* Can this piece go on the head right now, and if not, why? */
@@ -393,6 +418,176 @@
   /* Total path length in metres. */
   RC.trackLength = function () {
     return RC.track.pieces.reduce((s, p) => s + RC.pieceLength(BY_ID.get(p.defId)), 0);
+  };
+
+  /* ---- finish the track -------------------------------------------------
+     RCT2's "complete the circuit": search for any sequence of pieces from the
+     build head back to the start node. The result is deliberately dull — the
+     point is to close a circuit so it can be tested, not to design a ride.
+
+     A* over nodes {i, j, dir, k, g}. The cost is roughly one per piece, so a
+     heuristic counting the fewest pieces that could possibly cover the
+     remaining distance is admissible. */
+
+  /* Only plain geometry — no stations, brakes or launches in a filler run. */
+  const ROUTE_IDS = [
+    'flat',
+    'gentle-up', 'gentle-down', 'steep-up', 'steep-down',
+    'flat-to-gentle-up', 'gentle-up-to-flat',
+    'flat-to-gentle-down', 'gentle-down-to-flat',
+    'gentle-to-steep-up', 'steep-to-gentle-up',
+    'gentle-to-steep-down', 'steep-to-gentle-down',
+    'turn-left-wide', 'turn-right-wide', 'turn-left-tight', 'turn-right-tight'
+  ];
+
+  /* Slight preferences, so the filler favours straight level track. */
+  function routeCost(def) {
+    if (def.kind === 'turn') return 1.25;
+    if (def.gIn !== 0 || def.gOut !== 0) return 1.2;
+    return 1;
+  }
+
+  const MAX_ADVANCE = 5;   // best Manhattan tile gain from one piece (wide turn)
+  const MAX_CLIMB = 6;     // best height change from one piece (steep)
+
+  function Heap() { this.a = []; }
+  Heap.prototype.push = function (item) {
+    const a = this.a;
+    a.push(item);
+    let i = a.length - 1;
+    while (i > 0) {
+      const p = (i - 1) >> 1;
+      if (a[p].f <= a[i].f) break;
+      const t = a[p]; a[p] = a[i]; a[i] = t;
+      i = p;
+    }
+  };
+  Heap.prototype.pop = function () {
+    const a = this.a;
+    const top = a[0], last = a.pop();
+    if (a.length) {
+      a[0] = last;
+      let i = 0;
+      for (;;) {
+        const l = 2 * i + 1, r = l + 1;
+        let m = i;
+        if (l < a.length && a[l].f < a[m].f) m = l;
+        if (r < a.length && a[r].f < a[m].f) m = r;
+        if (m === i) break;
+        const t = a[m]; a[m] = a[i]; a[i] = t;
+        i = m;
+      }
+    }
+    return top;
+  };
+
+  const nodeKey = n => n.i + ',' + n.j + ',' + n.dir + ',' + n.k + ',' + n.g;
+
+  RC.findRouteHome = function (limits) {
+    const target = RC.track.start;
+    const from = RC.track.head;
+    if (!target || !from) return { ok: false, why: 'There is no track to finish' };
+    if (sameNode(from, target)) return { ok: false, why: 'The circuit is already complete' };
+
+    const maxExpand = (limits && limits.maxExpand) || 40000;
+    const maxPieces = (limits && limits.maxPieces) || 150;
+    const occ = occupancy();
+    const skipPi = RC.track.pieces.length - 1;
+    const defs = ROUTE_IDS.map(id => BY_ID.get(id)).filter(Boolean);
+
+    const heuristic = n => Math.max(
+      (Math.abs(n.i - target.i) + Math.abs(n.j - target.j)) / MAX_ADVANCE,
+      Math.abs(n.k - target.k) / MAX_CLIMB
+    );
+
+    const open = new Heap();
+    const best = new Map();
+    const startKey = nodeKey(from);
+    best.set(startKey, { g: 0, node: from, parent: null, defId: null });
+    // Weighted slightly, trading a possibly longer route for a much faster
+    // search. The route only has to be legal and dull, not optimal.
+    open.push({ f: heuristic(from) * 1.2, key: startKey });
+
+    let expanded = 0;
+    let goal = null;
+
+    while (open.a.length && expanded < maxExpand) {
+      const cur = open.pop();
+      // Stale heap items resolve to whatever entry is now best for that key,
+      // so a single closed flag is enough to skip repeats.
+      const entry = best.get(cur.key);
+      if (!entry || entry.closed) continue;
+      entry.closed = true;
+      expanded++;
+
+      const node = entry.node;
+      if (sameNode(node, target)) { goal = entry; break; }
+      if (entry.g >= maxPieces) continue;
+
+      for (const def of defs) {
+        if (def.gIn !== node.g) continue;
+        const exit = RC.exitNode(def, node);
+        if (exit.k < 0 || exit.k > MAX_H) continue;
+        if (!RC.inBounds(exit.i, exit.j)) continue;
+
+        // Bounds and collision from one pass over the cells. A quarter turn's
+        // widest bulge is at t = 0.5, so the interior samples catch it.
+        let bad = false;
+        for (const c of interiorCells(def, node)) {
+          if (!RC.inBounds(c.i, c.j)) { bad = true; break; }
+          const arr = occ.get(c.i + ',' + c.j);
+          if (!arr) continue;
+          for (const e of arr) {
+            if (e.pi !== skipPi && Math.abs(e.z - c.z) < CLEARANCE) { bad = true; break; }
+          }
+          if (bad) break;
+        }
+        if (bad) continue;
+
+        const g = entry.g + routeCost(def);
+        const key = nodeKey(exit);
+        const prev = best.get(key);
+        if (prev && prev.g <= g) continue;
+        const next = { g, node: exit, parent: entry, defId: def.id };
+        best.set(key, next);
+        open.push({ f: g + heuristic(exit) * 1.2, key });
+      }
+    }
+
+    if (!goal) {
+      return {
+        ok: false,
+        why: expanded >= maxExpand
+          ? 'Could not find a way back to the station'
+          : 'There is no way back to the station from here'
+      };
+    }
+
+    const ids = [];
+    for (let e = goal; e && e.defId; e = e.parent) ids.unshift(e.defId);
+    return { ok: true, ids, expanded };
+  };
+
+  /* Find a route and actually build it. Everything is placed through the
+     normal RC.place, so the finished track obeys exactly the same rules as
+     hand-built track; if any piece is refused the whole lot is rolled back
+     rather than leaving a half-finished stub. */
+  RC.completeTrack = function (limits) {
+    const route = RC.findRouteHome(limits);
+    if (!route.ok) return route;
+
+    const before = RC.track.pieces.length;
+    for (const id of route.ids) {
+      if (!RC.place(id)) {
+        while (RC.track.pieces.length > before) RC.undo();
+        return { ok: false, why: 'The route it found ran into the track on the way' };
+      }
+    }
+    if (!sameNode(RC.track.head, RC.track.start)) {
+      while (RC.track.pieces.length > before) RC.undo();
+      return { ok: false, why: 'The route it found did not close the circuit' };
+    }
+    return { ok: true, added: route.ids.length };
   };
 
   /* ---- setup ----------------------------------------------------------

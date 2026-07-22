@@ -379,6 +379,69 @@
     }
   });
 
+  /* ---- finish track ----------------------------------------------------- */
+  check('finish track closes a circuit from the bare station', () => {
+    RC.resetTrack();
+    const res = RC.completeTrack();
+    if (!res.ok) return res.why;
+    const st = RC.circuitStatus();
+    if (st.kind !== 'closed') return `status is "${st.kind}" after finishing`;
+    if (!RC.sameNode(RC.track.head, RC.track.start)) return 'head is not back at the start';
+  });
+
+  check('finish track closes a circuit after a lift hill and drop', () => {
+    RC.resetTrack();
+    const seq = ['flat-to-gentle-up', 'gentle-up', 'gentle-up', 'gentle-up-to-flat',
+                 'flat', 'flat-to-gentle-down', 'gentle-down', 'gentle-down',
+                 'gentle-down-to-flat'];
+    for (const id of seq) {
+      if (!RC.place(id, { lift: true })) return `${id} refused`;
+    }
+    const res = RC.completeTrack();
+    if (!res.ok) return res.why;
+    if (RC.circuitStatus().kind !== 'closed') return 'circuit did not close';
+  });
+
+  check('finish track leaves every piece legal and connected', () => {
+    RC.resetTrack();
+    for (const id of ['flat-to-gentle-up', 'gentle-up', 'gentle-up-to-flat',
+                      'turn-right-wide', 'flat', 'flat']) {
+      if (!RC.place(id)) return `${id} refused`;
+    }
+    if (!RC.completeTrack().ok) return 'could not finish';
+
+    // Walk the whole chain: each piece must start exactly where the last ended.
+    const pieces = RC.track.pieces;
+    let node = RC.track.start;
+    for (let n = 0; n < pieces.length; n++) {
+      if (!RC.sameNode(pieces[n].node, node)) {
+        return `piece ${n} (${pieces[n].defId}) starts at (${pieces[n].node.i},` +
+               `${pieces[n].node.j},dir ${pieces[n].node.dir},k ${pieces[n].node.k}) ` +
+               `but the previous piece ended at (${node.i},${node.j},dir ${node.dir},k ${node.k})`;
+      }
+      node = RC.exitNode(RC.pieceDef(pieces[n].defId), node);
+    }
+    if (!RC.sameNode(node, RC.track.start)) return 'the chain does not return to the start';
+  });
+
+  check('finish track refuses when the circuit is already closed', () => {
+    RC.resetTrack();
+    if (!RC.completeTrack().ok) return 'could not finish the first time';
+    const again = RC.completeTrack();
+    if (again.ok) return 'it claimed to finish an already-closed circuit';
+  });
+
+  check('finish track rolls back cleanly when it cannot find a route', () => {
+    RC.resetTrack();
+    const before = RC.track.pieces.length;
+    // A tiny expansion budget makes the search give up.
+    const res = RC.completeTrack({ maxExpand: 1 });
+    if (res.ok) return 'expected the search to give up with a budget of 1';
+    if (RC.track.pieces.length !== before) {
+      return `left ${RC.track.pieces.length - before} pieces behind after failing`;
+    }
+  });
+
   /* ---- physics ---------------------------------------------------------
      The invariant the whole sim exists to teach: KE + PE + thermal must
      equal the energy it started with plus whatever the motor put in. If
