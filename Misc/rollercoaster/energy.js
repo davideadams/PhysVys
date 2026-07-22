@@ -321,8 +321,8 @@
     html += row('Vertical, least', sim.minVertG.toFixed(2) + ' g');
     html += row('Lateral, greatest', sim.maxLatG.toFixed(2) + ' g');
     html += `<p class="hint">Vertical is 1.00&nbsp;g sitting still; below zero the riders ` +
-            `leave their seats. Lateral is sideways — none of the track banks, so every ` +
-            `turn puts its whole centripetal force through the riders.</p>`;
+            `leave their seats. Lateral is sideways: banking a turn tilts the track so ` +
+            `some of that force pushes riders into their seats instead of across them.</p>`;
     html += `<p class="hint">${RC.rideVerdict(sim)}</p>`;
 
     html += `<div class="report-hd">Energy</div>`;

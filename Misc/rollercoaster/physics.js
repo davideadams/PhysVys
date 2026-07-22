@@ -68,14 +68,8 @@
        u — up, perpendicular to the track surface (r x f)
 
      Returned in metre-space; the renderer divides back by TILE_M / LEVEL_M. */
-  RC.carFrame = function (p) {
-    const cl = closed();
-    const a = RC.pathAt(p.s - 0.6, cl) || p;
-    const b = RC.pathAt(p.s + 0.6, cl) || p;
-
-    let fx = (b.x - a.x) * RC.TILE_M;
-    let fy = (b.y - a.y) * RC.TILE_M;
-    let fz = (b.z - a.z) * RC.LEVEL_M;
+  function buildFrame(dx, dy, dz, bank) {
+    let fx = dx, fy = dy, fz = dz;
     let fl = Math.hypot(fx, fy, fz);
     if (fl < 1e-9) { fx = 1; fy = 0; fz = 0; fl = 1; }
     fx /= fl; fy /= fl; fz /= fl;
@@ -83,7 +77,7 @@
     // Right, horizontal by construction. The sign matters: a right turn from
     // heading +i curves towards +j, so +j has to be the rider's right, and
     // this must come out as (0,1,0) when f is (1,0,0).
-    let rx = -fy, ry = fx;
+    let rx = -fy, ry = fx, rz = 0;
     const rl = Math.hypot(rx, ry);
     if (rl < 1e-9) { rx = 0; ry = 1; }       // track pointing straight up
     else { rx /= rl; ry /= rl; }
@@ -95,11 +89,49 @@
     const ul = Math.hypot(ux, uy, uz) || 1;
     ux /= ul; uy /= ul; uz /= ul;
 
+    // Banking is a roll about the forward axis. A positive angle tips "up"
+    // towards the rider's right, which is what a right-hand turn needs: the
+    // outside of the curve rises. Everything downstream — the g-forces, the
+    // car, the rails — reads the rolled frame, so nothing else has to know
+    // banking exists.
+    if (bank) {
+      const c = Math.cos(bank), s = Math.sin(bank);
+      const nux = ux * c + rx * s, nuy = uy * c + ry * s, nuz = uz * c + rz * s;
+      const nrx = rx * c - ux * s, nry = ry * c - uy * s, nrz = rz * c - uz * s;
+      ux = nux; uy = nuy; uz = nuz;
+      rx = nrx; ry = nry; rz = nrz;
+    }
+
     return {
       f: { x: fx, y: fy, z: fz },
-      r: { x: rx, y: ry, z: 0 },
+      r: { x: rx, y: ry, z: rz },
       u: { x: ux, y: uy, z: uz }
     };
+  }
+
+  RC.carFrame = function (p) {
+    const cl = closed();
+    const a = RC.pathAt(p.s - 0.6, cl) || p;
+    const b = RC.pathAt(p.s + 0.6, cl) || p;
+    return buildFrame(
+      (b.x - a.x) * RC.TILE_M,
+      (b.y - a.y) * RC.TILE_M,
+      (b.z - a.z) * RC.LEVEL_M,
+      p.bank || 0
+    );
+  };
+
+  /* Same frame for a point in the path array, using its neighbours directly
+     rather than a lookup — the renderer needs one per point, every frame. */
+  RC.frameAtPoint = function (pts, idx) {
+    const a = pts[Math.max(0, idx - 1)];
+    const b = pts[Math.min(pts.length - 1, idx + 1)];
+    return buildFrame(
+      (b.x - a.x) * RC.TILE_M,
+      (b.y - a.y) * RC.TILE_M,
+      (b.z - a.z) * RC.LEVEL_M,
+      pts[idx].bank || 0
+    );
   };
 
   /* What the rider feels, resolved onto the car's own axes.

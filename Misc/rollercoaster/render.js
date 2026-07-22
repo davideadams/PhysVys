@@ -28,8 +28,9 @@
 
   const CHAIN = '#3d3428';
 
-  /* Half the track gauge, in tiles. 0.2 tiles = 0.8 m each side. */
-  const HG = 0.2;
+  /* Half the track gauge, in METRES. Offsets are taken along the frame's
+     right and up axes so banked track rolls properly. */
+  const HG = 0.8;
   const SLEEPER_M = 1.6;    // metres between sleepers
   const SUPPORT_M = 6.0;    // metres between support bents
   const BENT_RUNG_M = 5.0;  // metres between cross-braces up a tall bent
@@ -42,16 +43,15 @@
     return SLEEPER;
   }
 
-  /* Tangent from neighbouring path points, and the horizontal normal to it.
-     Offsets are done in WORLD space then projected, so the track's width
-     foreshortens correctly instead of staying a constant number of pixels. */
-  function normalAt(pts, idx) {
-    const a = pts[Math.max(0, idx - 1)];
-    const b = pts[Math.min(pts.length - 1, idx + 1)];
-    const dx = b.x - a.x, dy = b.y - a.y;
-    const len = Math.hypot(dx, dy);
-    if (len < 1e-9) return { x: 0, y: 0 };
-    return { x: -dy / len, y: dx / len };
+  /* Offsets are taken in metre-space along a point's frame and converted back
+     for projection, so the track foreshortens correctly and rolls with the
+     bank. `side` is metres to the rider's right, `up` metres perpendicular to
+     the track surface. */
+  function off(p, fr, side, up, cam, view) {
+    const mx = p.x * RC.TILE_M + fr.r.x * side + fr.u.x * up;
+    const my = p.y * RC.TILE_M + fr.r.y * side + fr.u.y * up;
+    const mz = p.z * RC.LEVEL_M + fr.r.z * side + fr.u.z * up;
+    return RC.toScreen(mx / RC.TILE_M, my / RC.TILE_M, mz / RC.LEVEL_M, cam, view);
   }
 
   function line(ctx, p, q, colour, width) {
@@ -66,18 +66,19 @@
   /* ---- drawables -------------------------------------------------------- */
 
   function drawRail(ctx, d, cam, view) {
-    const { a, b, na, nb } = d;
+    const { a, b, fa, fb } = d;
     const z = cam.zoom;
-    const S = (p, n, s, dz) => RC.toScreen(p.x + n.x * HG * s, p.y + n.y * HG * s, p.z + (dz || 0), cam, view);
 
     // Spine below the rails, which is what gives the track visual mass.
-    const sa = S(a, na, 0, -0.35), sb = S(b, nb, 0, -0.35);
+    const sa = off(a, fa, 0, -0.35, cam, view);
+    const sb = off(b, fb, 0, -0.35, cam, view);
     line(ctx, sa, sb, SPINE_DARK, Math.max(2, 5.2 * z));
     line(ctx, sa, sb, SPINE, Math.max(1, 3.0 * z));
 
     ctx.lineCap = 'round';
     for (const s of [1, -1]) {
-      const pa = S(a, na, s), pb = S(b, nb, s);
+      const pa = off(a, fa, HG * s, 0, cam, view);
+      const pb = off(b, fb, HG * s, 0, cam, view);
       line(ctx, pa, pb, RAIL_DARK, Math.max(1.8, 3.4 * z));
       line(ctx, pa, pb, RAIL_TOP, Math.max(0.8, 1.5 * z));
     }
@@ -85,49 +86,53 @@
   }
 
   function drawSleeper(ctx, d, cam, view) {
-    const { p, n, colour } = d;
+    const { p, fr, colour } = d;
     const z = cam.zoom;
-    const l = RC.toScreen(p.x + n.x * HG * 1.5, p.y + n.y * HG * 1.5, p.z - 0.3, cam, view);
-    const r = RC.toScreen(p.x - n.x * HG * 1.5, p.y - n.y * HG * 1.5, p.z - 0.3, cam, view);
+    const l = off(p, fr, HG * 1.5, -0.3, cam, view);
+    const r = off(p, fr, -HG * 1.5, -0.3, cam, view);
     line(ctx, l, r, colour, Math.max(1.5, 4.0 * z));
   }
 
   /* Chain dogs along a lift hill, so it reads as powered rather than just
      coloured differently. */
   function drawChain(ctx, d, cam, view) {
-    const { p, n } = d;
+    const { p, fr } = d;
     const z = cam.zoom;
-    const l = RC.toScreen(p.x + n.x * HG * 0.35, p.y + n.y * HG * 0.35, p.z - 0.15, cam, view);
-    const r = RC.toScreen(p.x - n.x * HG * 0.35, p.y - n.y * HG * 0.35, p.z - 0.15, cam, view);
+    const l = off(p, fr, HG * 0.35, -0.15, cam, view);
+    const r = off(p, fr, -HG * 0.35, -0.15, cam, view);
     line(ctx, l, r, CHAIN, Math.max(1.2, 2.4 * z));
   }
 
-  /* A support bent: two legs under the rails, cross-braced up its height. */
+  /* A support bent: two legs under the rails, cross-braced up its height.
+     The legs meet the track wherever the (possibly banked) rails are, but
+     drop vertically to the ground — supports don't lean with the track. */
   function drawBent(ctx, d, cam, view) {
-    const { p, n } = d;
+    const { p, fr } = d;
     const z = cam.zoom;
     const legW = Math.max(1.5, 3.6 * z);
 
-    const feet = [], tops = [];
+    const feet = [], tops = [], legX = [], legY = [];
     for (const s of [1, -1]) {
-      const x = p.x + n.x * HG * s, y = p.y + n.y * HG * s;
-      tops.push(RC.toScreen(x, y, p.z - 0.4, cam, view));
-      feet.push(RC.toScreen(x, y, 0, cam, view));
+      const mx = p.x * RC.TILE_M + fr.r.x * HG * s + fr.u.x * -0.4;
+      const my = p.y * RC.TILE_M + fr.r.y * HG * s + fr.u.y * -0.4;
+      const mz = p.z * RC.LEVEL_M + fr.r.z * HG * s + fr.u.z * -0.4;
+      const tx = mx / RC.TILE_M, ty = my / RC.TILE_M;
+      legX.push(tx); legY.push(ty);
+      tops.push(RC.toScreen(tx, ty, mz / RC.LEVEL_M, cam, view));
+      feet.push(RC.toScreen(tx, ty, 0, cam, view));
     }
 
     // Cross-bracing first so the legs draw over it.
     const rungs = Math.max(1, Math.floor(p.z / BENT_RUNG_M));
     for (let r = 1; r <= rungs; r++) {
       const h = p.z * (r / (rungs + 1));
-      const a = RC.toScreen(p.x + n.x * HG, p.y + n.y * HG, h, cam, view);
-      const b = RC.toScreen(p.x - n.x * HG, p.y - n.y * HG, h, cam, view);
+      const a = RC.toScreen(legX[0], legY[0], h, cam, view);
+      const b = RC.toScreen(legX[1], legY[1], h, cam, view);
       line(ctx, a, b, BRACE, Math.max(1, 1.8 * z));
       // Alternating diagonal, giving the lattice its zig-zag.
       const hNext = p.z * ((r + 0.5) / (rungs + 1));
-      const c = RC.toScreen(
-        p.x + n.x * HG * (r % 2 ? -1 : 1),
-        p.y + n.y * HG * (r % 2 ? -1 : 1),
-        hNext, cam, view);
+      const side = r % 2 ? 1 : 0;
+      const c = RC.toScreen(legX[side], legY[side], hNext, cam, view);
       line(ctx, r % 2 ? a : b, c, BRACE, Math.max(0.8, 1.4 * z));
     }
 
@@ -139,13 +144,13 @@
 
   /* Station platforms, one either side of the track. */
   function drawPlatform(ctx, d, cam, view) {
-    const { a, b, na, nb } = d;
+    const { a, b, fa, fb } = d;
     for (const s of [1, -1]) {
       const q = [
-        RC.toScreen(a.x + na.x * HG * 1.6 * s, a.y + na.y * HG * 1.6 * s, a.z - 0.4, cam, view),
-        RC.toScreen(a.x + na.x * HG * 4.2 * s, a.y + na.y * HG * 4.2 * s, a.z - 0.4, cam, view),
-        RC.toScreen(b.x + nb.x * HG * 4.2 * s, b.y + nb.y * HG * 4.2 * s, b.z - 0.4, cam, view),
-        RC.toScreen(b.x + nb.x * HG * 1.6 * s, b.y + nb.y * HG * 1.6 * s, b.z - 0.4, cam, view)
+        off(a, fa, HG * 1.6 * s, -0.4, cam, view),
+        off(a, fa, HG * 4.2 * s, -0.4, cam, view),
+        off(b, fb, HG * 4.2 * s, -0.4, cam, view),
+        off(b, fb, HG * 1.6 * s, -0.4, cam, view)
       ];
       ctx.beginPath();
       ctx.moveTo(q[0].x, q[0].y);
@@ -194,7 +199,7 @@
     const cover = coverSorter(cam);
 
     if (pts.length > 1) {
-      const normals = pts.map((_, n) => normalAt(pts, n));
+      const frames = pts.map((_, n) => RC.frameAtPoint(pts, n));
 
       for (let n = 1; n < pts.length; n++) {
         const a = pts[n - 1], b = pts[n];
@@ -203,12 +208,12 @@
         if (cover) d = cover((a.s + b.s) / 2, d);
         list.push({
           depth: d, draw: drawRail,
-          a, b, na: normals[n - 1], nb: normals[n]
+          a, b, fa: frames[n - 1], fb: frames[n]
         });
         if (b.def.station) {
           list.push({
             depth: d - 0.5, draw: drawPlatform,
-            a, b, na: normals[n - 1], nb: normals[n]
+            a, b, fa: frames[n - 1], fb: frames[n]
           });
         }
       }
@@ -224,7 +229,7 @@
           if (cover) ds = cover(p.s, ds);
           list.push({
             depth: ds,
-            draw: drawSleeper, p, n: normals[n],
+            draw: drawSleeper, p, fr: frames[n],
             colour: sleeperColour(p.def, p.piece)
           });
           if (p.piece.lift) {
@@ -232,7 +237,7 @@
             if (cover) dc = cover(p.s, dc);
             list.push({
               depth: dc,
-              draw: drawChain, p, n: normals[n]
+              draw: drawChain, p, fr: frames[n]
             });
           }
         }
@@ -241,7 +246,7 @@
           // Sorted at the foot, so anything in front of the bent draws later.
           list.push({
             depth: RC.depth(p.x, p.y, 0, cam.rot),
-            draw: drawBent, p, n: normals[n]
+            draw: drawBent, p, fr: frames[n]
           });
         } else if (p.s >= nextSupport) {
           nextSupport = p.s + SUPPORT_M;

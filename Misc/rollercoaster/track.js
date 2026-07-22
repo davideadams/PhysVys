@@ -14,6 +14,27 @@
   const MAX_H = 60;
   RC.MAX_H = MAX_H;
 
+  /* Banking is a single angle, applied to turns only. Rolling in and out
+     within the piece itself means the joint between pieces stays level, so
+     bank never becomes part of the node state and the piece catalogue does
+     not multiply. Real track spirals the roll in over a longer transition;
+     the difference is cosmetic here. */
+  const BANK_ANGLE = 45 * Math.PI / 180;
+  RC.BANK_ANGLE = BANK_ANGLE;
+
+  /* Full bank through the middle half of the turn, smoothly ramped at each
+     end so the piece starts and finishes level. */
+  function bankProfile(t) {
+    const ramp = 0.25;
+    let f;
+    if (t < ramp) f = t / ramp;
+    else if (t > 1 - ramp) f = (1 - t) / ramp;
+    else f = 1;
+    f = Math.min(1, Math.max(0, f));
+    return f * f * (3 - 2 * f);
+  }
+  RC.bankProfile = bankProfile;
+
   /* A piece's height gain is the integral of its slope profile. Ramping the
      slope linearly from gIn to gOut over L tiles gives L*(gIn+gOut)/2, which
      is an integer for every combination below — that is why GENTLE and STEEP
@@ -205,7 +226,11 @@
             (c.z - prev.z) * RC.LEVEL_M
           );
         }
-        pts.push({ x: c.x, y: c.y, z: c.z, s, pi, t, piece: p, def });
+        // Signed by turn direction: a right turn banks to the right.
+        const bank = p.bank && def.kind === 'turn'
+          ? def.turn * BANK_ANGLE * bankProfile(t)
+          : 0;
+        pts.push({ x: c.x, y: c.y, z: c.z, s, pi, t, bank, piece: p, def });
         prev = c;
       }
     }
@@ -300,6 +325,7 @@
       kx: mix(a.kx, b.kx),
       ky: mix(a.ky, b.ky),
       kz: mix(a.kz, b.kz),
+      bank: mix(a.bank, b.bank),
       piece: f < 0.5 ? a.piece : b.piece,
       def: f < 0.5 ? a.def : b.def
     };
@@ -399,7 +425,8 @@
     RC.track.pieces.push({
       defId,
       node: { i: head.i, j: head.j, dir: head.dir, k: head.k, g: head.g },
-      lift: !!(opts && opts.lift) && !!def.liftable
+      lift: !!(opts && opts.lift) && !!def.liftable,
+      bank: !!(opts && opts.bank) && def.kind === 'turn'
     });
     RC.track.head = check.exit;
     RC.version++;

@@ -785,6 +785,93 @@
     }
   });
 
+  /* ---- banking ----------------------------------------------------------- */
+  function bankedTurnSample(id, banked, sOffset) {
+    RC.resetTrack();
+    RC.place(id, { bank: banked });
+    const path = RC.trackPath();
+    const turnStart = path.pts.find(p => p.def.kind === 'turn').s;
+    return RC.pathAt(turnStart + (sOffset == null ? 4 : sOffset), false);
+  }
+
+  check('banked pieces still start and finish level', () => {
+    // The whole reason bank never became part of the node state: a banked
+    // turn must join level track at both ends.
+    RC.resetTrack();
+    RC.place('turn-right-tight', { bank: true });
+    RC.place('flat');
+    const pts = RC.trackPath().pts;
+    const turn = pts.filter(p => p.def.kind === 'turn');
+    if (!turn.length) return 'no turn in the path';
+    if (!near(turn[0].bank, 0, 1e-9)) return `turn starts banked at ${turn[0].bank}`;
+    if (!near(turn[turn.length - 1].bank, 0, 1e-9)) {
+      return `turn ends banked at ${turn[turn.length - 1].bank}`;
+    }
+    const peak = Math.max(...turn.map(p => Math.abs(p.bank)));
+    if (!near(peak, RC.BANK_ANGLE, 1e-9)) {
+      return `peak bank is ${(peak * 180 / Math.PI).toFixed(1)} deg, expected 45`;
+    }
+    for (const p of pts) {
+      if (p.def.kind !== 'turn' && !near(p.bank, 0, 1e-9)) {
+        return 'straight track picked up a bank angle';
+      }
+    }
+  });
+
+  check('the frame stays orthonormal when banked', () => {
+    const p = bankedTurnSample('turn-right-tight', true);
+    const fr = RC.carFrame(p);
+    const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z;
+    const len = a => Math.hypot(a.x, a.y, a.z);
+    for (const [name, v] of [['f', fr.f], ['r', fr.r], ['u', fr.u]]) {
+      if (!near(len(v), 1, 1e-9)) return `${name} is not unit length (${len(v).toFixed(6)})`;
+    }
+    if (!near(dot(fr.f, fr.r), 0, 1e-9)) return 'f and r not perpendicular';
+    if (!near(dot(fr.f, fr.u), 0, 1e-9)) return 'f and u not perpendicular';
+    if (!near(dot(fr.r, fr.u), 0, 1e-9)) return 'r and u not perpendicular';
+    // Rolled 45 degrees, so "right" now has a downward component.
+    if (!(fr.r.z < -0.5)) return `banked right vector should tilt down, z = ${fr.r.z.toFixed(3)}`;
+    if (!(fr.u.z > 0.5 && fr.u.z < 0.8)) return `banked up vector z = ${fr.u.z.toFixed(3)}, expected about 0.707`;
+  });
+
+  check('banking a turn trades lateral g for vertical g', () => {
+    // The point of the whole feature, and what RCT teaches by feel.
+    const v = 10;
+    const flat = RC.gForces(bankedTurnSample('turn-right-tight', false), v, 0);
+    const banked = RC.gForces(bankedTurnSample('turn-right-tight', true), v, 0);
+
+    if (!(Math.abs(banked.lat) < Math.abs(flat.lat) * 0.5)) {
+      return `banking barely helped: ${Math.abs(flat.lat).toFixed(2)} g flat vs ` +
+             `${Math.abs(banked.lat).toFixed(2)} g banked`;
+    }
+    if (!(banked.vert > flat.vert)) {
+      return `vertical should rise when banked: ${flat.vert.toFixed(2)} -> ${banked.vert.toFixed(2)}`;
+    }
+    // The total force on the rider is unchanged — banking only redirects it.
+    const magFlat = Math.hypot(flat.vert, flat.lat, flat.long);
+    const magBank = Math.hypot(banked.vert, banked.lat, banked.long);
+    if (Math.abs(magFlat - magBank) / magFlat > 0.02) {
+      return `total force changed: ${magFlat.toFixed(3)} g flat vs ${magBank.toFixed(3)} g banked`;
+    }
+  });
+
+  check('at the ideal speed a 45 degree bank cancels lateral g entirely', () => {
+    // tan(theta) = v^2 / (r g), so at 45 degrees the ideal speed is v = sqrt(r g).
+    const R = 1.5 * RC.TILE_M;                  // tight turn, 6 m
+    const vIdeal = Math.sqrt(R * 9.81 * Math.tan(RC.BANK_ANGLE));
+    const g = RC.gForces(bankedTurnSample('turn-right-tight', true), vIdeal, 0);
+
+    if (Math.abs(g.lat) > 0.05) {
+      return `lateral is ${g.lat.toFixed(3)} g at the ideal speed ` +
+             `(${vIdeal.toFixed(2)} m/s), expected about 0`;
+    }
+    // All of it goes vertical: 1/cos(45) = sqrt(2).
+    const expect = 1 / Math.cos(RC.BANK_ANGLE);
+    if (Math.abs(g.vert - expect) / expect > 0.03) {
+      return `vertical is ${g.vert.toFixed(3)} g, expected ${expect.toFixed(3)}`;
+    }
+  });
+
   check('a crest lightens the riders and a dip presses them down', () => {
     RC.track.pieces = [];
     RC.track.start = { i: 6, j: 20, dir: 0, k: 8, g: 0 };

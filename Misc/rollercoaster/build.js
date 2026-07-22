@@ -47,10 +47,23 @@
     STRAIGHTS.set(def.gIn + '>' + def.gOut, def);
   }
 
-  const sel = { dir: 'straight', slope: S.LEVEL, special: null, lift: false };
+  const ROLLS = [
+    { bank: false, icon: 'roll-none', label: 'No banking' },
+    { bank: true, icon: 'roll-bank', label: 'Banked 45°' }
+  ];
+
+  const sel = { dir: 'straight', slope: S.LEVEL, special: null, lift: false, bank: false };
   RC.build = sel;
 
   const dirBtns = new Map(), slopeBtns = new Map(), specialBtns = new Map();
+  const rollBtns = new Map();
+
+  /* Banking applies to turns only — there's nothing to bank on straight
+     track, and the piece has to start and finish level either way. */
+  function bankable() {
+    const dir = DIRECTIONS.find(d => d.id === sel.dir);
+    return !sel.special && !!(dir && dir.piece);
+  }
 
   /* What would "build" place, for a given selection? */
   function resolveWith(dirId, slopeG, specialId) {
@@ -135,6 +148,18 @@
     });
     slopeRow.appendChild(lift);
 
+    const rollRow = document.getElementById('row-roll');
+    if (rollRow) {
+      rollRow.innerHTML = '';
+      for (const r of ROLLS) {
+        const b = makeBtn(rollRow, r.icon, r.label, () => {
+          sel.bank = r.bank;
+          refresh();
+        }, null);
+        rollBtns.set(r.bank, b);
+      }
+    }
+
     for (const sp of SPECIALS) {
       const b = makeBtn(specialRow, sp.icon, sp.label, () => {
         sel.special = sp.id;
@@ -150,7 +175,7 @@
     if (!def) { setStatus('Nothing to build from here'); return; }
     const check = RC.canPlace(def, RC.track.head);
     if (!check.ok) { setStatus(check.why); return; }
-    RC.place(def.id, { lift: sel.lift });
+    RC.place(def.id, { lift: sel.lift, bank: sel.bank && bankable() });
     // A special is a one-shot choice; drop back to plain track afterwards.
     if (sel.special) sel.special = null;
     refresh();
@@ -201,6 +226,15 @@
       b.classList.toggle('selected', sel.special === sp.id);
     }
 
+    const canBank = bankable();
+    for (const r of ROLLS) {
+      const b = rollBtns.get(r.bank);
+      if (!b) continue;
+      b.disabled = !canBank;
+      b.title = canBank ? r.label : `${r.label} — only turns can be banked`;
+      b.classList.toggle('selected', canBank && sel.bank === r.bank);
+    }
+
     const liftBtn = document.getElementById('btn-lift');
     if (liftBtn) liftBtn.classList.toggle('active', sel.lift);
 
@@ -209,7 +243,11 @@
     const check = def ? RC.canPlace(def, head) : { ok: false, why: 'Nothing to build from here' };
     const nameEl = document.getElementById('preview-name');
     const whyEl = document.getElementById('preview-why');
-    if (nameEl) nameEl.textContent = def ? def.label : '—';
+    if (nameEl) {
+      nameEl.textContent = def
+        ? def.label + (sel.bank && canBank ? ', banked' : '')
+        : '—';
+    }
     if (whyEl) whyEl.textContent = check.ok ? '' : check.why;
 
     const buildBtn = document.getElementById('btn-build');

@@ -88,6 +88,16 @@
       `<path d="M16 6.5 L21.5 12 L16 17.5"/>`
     ),
 
+    /* Track cross-sections, seen head on: level rails, then rolled 45. */
+    'roll-none': svg(
+      `<path d="M4 14 H20"/>` +
+      `<path d="M7 14 V10 M17 14 V10" stroke-width="1.6"/>`
+    ),
+    'roll-bank': svg(
+      `<path d="M5.4 17.6 L18.6 8.4"/>` +
+      `<path d="M8.1 15.7 L5.8 12.4 M18.1 8.7 L15.8 5.4" stroke-width="1.6"/>`
+    ),
+
     /* Chain lift: links climbing a gradient. */
     'chain': svg(
       `<path d="M4.5 18.5 L19.5 7.5" stroke-width="1.6"/>` +
