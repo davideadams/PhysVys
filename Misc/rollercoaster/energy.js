@@ -311,7 +311,7 @@
     if (sim.note) html += `<p class="report-note">${sim.note}</p>`;
 
     html += `<div class="report-hd">Ride</div>`;
-    html += row('Top speed', (sim.maxV * 3.6).toFixed(0) + ' km/h');
+    html += row('Top speed', sim.maxV.toFixed(1) + ' m/s');
     html += row('Highest point', sim.maxZ.toFixed(1) + ' m');
     html += row('Ride time', sim.time.toFixed(1) + ' s');
     html += row('Track length', RC.trackLength().toFixed(0) + ' m');

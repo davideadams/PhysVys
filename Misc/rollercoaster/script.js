@@ -216,7 +216,7 @@
 
     if (visible('win-energy')) {
       RC.drawEnergyBars(document.getElementById('energy-bars'));
-      setText('ro-e-v', (Math.abs(sim.v) * 3.6).toFixed(1) + ' km/h');
+      setText('ro-e-v', Math.abs(sim.v).toFixed(1) + ' m/s');
       setText('ro-e-h', e.h.toFixed(2) + ' m');
       setText('ro-e-ke', RC.fmtEnergy(e.ke));
       setText('ro-e-pe', RC.fmtEnergy(e.pe));
@@ -258,7 +258,7 @@
     } else if (running || sim.time > 0) {
       const e = RC.energy();
       roRide.textContent =
-        `${(Math.abs(sim.v) * 3.6).toFixed(0)} km/h · ${e.h.toFixed(1)} m · ${sim.time.toFixed(1)} s`;
+        `${Math.abs(sim.v).toFixed(1)} m/s · ${e.h.toFixed(1)} m · ${sim.time.toFixed(1)} s`;
     } else {
       roRide.textContent = 'Train at the station';
     }

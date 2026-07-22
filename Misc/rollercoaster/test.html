@@ -1223,7 +1223,7 @@
       return `vertical drops to ${RC.sim.minVertG.toFixed(2)} g — riders would be thrown out`;
     }
     if (RC.sim.maxVertG > 4) return `vertical reaches ${RC.sim.maxVertG.toFixed(2)} g`;
-    if (RC.sim.maxV * 3.6 > 110) return `top speed ${(RC.sim.maxV * 3.6).toFixed(0)} km/h is excessive`;
+    if (RC.sim.maxV > 30) return `top speed ${RC.sim.maxV.toFixed(1)} m/s is excessive`;
   });
 
   check('the default prefab trades energy back and forth several times', () => {

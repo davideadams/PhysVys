@@ -294,7 +294,7 @@
     if (g.vert > 5) addWarning(`Punishing vertical g (${g.vert.toFixed(1)}) on a curve`);
     if (Math.abs(g.lat) > 1.8) addWarning(`Violent sideways force (${Math.abs(g.lat).toFixed(1)} g) — this turn needs banking`);
     else if (Math.abs(g.lat) > 1.0) addWarning(`Uncomfortable sideways force (${Math.abs(g.lat).toFixed(1)} g) on a turn`);
-    if (sim.maxV > 45) addWarning(`Train reaches ${(sim.maxV * 3.6).toFixed(0)} km/h — too fast to be safe`);
+    if (sim.maxV > 45) addWarning(`Train reaches ${sim.maxV.toFixed(0)} m/s — too fast to be safe`);
 
     // Valleying: sign changes with no forward progress.
     const vs = Math.sign(sim.v);
