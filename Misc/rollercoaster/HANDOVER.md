@@ -246,13 +246,17 @@ If a display and the physics ever disagree, the physics is right.
 - [x] **Menu link and prefab.** "Energy" topic card in `miscellaneous.html`;
       `prefabs.js` loads *First Drop* on startup so the page is testable
       immediately.
-- [ ] **Phase 6 — Train config and friction.** Everything below already works in
-      `physics.js` and has **no UI to reach it**: `friction` (the Heat bar is inert
-      without it), `cars`, `liftSpeed`, `brakeSpeed`, `launchSpeed`, `mu`, `kDrag`.
-      Also wanted: drag-to-place the train's start position, and the **vertical
-      loop** piece. Start here — it is mostly UI over finished physics.
+- [x] **Phase 6 — Train config, friction, loops.** The Train window (`controls.js`)
+      exposes cars, release point (a slider along the track, not a drag), friction
+      on/off with `mu`/`kDrag` sliders, and lift/brake/launch speeds. Vertical
+      loops landed here too (left/right, RCT footprint). Speeds shown in m/s.
+- [x] **Height labels, m/s units, acceleration graph + turn overlay, copyable test
+      failures.** Added after phase 6 at the teacher's request.
 - [ ] **Phase 7 — Polish.** Scenery, more prefabs, and whatever the classroom
-      turns up.
+      turns up. The default prefab (*First Drop*) is deliberately spirited — it hits
+      ~1.7 g lateral and −1.6 g airtime; the teacher is happy with that, but a
+      gentler variant (lower lift, drops and hills scaled to match, keeping the
+      five-exchange shape) is a standing option if a tamer default is wanted.
 
 ### Deliberately not built
 
@@ -345,44 +349,43 @@ Repo-wide conventions from the root `TODO.md` that apply here:
 
 ## State of verification — read this
 
-**The build machine has no JS runtime and no working browser automation.** Every
-line here was written without being executed by its author. What stands in for
-that:
+**The build machine has no JS runtime and no browser automation.** The assistant
+cannot run anything; only the teacher can, by opening `test.html` in a browser.
 
-- **`test.html`** — the whole reason it exists. Open it in a browser; everything
-  should say PASS. It covers the projection round-trips, the piece-geometry
-  invariant, collision, the A* finisher, energy conservation, g-forces, banking
-  and the prefabs. **Add to it as you add anything with a number in it.**
-- **The teacher has been checking each phase visually** as it shipped, and has
-  approved the ground artwork, the track, the construction window and the ride.
+**As of the last run, all 75 checks in `test.html` pass.** The suite covers the
+projection round-trips, the piece-geometry invariant (a declared exit node must
+sit exactly where the drawn centreline ends, or track looks joined while the
+physics path has gaps), collision, the A* finisher, energy conservation,
+g-forces, banking, loops, the graph overlay, the train controls and the prefabs.
 
-Bugs the tests and hand-tracing caught that a glance at the running sim would
-not have — worth reading as a list of what to be suspicious of:
+### The lesson that cost a dozen failures
 
-- Ground cache built without devicePixelRatio (blurry on HiDPI only).
-- Ground cache unbounded — would have wanted ~333 MB at 40×40, max zoom, dpr 2.
-- Windows positioned from the right became over-constrained once dragged.
-- Cars built from a horizontal tangent, so they never pitched on slopes.
-- Rails painting over the cars, because each segment sorted independently.
+For several phases the assistant *reasoned* that new tests passed and reported
+them green without the teacher running them. When the suite was finally run in
+full it showed **12 failures at once** — 11 of them faults in the tests
+(released-at-rest-on-flat trains that never moved, a trace that truncated at the
+sample cap, closed-circuit assumptions, tolerances too tight for a full lap),
+and only one a real code bug (`pieceSpans` leaving a gap at every piece joint).
+
+So: **a test is not passing until the teacher has run it and said so.** After any
+change with a number in it, add or update a check in `test.html`, then ask the
+teacher to run it and paste the result. The copyable failure panel at the top of
+the page exists for exactly that hand-off. Do not tick a task or call something
+verified on the strength of reasoning alone.
+
+### Bugs the tests and hand-tracing caught that the running sim would not have
+
+Worth reading as a list of what to stay suspicious of:
+
+- **`carFrame`'s right vector pointed left**, so every lateral g was labelled with
+  the wrong side — invisible, because the car box is symmetric.
 - **Energy silently deleted** when a train stopped dead at a track end.
-- **`carFrame`'s right vector pointed left**, so every lateral g would have been
-  labelled with the wrong side — invisible, because the car box is symmetric.
-
-Git note: the repo normalises LF→CRLF on checkout, so `git` prints line-ending
-warnings on every add. They're harmless.
-
-**First thing a new session should do is open `test.html` and then `index.html` in
-a browser**, before building anything on top of them. Three bugs were already
-caught by inspection alone (a missing devicePixelRatio in the ground cache, the
-unbounded cache allocation, and an over-constrained `left`/`right` on windows
-positioned from the right), which is fair warning that more may be lurking.
-
-`test.html` exists because there is no JS runtime on the build machine — it puts
-the assertions somewhere a browser can run them. It covers the projection
-round-trips, the piece-geometry invariant (a piece's declared exit node must sit
-exactly where its drawn centreline ends — if these drift, track looks connected
-but the physics path has gaps), slope continuity, circuit closure and the
-palette's slope-matching rules. **Add to it as you add geometry.**
+- Cars built from a horizontal tangent, so they never pitched on slopes.
+- The orientation frame could not invert, so a train stayed upright through a
+  loop (fixed by parallel-transporting it — see **The car frame** above).
+- Rails painting over the cars, because each segment sorted independently.
+- Ground cache unbounded — would have wanted ~333 MB at 40×40, max zoom, dpr 2.
+- Ground cache built without devicePixelRatio (blurry on HiDPI only).
 
 Git note: the repo normalises LF→CRLF on checkout, so `git` prints line-ending
 warnings on every add. They're harmless.
