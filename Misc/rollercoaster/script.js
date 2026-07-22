@@ -295,6 +295,21 @@
     state.dirty = true;
   });
 
+  /* Graph mode toggle. */
+  const graphModeBtns = document.querySelectorAll('#graph-modes [data-graph]');
+  graphModeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mode = btn.dataset.graph;
+      RC.setGraphMode(mode);
+      graphModeBtns.forEach(b => b.classList.toggle('active', b === btn));
+      const eLeg = document.getElementById('legend-energy');
+      const aLeg = document.getElementById('legend-accel');
+      if (eLeg) eLeg.hidden = mode !== 'energy';
+      if (aLeg) aLeg.hidden = mode !== 'accel';
+      updateEnergyPanels();
+    });
+  });
+
   /* Called by build.js whenever the track is edited. */
   RC.onTrackEdit = function () {
     RC.pauseSim();

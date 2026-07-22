@@ -157,7 +157,66 @@
     ctx.fillText('kJ', 4, padT - 9);
   };
 
-  /* ---- energy against distance ------------------------------------------ */
+  /* ---- graph against distance -------------------------------------------
+     Two modes over the same x-axis (distance along the track): energy, and
+     the g-forces the rider feels. The turn/loop overlay is drawn in both, so
+     a spike can be read off against the piece that caused it. */
+  const VERT_G = '#0d9488';   // vertical g
+  const LAT_G = '#c2185b';    // lateral g
+
+  let graphMode = 'energy';
+  RC.setGraphMode = function (m) { graphMode = (m === 'accel') ? 'accel' : 'energy'; };
+  RC.graphMode = () => graphMode;
+
+  /* Draw one trace series as a polyline, breaking where a lap wraps past the
+     start line rather than streaking back across the plot. */
+  function plotSeries(ctx, trace, key, X, Y, total, colour, width, dash) {
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = width;
+    ctx.setLineDash(dash || []);
+    ctx.beginPath();
+    let started = false, prevS = null;
+    for (const p of trace) {
+      const x = X(p.s), y = Y(p[key]);
+      if (started && prevS !== null && p.s < prevS - total * 0.5) started = false;
+      if (!started) { ctx.moveTo(x, y); started = true; }
+      else ctx.lineTo(x, y);
+      prevS = p.s;
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  /* Vertical ticks and labels marking each turn and loop. */
+  function drawTurnOverlay(ctx, X, total, padT, plotH) {
+    let spans;
+    try { spans = RC.pieceSpans(); } catch (e) { return; }
+    ctx.save();
+    ctx.font = 'bold 9px "Trebuchet MS", "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    for (const sp of spans) {
+      if (!sp.label) continue;
+      const x = X(sp.sMid);
+      ctx.strokeStyle = 'rgba(21,48,77,0.22)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([2, 3]);
+      ctx.beginPath();
+      ctx.moveTo(x, padT + 12);
+      ctx.lineTo(x, padT + plotH);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      const w = ctx.measureText(sp.label).width + 6;
+      const isLoop = sp.label[0] === 'L';
+      ctx.fillStyle = isLoop ? 'rgba(111,63,150,0.9)' : 'rgba(21,48,77,0.82)';
+      ctx.fillRect(x - w / 2, padT, w, 12);
+      ctx.fillStyle = '#fff';
+      ctx.fillText(sp.label, x, padT + 2);
+    }
+    ctx.restore();
+  }
+
   RC.drawEnergyGraph = function (canvas) {
     const f = fit(canvas);
     if (!f) return;
@@ -165,80 +224,34 @@
     const trace = RC.sim.trace;
     const total = RC.trackPath().total;
 
-    const padL = 36, padR = 8, padT = 10, padB = 24;
+    const padL = 36, padR = 8, padT = 14, padB = 24;
     const plotW = w - padL - padR;
     const plotH = h - padT - padB;
-
-    ctx.strokeStyle = AXIS;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(padL + 0.5, padT);
-    ctx.lineTo(padL + 0.5, padT + plotH + 0.5);
-    ctx.lineTo(padL + plotW, padT + plotH + 0.5);
-    ctx.stroke();
+    const X = s => padL + plotW * Math.min(1, Math.max(0, s / total));
 
     if (!trace.length || total <= 0) {
+      ctx.strokeStyle = AXIS;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(padL + 0.5, padT);
+      ctx.lineTo(padL + 0.5, padT + plotH + 0.5);
+      ctx.lineTo(padL + plotW, padT + plotH + 0.5);
+      ctx.stroke();
       ctx.fillStyle = LABEL;
       ctx.font = FONT;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('Run the train to plot its energy', padL + plotW / 2, padT + plotH / 2);
+      ctx.fillText('Run the train to plot the ride', padL + plotW / 2, padT + plotH / 2);
       return;
     }
 
-    let top = 0;
-    for (const p of trace) top = Math.max(top, p.total, p.supplied);
-    top = Math.max(top * 1.1, 1);
+    if (graphMode === 'accel') drawAccel(ctx, trace, total, X, padL, padT, plotW, plotH);
+    else drawEnergy(ctx, trace, total, X, padL, padT, plotW, plotH);
 
-    const X = s => padL + plotW * Math.min(1, Math.max(0, s / total));
-    const Y = j => padT + plotH * (1 - j / top);
-
-    // Gridlines.
-    ctx.strokeStyle = GRID;
-    ctx.fillStyle = LABEL;
-    ctx.font = FONT;
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
-    for (let n = 0; n <= 4; n++) {
-      const j = top * n / 4;
-      const yy = Math.round(Y(j)) + 0.5;
-      ctx.beginPath();
-      ctx.moveTo(padL, yy);
-      ctx.lineTo(padL + plotW, yy);
-      ctx.stroke();
-      ctx.fillText(kJ(j).toFixed(0), padL - 5, yy);
-    }
-
-    const series = [
-      { key: 'supplied', colour: SUPPLIED, dash: [4, 3], width: 1.5 },
-      { key: 'total', colour: '#0d9488', dash: [], width: 2 },
-      { key: 'pe', colour: PE, dash: [], width: 1.6 },
-      { key: 'ke', colour: KE, dash: [], width: 1.6 }
-    ];
-
-    for (const ser of series) {
-      ctx.strokeStyle = ser.colour;
-      ctx.lineWidth = ser.width;
-      ctx.setLineDash(ser.dash);
-      ctx.beginPath();
-      let started = false;
-      let prevS = null;
-      for (const p of trace) {
-        const x = X(p.s), y = Y(p[ser.key]);
-        // A lap wrapping past the start line shouldn't draw a line straight
-        // back across the plot.
-        if (started && prevS !== null && p.s < prevS - total * 0.5) started = false;
-        if (!started) { ctx.moveTo(x, y); started = true; }
-        else ctx.lineTo(x, y);
-        prevS = p.s;
-      }
-      ctx.stroke();
-    }
-    ctx.setLineDash([]);
+    drawTurnOverlay(ctx, X, total, padT, plotH);
 
     // Where the train is now.
-    const last = trace[trace.length - 1];
-    const xNow = X(last.s);
+    const xNow = X(trace[trace.length - 1].s);
     ctx.strokeStyle = 'rgba(21,48,77,0.35)';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -253,6 +266,96 @@
     ctx.fillText('0', padL, padT + plotH + 4);
     ctx.fillText(total.toFixed(0) + ' m along the track', padL + plotW / 2, padT + plotH + 4);
   };
+
+  function drawEnergy(ctx, trace, total, X, padL, padT, plotW, plotH) {
+    let top = 0;
+    for (const p of trace) top = Math.max(top, p.total, p.supplied);
+    top = Math.max(top * 1.1, 1);
+    const Y = j => padT + plotH * (1 - j / top);
+
+    ctx.strokeStyle = GRID;
+    ctx.fillStyle = LABEL;
+    ctx.font = FONT;
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    for (let n = 0; n <= 4; n++) {
+      const j = top * n / 4;
+      const yy = Math.round(Y(j)) + 0.5;
+      ctx.beginPath();
+      ctx.moveTo(padL, yy);
+      ctx.lineTo(padL + plotW, yy);
+      ctx.stroke();
+      ctx.fillText(kJ(j).toFixed(0), padL - 5, yy);
+    }
+    ctx.textAlign = 'left';
+    ctx.fillText('kJ', 3, padT - 4);
+
+    plotSeries(ctx, trace, 'supplied', X, Y, total, SUPPLIED, 1.5, [4, 3]);
+    plotSeries(ctx, trace, 'total', X, Y, total, '#0d9488', 2);
+    plotSeries(ctx, trace, 'pe', X, Y, total, PE, 1.6);
+    plotSeries(ctx, trace, 'ke', X, Y, total, KE, 1.6);
+
+    ctx.strokeStyle = AXIS;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padL + 0.5, padT);
+    ctx.lineTo(padL + 0.5, padT + plotH + 0.5);
+    ctx.lineTo(padL + plotW, padT + plotH + 0.5);
+    ctx.stroke();
+  }
+
+  function drawAccel(ctx, trace, total, X, padL, padT, plotW, plotH) {
+    // Range always spans 0..1 g (weightless to sitting still) plus the data,
+    // so the 1 g reference line is meaningful and airtime shows below zero.
+    let lo = -0.5, hi = 1.4;
+    for (const p of trace) {
+      lo = Math.min(lo, p.vg, p.lg);
+      hi = Math.max(hi, p.vg, Math.abs(p.lg));
+    }
+    lo = Math.floor(lo * 2) / 2;
+    hi = Math.ceil(hi * 2) / 2;
+    const Y = g => padT + plotH * (1 - (g - lo) / (hi - lo));
+
+    // Gridline at every whole g.
+    ctx.font = FONT;
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    for (let g = Math.ceil(lo); g <= Math.floor(hi); g++) {
+      const yy = Math.round(Y(g)) + 0.5;
+      ctx.strokeStyle = (g === 0) ? 'rgba(21,48,77,0.3)' : GRID;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(padL, yy);
+      ctx.lineTo(padL + plotW, yy);
+      ctx.stroke();
+      ctx.fillStyle = LABEL;
+      ctx.fillText(g.toFixed(0), padL - 5, yy);
+    }
+
+    // Dashed reference at 1 g — what a rider feels sitting still.
+    const y1 = Math.round(Y(1)) + 0.5;
+    ctx.strokeStyle = 'rgba(21,48,77,0.28)';
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.moveTo(padL, y1);
+    ctx.lineTo(padL + plotW, y1);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.textAlign = 'left';
+    ctx.fillStyle = LABEL;
+    ctx.fillText('g', 3, padT - 4);
+
+    plotSeries(ctx, trace, 'vg', X, Y, total, VERT_G, 1.8);
+    plotSeries(ctx, trace, 'lg', X, Y, total, LAT_G, 1.8);
+
+    ctx.strokeStyle = AXIS;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padL + 0.5, padT);
+    ctx.lineTo(padL + 0.5, padT + plotH + 0.5);
+    ctx.stroke();
+  }
 
   /* ---- ride report ------------------------------------------------------- */
   function row(label, value) {

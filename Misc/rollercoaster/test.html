@@ -1453,6 +1453,88 @@
     }
   });
 
+  /* ---- graph overlay ----------------------------------------------------- */
+  check('piece spans number turns and loops in build order', () => {
+    RC.resetTrack();
+    for (const id of ['flat', 'turn-right-wide', 'flat', 'turn-left-tight',
+                      'flat', 'loop-right', 'flat', 'turn-right-tight']) {
+      if (!RC.place(id)) return `${id} refused`;
+    }
+    const spans = RC.pieceSpans();
+    const labelled = spans.filter(s => s.label).map(s => s.label);
+    // Three turns and one loop, numbered independently in the order built.
+    if (labelled.join(',') !== 'T1,T2,L1,T3') {
+      return `labels came out "${labelled.join(',')}", expected "T1,T2,L1,T3"`;
+    }
+    // Only turns and loops get labels.
+    for (const s of spans) {
+      if (s.label && s.kind !== 'turn' && s.kind !== 'loop') {
+        return `a ${s.kind} piece was labelled ${s.label}`;
+      }
+    }
+  });
+
+  check('piece spans are ordered, non-overlapping and cover the track', () => {
+    RC.loadPrefab('first-drop');
+    const spans = RC.pieceSpans();
+    const total = RC.trackPath().total;
+    if (!near(spans[0].s0, 0, 1e-9)) return `first span starts at ${spans[0].s0}`;
+    if (!near(spans[spans.length - 1].s1, total, 1e-6)) {
+      return `last span ends at ${spans[spans.length - 1].s1}, track is ${total.toFixed(1)} m`;
+    }
+    for (let n = 0; n < spans.length; n++) {
+      const sp = spans[n];
+      if (sp.s1 < sp.s0) return `span ${n} runs backwards`;
+      if (sp.sMid < sp.s0 || sp.sMid > sp.s1) return `span ${n} midpoint is outside its range`;
+      if (n > 0 && Math.abs(sp.s0 - spans[n - 1].s1) > 1e-6) {
+        return `gap between spans ${n - 1} and ${n}`;
+      }
+    }
+  });
+
+  check('a labelled turn coincides with its lateral-g spike in the trace', () => {
+    // The point of the overlay: a student reading a spike can name the turn.
+    RC.resetTrack();
+    // Long run-up so there is real speed into the turn.
+    for (let n = 0; n < 10; n++) RC.place('flat');
+    RC.place('flat-to-gentle-down');
+    for (let n = 0; n < 6; n++) RC.place('gentle-down');
+    RC.place('gentle-down-to-flat');
+    for (let n = 0; n < 4; n++) RC.place('flat');
+    RC.place('turn-right-tight');           // the turn we will look for
+    for (let n = 0; n < 4; n++) RC.place('flat');
+
+    const spans = RC.pieceSpans();
+    const turn = spans.find(s => s.label === 'T1');
+    if (!turn) return 'no turn was labelled';
+
+    RC.sim.cars = 1;
+    RC.sim.friction = false;
+    RC.resetSim(0);
+    runFor(60);
+
+    // The largest lateral g in the whole run should fall within the turn's
+    // span along the track.
+    let peak = null;
+    for (const p of RC.sim.trace) {
+      if (!peak || Math.abs(p.lg) > Math.abs(peak.lg)) peak = p;
+    }
+    if (!peak || Math.abs(peak.lg) < 0.3) return `no real lateral spike (peak ${peak ? peak.lg.toFixed(2) : 'none'})`;
+    if (peak.s < turn.s0 - 1 || peak.s > turn.s1 + 1) {
+      return `lateral peak at s=${peak.s.toFixed(1)} m is outside T1's span ` +
+             `[${turn.s0.toFixed(1)}, ${turn.s1.toFixed(1)}]`;
+    }
+  });
+
+  check('the graph mode setter is well behaved', () => {
+    RC.setGraphMode('accel');
+    if (RC.graphMode() !== 'accel') return 'did not switch to accel';
+    RC.setGraphMode('energy');
+    if (RC.graphMode() !== 'energy') return 'did not switch back to energy';
+    RC.setGraphMode('nonsense');
+    if (RC.graphMode() !== 'energy') return 'an unknown mode should fall back to energy';
+  });
+
   /* ---- report ---------------------------------------------------------- */
   const ul = document.getElementById('results');
   let failed = 0;

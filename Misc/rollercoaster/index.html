@@ -230,17 +230,29 @@
 
 <section class="window" id="win-graph" hidden style="left: 24px; top: 300px; width: 420px;">
   <div class="window-hd">
-    <span>Energy along the track</span>
+    <span>Along the track</span>
     <button class="window-x" type="button" aria-label="Close">×</button>
   </div>
   <div class="window-body">
+    <div class="auto-row" id="graph-modes" style="margin-bottom:0.5rem">
+      <button class="pal-wide active" data-graph="energy" type="button">Energy</button>
+      <button class="pal-wide" data-graph="accel" type="button">Acceleration</button>
+    </div>
     <canvas id="energy-graph" class="mini-canvas" style="height: 200px;"></canvas>
-    <div class="legend">
+    <div class="legend" id="legend-energy">
       <span><i style="background:#e8963c"></i>Kinetic</span>
       <span><i style="background:#4a90d9"></i>Potential</span>
       <span><i style="background:#0d9488"></i>Total</span>
       <span><i class="dashed"></i>Supplied</span>
     </div>
+    <div class="legend" id="legend-accel" hidden>
+      <span><i style="background:#0d9488"></i>Vertical g</span>
+      <span><i style="background:#c2185b"></i>Lateral g</span>
+      <span><i class="dashed"></i>1 g (sitting still)</span>
+    </div>
+    <p class="hint" style="margin:0.4rem 0 0">
+      <b>T</b> marks each turn, <b>L</b> each loop, numbered in build order.
+    </p>
   </div>
 </section>
 

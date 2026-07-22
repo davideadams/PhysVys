@@ -417,6 +417,30 @@
     ];
   }
 
+  /* Each piece's extent along the arc-length path, in metres, with its
+     midpoint — for annotating the graph. Turns and loops are numbered in
+     build order (T1, T2… and L1, L2…) since those are the pieces whose
+     acceleration is worth pointing at. */
+  RC.pieceSpans = function () {
+    const pts = RC.trackPath().pts;
+    const spans = [];
+    let cur = null, tN = 0, lN = 0;
+    for (const p of pts) {
+      if (!cur || cur.pi !== p.pi) {
+        cur = { pi: p.pi, defId: p.piece.defId, kind: p.def.kind, s0: p.s, s1: p.s, label: null };
+        spans.push(cur);
+      } else {
+        cur.s1 = p.s;
+      }
+    }
+    for (const sp of spans) {
+      sp.sMid = (sp.s0 + sp.s1) / 2;
+      if (sp.kind === 'turn') sp.label = 'T' + (++tN);
+      else if (sp.kind === 'loop') sp.label = 'L' + (++lN);
+    }
+    return spans;
+  };
+
   /* Distance along the track between two arc positions. On a closed circuit
      the short way round counts, so a point just after the start line is near
      one just before it rather than a full lap away. */
