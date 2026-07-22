@@ -56,6 +56,46 @@
     return out;
   };
 
+  /* Orthonormal frame for a car at path point p, in METRES so the pitch is a
+     true angle rather than one distorted by the tile/level scale difference.
+
+       f — forward, the full 3D tangent, so the car pitches with the track
+       r — right, horizontal by construction (f x up)
+       u — up, perpendicular to the track surface (r x f)
+
+     Returned in metre-space; the renderer divides back by TILE_M / LEVEL_M. */
+  RC.carFrame = function (p) {
+    const cl = closed();
+    const a = RC.pathAt(p.s - 0.6, cl) || p;
+    const b = RC.pathAt(p.s + 0.6, cl) || p;
+
+    let fx = (b.x - a.x) * RC.TILE_M;
+    let fy = (b.y - a.y) * RC.TILE_M;
+    let fz = (b.z - a.z) * RC.LEVEL_M;
+    let fl = Math.hypot(fx, fy, fz);
+    if (fl < 1e-9) { fx = 1; fy = 0; fz = 0; fl = 1; }
+    fx /= fl; fy /= fl; fz /= fl;
+
+    // r = f x (0,0,1), which has no vertical component.
+    let rx = fy, ry = -fx;
+    const rl = Math.hypot(rx, ry);
+    if (rl < 1e-9) { rx = 1; ry = 0; }       // track pointing straight up
+    else { rx /= rl; ry /= rl; }
+
+    // u = r x f
+    let ux = ry * fz;
+    let uy = -rx * fz;
+    let uz = rx * fy - ry * fx;
+    const ul = Math.hypot(ux, uy, uz) || 1;
+    ux /= ul; uy /= ul; uz /= ul;
+
+    return {
+      f: { x: fx, y: fy, z: fz },
+      r: { x: rx, y: ry, z: 0 },
+      u: { x: ux, y: uy, z: uz }
+    };
+  };
+
   function meanOf(cars, key) {
     if (!cars.length) return 0;
     let t = 0;

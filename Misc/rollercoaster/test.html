@@ -579,6 +579,47 @@
     RC.sim.cars = 4;
   });
 
+  check('car orientation frame is orthonormal and pitches with the track', () => {
+    RC.track.pieces = [];
+    RC.track.start = { i: 6, j: 20, dir: 0, k: 10, g: 0 };
+    RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
+    for (const id of ['flat', 'flat-to-gentle-down', 'gentle-down', 'gentle-down',
+                      'gentle-down-to-flat', 'flat']) {
+      if (!RC.place(id)) return `${id} refused`;
+    }
+    const path = RC.trackPath();
+    const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z;
+    const len = a => Math.hypot(a.x, a.y, a.z);
+
+    let sawPitch = false, sawFlat = false;
+    for (let s = 0.5; s < path.total - 0.5; s += 0.5) {
+      const p = RC.pathAt(s, false);
+      const fr = RC.carFrame(p);
+
+      for (const [name, v] of [['f', fr.f], ['r', fr.r], ['u', fr.u]]) {
+        if (!near(len(v), 1, 1e-6)) return `${name} is not unit length at s=${s} (${len(v).toFixed(5)})`;
+      }
+      if (!near(dot(fr.f, fr.r), 0, 1e-6)) return `f and r not perpendicular at s=${s}`;
+      if (!near(dot(fr.f, fr.u), 0, 1e-6)) return `f and u not perpendicular at s=${s}`;
+      if (!near(dot(fr.r, fr.u), 0, 1e-6)) return `r and u not perpendicular at s=${s}`;
+      if (fr.r.z !== 0) return `r should stay horizontal, got z=${fr.r.z} at s=${s}`;
+      if (fr.u.z <= 0) return `u should point upwards, got z=${fr.u.z} at s=${s}`;
+
+      // On the gentle slope the car must actually be tilted.
+      if (Math.abs(fr.f.z) > 0.4) {
+        sawPitch = true;
+        if (fr.u.z > 0.95) return `car is not tilted at s=${s}: u.z=${fr.u.z.toFixed(4)}`;
+      }
+      if (Math.abs(fr.f.z) < 1e-6) {
+        sawFlat = true;
+        if (!near(fr.u.z, 1, 1e-6)) return `car should be level on flat track at s=${s}`;
+      }
+    }
+    if (!sawPitch) return 'never found a sloped section to check';
+    if (!sawFlat) return 'never found a flat section to check';
+  });
+
   /* ---- report ---------------------------------------------------------- */
   const ul = document.getElementById('results');
   let failed = 0;

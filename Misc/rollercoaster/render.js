@@ -225,10 +225,11 @@
   /* ---- train ------------------------------------------------------------
      Each car is a small isometric box sitting on the rails, oriented along
      the local tangent so it banks round with the track. */
-  const CAR_HL = 0.375;   // half length, tiles (3 m car)
-  const CAR_HW = 0.20;    // half width, tiles (1.6 m)
-  const CAR_H = 1.6;      // height, levels
-  const CAR_FLOOR = 0.25; // sits this far above the rail centreline
+  /* All in METRES; drawCar converts to tile/level space at the end. */
+  const CAR_HL = 1.5;     // half length (3 m car)
+  const CAR_HW = 0.8;     // half width (1.6 m)
+  const CAR_H = 1.6;      // height
+  const CAR_FLOOR = 0.25; // clearance above the rail centreline
 
   const CAR_FRONT = '#cf3a2f';
   const CAR_BODY = '#1f6fb2';
@@ -251,21 +252,20 @@
 
   function drawCar(ctx, d, cam, view) {
     const p = d.p;
-    const cl = RC.isClosed();
-    const a = RC.pathAt(p.s - 0.6, cl) || p;
-    const b = RC.pathAt(p.s + 0.6, cl) || p;
-    let tx = b.x - a.x, ty = b.y - a.y;
-    const len = Math.hypot(tx, ty);
-    if (len < 1e-9) { tx = 1; ty = 0; } else { tx /= len; ty /= len; }
-    const nx = -ty, ny = tx;
+    // Body axes follow the track's full 3D tangent, so the car pitches with
+    // the slope instead of sitting horizontally on a hill.
+    const { f, r, u } = RC.carFrame(p);
 
-    const P = (fl, fw, dz) => RC.toScreen(
-      p.x + tx * CAR_HL * fl + nx * CAR_HW * fw,
-      p.y + ty * CAR_HL * fl + ny * CAR_HW * fw,
-      p.z + CAR_FLOOR + dz, cam, view);
+    const P = (fl, fw, fu) => {
+      const up = CAR_FLOOR + CAR_H * fu;
+      const mx = p.x * RC.TILE_M + f.x * CAR_HL * fl + r.x * CAR_HW * fw + u.x * up;
+      const my = p.y * RC.TILE_M + f.y * CAR_HL * fl + r.y * CAR_HW * fw + u.y * up;
+      const mz = p.z * RC.LEVEL_M + f.z * CAR_HL * fl + r.z * CAR_HW * fw + u.z * up;
+      return RC.toScreen(mx / RC.TILE_M, my / RC.TILE_M, mz / RC.LEVEL_M, cam, view);
+    };
 
     const lo = [P(1, 1, 0), P(1, -1, 0), P(-1, -1, 0), P(-1, 1, 0)];
-    const hi = [P(1, 1, CAR_H), P(1, -1, CAR_H), P(-1, -1, CAR_H), P(-1, 1, CAR_H)];
+    const hi = [P(1, 1, 1), P(1, -1, 1), P(-1, -1, 1), P(-1, 1, 1)];
 
     const base = d.idx === 0 ? CAR_FRONT : CAR_BODY;
 
