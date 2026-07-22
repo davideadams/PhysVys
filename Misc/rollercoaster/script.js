@@ -12,6 +12,7 @@
   const state = {
     view: { w: 960, h: 600, dpr: 1 },
     hover: null,       // {i, j} tile under the cursor, or null
+    showHeights: false,
     dragging: false,
     dragMoved: false,
     lastX: 0,
@@ -135,6 +136,13 @@
     setZoom(cam.zoom / 1.25, state.view.w / 2, state.view.h / 2));
   document.getElementById('btn-view-reset').addEventListener('click', resetView);
 
+  const btnHeights = document.getElementById('btn-heights');
+  btnHeights.addEventListener('click', () => {
+    state.showHeights = !state.showHeights;
+    btnHeights.classList.toggle('active', state.showHeights);
+    state.dirty = true;
+  });
+
   /* ---- readouts -------------------------------------------------------- */
   const roTile = document.getElementById('ro-tile');
   const roScale = document.getElementById('ro-scale');
@@ -183,6 +191,7 @@
     for (const t of RC.trainDrawables(cam)) extras.push(t);
 
     RC.drawTrack(ctx, cam, view, extras);
+    if (state.showHeights) RC.drawHeightLabels(ctx, cam, view);
     RC.drawCompass(ctx, cam, view);
   }
 
