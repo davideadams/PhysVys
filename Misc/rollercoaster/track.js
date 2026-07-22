@@ -246,6 +246,19 @@
     return 2 * lc / (lu * lv * lw);
   }
 
+  /* Distance along the track between two arc positions. On a closed circuit
+     the short way round counts, so a point just after the start line is near
+     one just before it rather than a full lap away. */
+  RC.arcGap = function (s1, s2, closed) {
+    const total = RC.trackPath().total;
+    let d = Math.abs(s1 - s2);
+    if (closed && total > 0) {
+      d = d % total;
+      d = Math.min(d, total - d);
+    }
+    return d;
+  };
+
   /* Interpolated state at arc position s (metres). Wraps on a closed
      circuit, clamps otherwise. */
   RC.pathAt = function (sQuery, closed) {

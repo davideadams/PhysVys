@@ -161,10 +161,37 @@
 
   /* ---- assembly --------------------------------------------------------- */
 
+  /* Sorting each rail segment on its own breaks down where a car sits on the
+     track: segments a little ahead of the car sort in front of it and paint
+     over the body. Track a car is riding on is always underneath it, so those
+     segments are pushed behind their car. Math.min means a segment is only
+     ever moved earlier, never later, so nothing else's ordering is disturbed.
+
+     Only segments within a car's own length are affected, so track genuinely
+     crossing in front at a different point along the ride still occludes
+     normally. */
+  const CAR_COVER_M = 3.0;
+
+  function coverSorter(cam) {
+    const cars = (RC.sim && RC.carStates) ? RC.carStates() : [];
+    if (!cars.length) return null;
+    const closed = RC.isClosed();
+    const depths = cars.map(c => RC.depth(c.x, c.y, c.z, cam.rot) + 0.4);
+    return function (s, natural) {
+      for (let n = 0; n < cars.length; n++) {
+        if (RC.arcGap(s, cars[n].s, closed) < CAR_COVER_M) {
+          return Math.min(natural, depths[n] - 0.01);
+        }
+      }
+      return natural;
+    };
+  }
+
   RC.drawTrack = function (ctx, cam, view, extras) {
     const path = RC.trackPath();
     const pts = path.pts;
     const list = [];
+    const cover = coverSorter(cam);
 
     if (pts.length > 1) {
       const normals = pts.map((_, n) => normalAt(pts, n));
@@ -172,7 +199,8 @@
       for (let n = 1; n < pts.length; n++) {
         const a = pts[n - 1], b = pts[n];
         const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 };
-        const d = RC.depth(mid.x, mid.y, mid.z, cam.rot);
+        let d = RC.depth(mid.x, mid.y, mid.z, cam.rot);
+        if (cover) d = cover((a.s + b.s) / 2, d);
         list.push({
           depth: d, draw: drawRail,
           a, b, na: normals[n - 1], nb: normals[n]
@@ -191,14 +219,19 @@
         const p = pts[n];
         if (p.s >= nextSleeper) {
           nextSleeper = p.s + SLEEPER_M;
+          const base = RC.depth(p.x, p.y, p.z, cam.rot);
+          let ds = base - 0.3;
+          if (cover) ds = cover(p.s, ds);
           list.push({
-            depth: RC.depth(p.x, p.y, p.z, cam.rot) - 0.3,
+            depth: ds,
             draw: drawSleeper, p, n: normals[n],
             colour: sleeperColour(p.def, p.piece)
           });
           if (p.piece.lift) {
+            let dc = base + 0.2;
+            if (cover) dc = cover(p.s, dc);
             list.push({
-              depth: RC.depth(p.x, p.y, p.z, cam.rot) + 0.2,
+              depth: dc,
               draw: drawChain, p, n: normals[n]
             });
           }

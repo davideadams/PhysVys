@@ -379,6 +379,32 @@
     }
   });
 
+  check('arc gap takes the short way round a closed circuit', () => {
+    RC.resetTrack();
+    if (!RC.completeTrack().ok) return 'could not build a closed circuit';
+    const total = RC.trackPath().total;
+
+    // Open track: plain absolute difference.
+    if (!near(RC.arcGap(10, 4, false), 6, 1e-9)) return 'open gap should be 6';
+    if (!near(RC.arcGap(4, 10, false), 6, 1e-9)) return 'open gap should be symmetric';
+
+    // Closed: a point just past the start line is near one just before it.
+    const gap = RC.arcGap(1, total - 1, true);
+    if (!near(gap, 2, 1e-6)) {
+      return `across the start line the gap is ${gap.toFixed(3)} m, expected 2`;
+    }
+    // Never more than half a lap.
+    for (let a = 0; a < total; a += total / 13) {
+      for (let b = 0; b < total; b += total / 7) {
+        const d = RC.arcGap(a, b, true);
+        if (d < -1e-9 || d > total / 2 + 1e-6) {
+          return `gap ${d.toFixed(2)} m between ${a.toFixed(1)} and ${b.toFixed(1)} ` +
+                 `is outside [0, ${(total / 2).toFixed(1)}]`;
+        }
+      }
+    }
+  });
+
   /* ---- construction UI's piece resolution -------------------------------
      The build window picks pieces by looking up "entry slope > exit slope".
      That only works if the piece table covers every reachable pair exactly
