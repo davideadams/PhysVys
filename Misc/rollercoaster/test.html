@@ -29,6 +29,7 @@
 
 <script src="iso.js"></script>
 <script src="track.js"></script>
+<script src="physics.js"></script>
 <script>
 (function () {
   const RC = window.RC;
@@ -376,6 +377,206 @@
     if (!near(RC.pieceLength(wide), expect, 1e-6)) {
       return `wide turn is ${RC.pieceLength(wide)} m, expected ${expect.toFixed(3)}`;
     }
+  });
+
+  /* ---- physics ---------------------------------------------------------
+     The invariant the whole sim exists to teach: KE + PE + thermal must
+     equal the energy it started with plus whatever the motor put in. If
+     this drifts, the energy bars are lying to students. */
+
+  /* A closed circuit with a lift hill and a drop, for the physics checks. */
+  function buildTestCircuit() {
+    RC.resetTrack();
+    const seq = ['flat-to-gentle-up', 'gentle-up', 'gentle-up', 'gentle-up-to-flat',
+                 'flat', 'flat-to-gentle-down', 'gentle-down', 'gentle-down',
+                 'gentle-down-to-flat', 'flat', 'flat'];
+    for (const id of seq) {
+      if (!RC.place(id, { lift: true })) return `${id} refused: ` +
+        RC.canPlace(RC.pieceDef(id), RC.track.head).why;
+    }
+    return null;
+  }
+
+  function runFor(seconds) {
+    RC.sim.state = 'running';
+    const dt = 1 / 240;
+    for (let n = 0; n < seconds * 240 && RC.sim.state === 'running'; n++) {
+      RC.stepSim(dt);
+    }
+  }
+
+  check('energy is conserved on a frictionless run', () => {
+    const err = buildTestCircuit();
+    if (err) return err;
+    RC.sim.cars = 3;
+    RC.sim.friction = false;
+    RC.resetSim(13);          // lead car onto the lift, or nothing ever moves
+    const e0 = RC.energy();
+    runFor(8);
+    const e = RC.energy();
+    const drift = Math.abs(e.total - e.supplied);
+    const scale = Math.max(1, e.supplied);
+    if (drift / scale > 0.01) {
+      return `total ${e.total.toFixed(1)} J vs supplied ${e.supplied.toFixed(1)} J ` +
+             `(drift ${(100 * drift / scale).toFixed(2)}%), started at ${e0.total.toFixed(1)} J`;
+    }
+  });
+
+  check('energy is conserved with friction on (losses go to thermal)', () => {
+    const err = buildTestCircuit();
+    if (err) return err;
+    RC.sim.cars = 3;
+    RC.sim.friction = true;
+    RC.resetSim(13);
+    runFor(8);
+    const e = RC.energy();
+    const drift = Math.abs(e.total - e.supplied);
+    const scale = Math.max(1, e.supplied);
+    if (drift / scale > 0.01) {
+      return `total ${e.total.toFixed(1)} J vs supplied ${e.supplied.toFixed(1)} J ` +
+             `(drift ${(100 * drift / scale).toFixed(2)}%)`;
+    }
+    if (e.thermal <= 0) return 'friction was on but no thermal energy accumulated';
+    RC.sim.friction = false;
+  });
+
+  check('a train released on a slope accelerates downhill', () => {
+    RC.track.pieces = [];
+    RC.track.start = { i: 6, j: 20, dir: 0, k: 20, g: 0 };
+    RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
+    for (const id of ['flat-to-gentle-down', 'gentle-down', 'gentle-down', 'gentle-down']) {
+      if (!RC.place(id)) return `${id} refused`;
+    }
+    RC.sim.cars = 1;
+    RC.sim.friction = false;
+    // Start past the transition piece, on constant gentle-down, so the
+    // comparison against a = g*sin(theta) is against a constant slope.
+    RC.resetSim(5);
+    runFor(1.5);
+    if (RC.sim.v <= 0) return `speed is ${RC.sim.v.toFixed(2)} m/s, expected positive`;
+    // Gentle is 2 levels per 4 m tile, so sin(theta) = 2/sqrt(4^2 + 2^2).
+    const expected = 9.81 * (2 / Math.sqrt(4 * 4 + 2 * 2)) * 1.5;
+    if (Math.abs(RC.sim.v - expected) / expected > 0.25) {
+      return `after 1.5 s v = ${RC.sim.v.toFixed(2)} m/s, expected roughly ${expected.toFixed(2)}`;
+    }
+  });
+
+  check('gravity converts potential energy into kinetic', () => {
+    RC.track.pieces = [];
+    RC.track.start = { i: 6, j: 20, dir: 0, k: 20, g: 0 };
+    RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
+    for (const id of ['flat-to-gentle-down', 'gentle-down', 'gentle-down',
+                      'gentle-down', 'gentle-down-to-flat']) {
+      if (!RC.place(id)) return `${id} refused`;
+    }
+    RC.sim.cars = 1;
+    RC.sim.friction = false;
+    RC.resetSim(0);
+    const start = RC.energy();
+    runFor(2);                // stop short of the end, which would zero v
+    const end = RC.energy();
+    if (!(end.ke > start.ke)) return 'kinetic energy did not increase';
+    if (!(end.pe < start.pe)) return 'potential energy did not decrease';
+    const gained = end.ke - start.ke, lost = start.pe - end.pe;
+    if (Math.abs(gained - lost) / Math.max(1, lost) > 0.01) {
+      return `KE gained ${gained.toFixed(1)} J but PE lost ${lost.toFixed(1)} J`;
+    }
+  });
+
+  check('the chain lift is booked as motor energy', () => {
+    RC.track.pieces = [];
+    RC.track.start = { i: 6, j: 20, dir: 0, k: 0, g: 0 };
+    RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
+    for (const id of ['flat-to-gentle-up', 'gentle-up', 'gentle-up', 'gentle-up']) {
+      if (!RC.place(id, { lift: true })) return `${id} refused`;
+    }
+    RC.sim.cars = 1;
+    RC.sim.friction = false;
+    RC.resetSim(0);
+    runFor(2);
+    if (RC.sim.eMotor <= 0) return 'the lift did no work';
+    const e = RC.energy();
+    if (Math.abs(e.total - e.supplied) / Math.max(1, e.supplied) > 0.01) {
+      return `total ${e.total.toFixed(1)} J vs supplied ${e.supplied.toFixed(1)} J`;
+    }
+    // Without the lift the train would simply have rolled back down.
+    if (RC.sim.v <= 0) return `train is not climbing: v = ${RC.sim.v.toFixed(2)}`;
+  });
+
+  check('a train that cannot crest a hill rolls back', () => {
+    RC.track.pieces = [];
+    RC.track.start = { i: 6, j: 20, dir: 0, k: 6, g: 0 };
+    RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
+    // A dip, then a hill far too tall to climb from rest.
+    for (const id of ['flat-to-gentle-down', 'gentle-down', 'gentle-down-to-flat', 'flat',
+                      'flat-to-gentle-up', 'gentle-up', 'gentle-up', 'gentle-up',
+                      'gentle-up', 'gentle-up']) {
+      if (!RC.place(id)) return `${id} refused`;
+    }
+    RC.sim.cars = 1;
+    RC.sim.friction = false;
+    // Released partway down, so it can never climb back to s = 0 and trip
+    // the end-of-track stop instead of oscillating in the dip.
+    RC.resetSim(6);
+    runFor(30);
+    if (RC.sim.maxZ * 1 > 20) return 'train somehow climbed the hill';
+    if (RC.sim.reversals < 2) {
+      return `expected the train to roll back and forth, saw ${RC.sim.reversals} reversals`;
+    }
+  });
+
+  check('train length changes the effective slope (mean over cars)', () => {
+    // A long train straddling a crest still has cars on the climb behind it,
+    // so it feels a slope the lead car alone does not. This is the whole
+    // reason the physics averages over cars rather than tracking one point.
+    RC.track.pieces = [];
+    RC.track.start = { i: 6, j: 20, dir: 0, k: 0, g: 0 };
+    RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
+    // Six flat pieces of run-up, so a six-car train fits behind the crest
+    // without any car being clamped at s = 0.
+    const seq = new Array(6).fill('flat').concat(
+      ['flat-to-gentle-up', 'gentle-up', 'gentle-up-to-flat',
+       'flat-to-gentle-down', 'gentle-down', 'gentle-down-to-flat']);
+    for (const id of seq) {
+      if (!RC.place(id)) return `${id} refused`;
+    }
+    const path = RC.trackPath();
+
+    // The crest is the highest path point.
+    let crest = path.pts[0];
+    for (const p of path.pts) if (p.z > crest.z) crest = p;
+    if (crest.s < 6 * RC.CAR_SPACING) {
+      return `crest at ${crest.s.toFixed(1)} m is too close to the start`;
+    }
+
+    RC.sim.friction = false;
+    const mean = a => a.reduce((t, c) => t + c.dzds, 0) / a.length;
+
+    RC.sim.cars = 1;
+    RC.resetSim(crest.s);
+    const one = RC.carStates();
+    if (one.length !== 1) return `expected 1 car, got ${one.length}`;
+
+    RC.sim.cars = 6;
+    RC.resetSim(crest.s);
+    const six = RC.carStates();
+    if (six.length !== 6) return `expected 6 cars, got ${six.length}`;
+    if (six.some(c => c.s <= 0)) return 'a car was clamped at the start of the track';
+
+    // The lead car sits on the crest, so it feels essentially nothing.
+    if (Math.abs(mean(one)) > 0.05) {
+      return `lead car at the crest feels slope ${mean(one).toFixed(4)}, expected ~0`;
+    }
+    // The six-car train still has cars on the climb, so it feels the hill.
+    if (Math.abs(mean(six)) < 0.05) {
+      return `six-car mean slope ${mean(six).toFixed(4)} — train length had no effect`;
+    }
+    RC.sim.cars = 4;
   });
 
   /* ---- report ---------------------------------------------------------- */

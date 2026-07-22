@@ -180,11 +180,74 @@
       });
     }
 
+    for (const t of RC.trainDrawables(cam)) extras.push(t);
+
     RC.drawTrack(ctx, cam, view, extras);
     RC.drawCompass(ctx, cam, view);
   }
 
-  function frame() {
+  /* ---- ride controls ---------------------------------------------------- */
+  const btnTest = document.getElementById('btn-test');
+  const roRide = document.getElementById('ro-ride');
+
+  function updateRideUI() {
+    const sim = RC.sim;
+    const running = sim.state === 'running';
+    btnTest.textContent = running ? '■ Pause' : '▶ Test';
+    btnTest.classList.toggle('active', running);
+
+    if (sim.note && sim.state !== 'running') {
+      roRide.textContent = sim.note;
+    } else if (running || sim.time > 0) {
+      const e = RC.energy();
+      roRide.textContent =
+        `${(Math.abs(sim.v) * 3.6).toFixed(0)} km/h · ${e.h.toFixed(1)} m · ${sim.time.toFixed(1)} s`;
+    } else {
+      roRide.textContent = 'Train at the station';
+    }
+  }
+  RC.updateRideUI = updateRideUI;
+
+  btnTest.addEventListener('click', () => {
+    if (RC.sim.state === 'running') RC.pauseSim();
+    else RC.startSim();
+    updateRideUI();
+    state.dirty = true;
+  });
+
+  document.getElementById('btn-ride-reset').addEventListener('click', () => {
+    RC.resetSim();
+    updateRideUI();
+    state.dirty = true;
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.code !== 'Space' || e.target.matches('input, textarea, button')) return;
+    e.preventDefault();
+    if (RC.sim.state === 'running') RC.pauseSim(); else RC.startSim();
+    updateRideUI();
+    state.dirty = true;
+  });
+
+  /* Called by build.js whenever the track is edited. */
+  RC.onTrackEdit = function () {
+    RC.pauseSim();
+    RC.resetSim();
+    updateRideUI();
+  };
+
+  /* ---- frame ------------------------------------------------------------ */
+  let lastT = 0;
+  function frame(t) {
+    const dt = lastT ? (t - lastT) / 1000 : 0;
+    lastT = t;
+
+    if (RC.sim.state === 'running') {
+      RC.stepSim(dt);
+      updateRideUI();
+      state.dirty = true;
+    }
+
     if (state.dirty) {
       state.dirty = false;
       render();
@@ -197,6 +260,8 @@
   RC.initWindows();
   RC.resetTrack();
   RC.initBuild();
+  RC.resetSim();
+  updateRideUI();
   resize();
   requestAnimationFrame(frame);
 })();

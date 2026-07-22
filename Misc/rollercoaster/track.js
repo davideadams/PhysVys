@@ -210,9 +210,75 @@
       }
     }
 
+    /* Per-point slope and curvature, in metres, for the physics. dz/ds is the
+       sine of the track's pitch — the whole of the gravitational term. */
+    for (let n = 0; n < pts.length; n++) {
+      const a = pts[Math.max(0, n - 1)];
+      const b = pts[Math.min(pts.length - 1, n + 1)];
+      const ds = b.s - a.s;
+      pts[n].dzds = ds > 1e-9 ? (b.z - a.z) * RC.LEVEL_M / ds : 0;
+      pts[n].curv = curvature(a, pts[n], b);
+    }
+
     pathCache = { pts, total: s };
     pathCacheVersion = RC.version;
     return pathCache;
+  };
+
+  /* Curvature as the reciprocal of the circumradius of three points, in
+     metres. Used for the centripetal term in the g-force estimate. */
+  function curvature(a, b, c) {
+    const P = p => [p.x * RC.TILE_M, p.y * RC.TILE_M, p.z * RC.LEVEL_M];
+    const [ax, ay, az] = P(a), [bx, by, bz] = P(b), [cx, cy, cz] = P(c);
+    const u = [bx - ax, by - ay, bz - az];
+    const v = [cx - bx, cy - by, cz - bz];
+    const w = [cx - ax, cy - ay, cz - az];
+    const cross = [
+      u[1] * v[2] - u[2] * v[1],
+      u[2] * v[0] - u[0] * v[2],
+      u[0] * v[1] - u[1] * v[0]
+    ];
+    const lu = Math.hypot(u[0], u[1], u[2]);
+    const lv = Math.hypot(v[0], v[1], v[2]);
+    const lw = Math.hypot(w[0], w[1], w[2]);
+    const lc = Math.hypot(cross[0], cross[1], cross[2]);
+    if (lu < 1e-9 || lv < 1e-9 || lw < 1e-9) return 0;
+    return 2 * lc / (lu * lv * lw);
+  }
+
+  /* Interpolated state at arc position s (metres). Wraps on a closed
+     circuit, clamps otherwise. */
+  RC.pathAt = function (sQuery, closed) {
+    const path = RC.trackPath();
+    const pts = path.pts;
+    if (pts.length < 2) return null;
+
+    let s = sQuery;
+    if (closed) {
+      s = ((s % path.total) + path.total) % path.total;
+    } else {
+      s = Math.min(path.total, Math.max(0, s));
+    }
+
+    let lo = 0, hi = pts.length - 1;
+    while (lo + 1 < hi) {
+      const mid = (lo + hi) >> 1;
+      if (pts[mid].s <= s) lo = mid; else hi = mid;
+    }
+    const a = pts[lo], b = pts[hi];
+    const span = b.s - a.s;
+    const f = span > 1e-9 ? (s - a.s) / span : 0;
+    const mix = (p, q) => p + (q - p) * f;
+    return {
+      s,
+      x: mix(a.x, b.x),
+      y: mix(a.y, b.y),
+      z: mix(a.z, b.z),
+      dzds: mix(a.dzds, b.dzds),
+      curv: mix(a.curv, b.curv),
+      piece: f < 0.5 ? a.piece : b.piece,
+      def: f < 0.5 ? a.def : b.def
+    };
   };
 
   function sameNode(a, b) {

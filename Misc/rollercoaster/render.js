@@ -222,6 +222,84 @@
     for (const d of list) d.draw(ctx, d, cam, view);
   };
 
+  /* ---- train ------------------------------------------------------------
+     Each car is a small isometric box sitting on the rails, oriented along
+     the local tangent so it banks round with the track. */
+  const CAR_HL = 0.375;   // half length, tiles (3 m car)
+  const CAR_HW = 0.20;    // half width, tiles (1.6 m)
+  const CAR_H = 1.6;      // height, levels
+  const CAR_FLOOR = 0.25; // sits this far above the rail centreline
+
+  const CAR_FRONT = '#cf3a2f';
+  const CAR_BODY = '#1f6fb2';
+  const CAR_TOP_LIGHTEN = '#ffffff';
+  const CAR_EDGE = 'rgba(15, 30, 45, 0.75)';
+
+  function quad(ctx, p, fill, stroke) {
+    ctx.beginPath();
+    ctx.moveTo(p[0].x, p[0].y);
+    for (let n = 1; n < p.length; n++) ctx.lineTo(p[n].x, p[n].y);
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+    if (stroke) {
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+
+  function drawCar(ctx, d, cam, view) {
+    const p = d.p;
+    const cl = RC.isClosed();
+    const a = RC.pathAt(p.s - 0.6, cl) || p;
+    const b = RC.pathAt(p.s + 0.6, cl) || p;
+    let tx = b.x - a.x, ty = b.y - a.y;
+    const len = Math.hypot(tx, ty);
+    if (len < 1e-9) { tx = 1; ty = 0; } else { tx /= len; ty /= len; }
+    const nx = -ty, ny = tx;
+
+    const P = (fl, fw, dz) => RC.toScreen(
+      p.x + tx * CAR_HL * fl + nx * CAR_HW * fw,
+      p.y + ty * CAR_HL * fl + ny * CAR_HW * fw,
+      p.z + CAR_FLOOR + dz, cam, view);
+
+    const lo = [P(1, 1, 0), P(1, -1, 0), P(-1, -1, 0), P(-1, 1, 0)];
+    const hi = [P(1, 1, CAR_H), P(1, -1, CAR_H), P(-1, -1, CAR_H), P(-1, 1, CAR_H)];
+
+    const base = d.idx === 0 ? CAR_FRONT : CAR_BODY;
+
+    // Side faces sorted back-to-front, then the roof on top.
+    const faces = [];
+    for (let n = 0; n < 4; n++) {
+      const m = (n + 1) % 4;
+      const pts = [lo[n], lo[m], hi[m], hi[n]];
+      const midY = (lo[n].y + lo[m].y + hi[m].y + hi[n].y) / 4;
+      faces.push({ pts, midY });
+    }
+    faces.sort((u, w) => u.midY - w.midY);
+    for (const f of faces) quad(ctx, f.pts, base, CAR_EDGE);
+
+    ctx.globalAlpha = 0.22;
+    quad(ctx, hi, CAR_TOP_LIGHTEN, null);
+    ctx.globalAlpha = 1;
+    quad(ctx, hi, 'rgba(0,0,0,0)', CAR_EDGE);
+  }
+
+  RC.trainDrawables = function (cam) {
+    const out = [];
+    if (!RC.sim || RC.trackPath().pts.length < 2) return out;
+    const cars = RC.carStates();
+    for (let n = 0; n < cars.length; n++) {
+      const p = cars[n];
+      out.push({
+        depth: RC.depth(p.x, p.y, p.z, cam.rot) + 0.4,
+        draw: drawCar, p, idx: n
+      });
+    }
+    return out;
+  };
+
   /* ---- build head and ghost preview ----------------------------------- */
 
   RC.drawHead = function (ctx, d, cam, view) {

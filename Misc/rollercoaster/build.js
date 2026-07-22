@@ -149,6 +149,9 @@
     const roLength = document.getElementById('ro-length');
     if (roLength) roLength.textContent = RC.trackLength().toFixed(0) + ' m';
 
+    // Editing the track invalidates any run in progress.
+    if (RC.onTrackEdit) RC.onTrackEdit();
+
     RC.requestRender && RC.requestRender();
   }
   RC.refreshBuild = refresh;

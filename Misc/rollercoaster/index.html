@@ -24,6 +24,13 @@
     <button class="tb-btn" id="btn-view-reset" type="button" title="Reset view">Reset</button>
   </div>
 
+  <div class="tb-sep"></div>
+
+  <div class="tb-group" role="group" aria-label="Ride">
+    <button class="tb-btn" id="btn-test" type="button" title="Run the train (Space)">▶ Test</button>
+    <button class="tb-btn" id="btn-ride-reset" type="button" title="Put the train back at the station">⟲</button>
+  </div>
+
   <div class="tb-spacer"></div>
 
   <div class="tb-group" role="group" aria-label="Windows">
@@ -40,6 +47,8 @@
   <span>Track <b id="ro-length">0 m</b></span>
   <span class="sb-sep"></span>
   <span id="ro-circuit">No track</span>
+  <span class="sb-sep"></span>
+  <span id="ro-ride">Train at the station</span>
 </div>
 
 <!-- Floating windows. Drag by the header; toggled from the top bar. -->
@@ -106,6 +115,7 @@
 
 <script src="iso.js"></script>
 <script src="track.js"></script>
+<script src="physics.js"></script>
 <script src="render.js"></script>
 <script src="ui.js"></script>
 <script src="build.js"></script>
