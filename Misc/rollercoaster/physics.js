@@ -15,6 +15,7 @@
 
   const SUBSTEP = 1 / 240;   // s — fixed physics step
   const MAX_FRAME = 0.1;     // s — ignore huge gaps after a tab switch
+  const STATION_BRAKE = 5;   // m/s^2 once the lap is done
 
   RC.sim = {
     state: 'ready',      // ready | running | finished | valleyed | stopped
@@ -131,6 +132,8 @@
     const sim = RC.sim;
     const path = RC.trackPath();
     sim.s = startS != null ? startS : Math.min(CAR_SPACING * sim.cars, path.total);
+    sim.startS = sim.s;      // the berth the train must return to
+    sim.lapDone = false;
     sim.v = 0;
     sim.time = 0;
     sim.eMotor = 0;
@@ -236,13 +239,34 @@
       return;
     }
 
-    // End of the ride.
+    // End of the ride. Crossing the finish is not the end of the run: the
+    // train still has to pull round into the station and stop where it
+    // started, the way it does in the real thing.
     if (c) {
-      if (sim.s >= path.total) {
+      if (!sim.lapDone && sim.s >= path.total) {
         sim.s -= path.total;
         sim.sMax = sim.s;
-        sim.state = 'finished';
-        sim.note = 'Completed the circuit.';
+        sim.lapDone = true;
+      }
+      if (sim.lapDone) {
+        const onStation = cars.some(p => p.def && p.def.station);
+        if (onStation && sim.v > 0) {
+          const dv = Math.min(sim.v, STATION_BRAKE * dt);
+          const after = sim.v - dv;
+          sim.eThermal += 0.5 * m * (sim.v * sim.v - after * after);
+          sim.v = after;
+        }
+        const berthed = sim.s >= sim.startS;
+        // Below a crawl the station's drive tyres see it home; without this
+        // a train that brakes early would stall short of its berth.
+        const crawling = sim.v < 0.5;
+        if (berthed || crawling) {
+          sim.eThermal += 0.5 * m * sim.v * sim.v;
+          sim.s = sim.startS;
+          sim.v = 0;
+          sim.state = 'finished';
+          sim.note = 'Completed the circuit and returned to the station.';
+        }
       }
     } else {
       // Hitting either end stops the train dead. That kinetic energy has to

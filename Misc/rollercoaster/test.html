@@ -592,6 +592,42 @@
     }
   });
 
+  check('a completed lap returns the train to its berth', () => {
+    RC.resetTrack();
+    // Lift hill up 6 m, drop back to ground, then plain filler round to the
+    // station. Frictionless, so the train coasts the filler at constant speed.
+    const seq = ['flat-to-gentle-up', 'gentle-up', 'gentle-up', 'gentle-up-to-flat',
+                 'flat-to-gentle-down', 'gentle-down', 'gentle-down', 'gentle-down-to-flat'];
+    for (const id of seq) {
+      if (!RC.place(id, { lift: true })) return `${id} refused`;
+    }
+    if (RC.track.head.k !== 0) return `drop did not return to ground (k = ${RC.track.head.k})`;
+    const fin = RC.completeTrack();
+    if (!fin.ok) return 'could not finish the circuit: ' + fin.why;
+    if (RC.circuitStatus().kind !== 'closed') return 'circuit is not closed';
+
+    RC.sim.cars = 4;
+    RC.sim.friction = false;
+    RC.resetSim();
+    const berth = RC.sim.startS;
+    runFor(120);
+
+    if (RC.sim.state !== 'finished') {
+      return `state is "${RC.sim.state}" after 120 s (s = ${RC.sim.s.toFixed(1)}, ` +
+             `v = ${RC.sim.v.toFixed(2)}, note "${RC.sim.note}")`;
+    }
+    if (!near(RC.sim.s, berth, 1e-6)) {
+      return `stopped at s = ${RC.sim.s.toFixed(2)} m, berth is ${berth.toFixed(2)} m`;
+    }
+    if (!near(RC.sim.v, 0, 1e-9)) return `stopped with v = ${RC.sim.v}`;
+
+    // Braking to a stand is a real energy sink, so the books must still balance.
+    const e = RC.energy();
+    if (Math.abs(e.total - e.supplied) / Math.max(1, e.supplied) > 0.01) {
+      return `total ${e.total.toFixed(1)} J vs supplied ${e.supplied.toFixed(1)} J`;
+    }
+  });
+
   check('train length changes the effective slope (mean over cars)', () => {
     // A long train straddling a crest still has cars on the climb behind it,
     // so it feels a slope the lead car alone does not. This is the whole
