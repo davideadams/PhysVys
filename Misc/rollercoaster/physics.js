@@ -22,6 +22,7 @@
     s: 0, v: 0, time: 0,
 
     cars: 4,
+    releaseS: null,      // metres along the track, or null for the station
     liftSpeed: 4.0,      // m/s — chain lift
     brakeSpeed: 3.0,     // m/s — brake run target
     launchSpeed: 22.0,   // m/s — shuttle launch
@@ -204,7 +205,11 @@
   RC.resetSim = function (startS) {
     const sim = RC.sim;
     const path = RC.trackPath();
-    sim.s = startS != null ? startS : Math.min(CAR_SPACING * sim.cars, path.total);
+    // Where the train starts: an explicit argument, else the release point the
+    // student has chosen, else just clear of the station.
+    const berth = Math.min(CAR_SPACING * sim.cars, path.total);
+    sim.s = startS != null ? startS
+          : (sim.releaseS != null ? Math.min(sim.releaseS, path.total) : berth);
     sim.startS = sim.s;      // the berth the train must return to
     sim.lapDone = false;
     sim.v = 0;

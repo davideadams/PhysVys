@@ -291,6 +291,8 @@
     RC.pauseSim();
     RC.resetSim();
     RC.resetEnergyScale();
+    // The release slider's range is the track length, so it has to follow.
+    RC.syncTrainControls && RC.syncTrainControls();
     updateRideUI();
   };
 
@@ -326,6 +328,7 @@
   RC.initBuild();
   RC.resetSim();
   RC.resetEnergyScale();
+  RC.initControls();
   updateRideUI();
   resize();
   requestAnimationFrame(frame);

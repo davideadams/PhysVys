@@ -1175,6 +1175,156 @@
     }
   });
 
+  /* ---- train and losses -------------------------------------------------- */
+  check('the release point decides where the train starts', () => {
+    RC.loadPrefab('first-drop');
+    RC.sim.releaseS = 40;
+    RC.resetSim();
+    if (!near(RC.sim.s, 40, 1e-9)) return `started at ${RC.sim.s}, expected 40`;
+    RC.sim.releaseS = null;
+    RC.resetSim();
+    const berth = Math.min(RC.CAR_SPACING * RC.sim.cars, RC.trackPath().total);
+    if (!near(RC.sim.s, berth, 1e-9)) return `clearing the release point should return to ${berth}`;
+  });
+
+  check('a release point beyond the track is clamped, not run off the end', () => {
+    RC.loadPrefab('first-drop');
+    const total = RC.trackPath().total;
+    RC.sim.releaseS = total + 500;
+    RC.resetSim();
+    if (RC.sim.s > total + 1e-9) return `started at ${RC.sim.s} on a ${total.toFixed(1)} m track`;
+    RC.sim.releaseS = null;
+  });
+
+  check('releasing from higher up gives a faster ride', () => {
+    RC.loadPrefab('first-drop');
+    RC.sim.friction = false;
+    RC.sim.cars = 1;
+
+    const speedFrom = s => {
+      RC.sim.releaseS = s;
+      RC.resetSim();
+      runFor(30);
+      return RC.sim.maxV;
+    };
+    // Two points on the lift hill: the second is higher up the climb.
+    const low = speedFrom(20);
+    const high = speedFrom(50);
+    RC.sim.releaseS = null;
+    RC.sim.cars = 4;
+    if (!(high > low)) {
+      return `released higher gave ${high.toFixed(2)} m/s, no faster than ${low.toFixed(2)}`;
+    }
+  });
+
+  check('car count scales mass and energy but not the speed of a free roll', () => {
+    // Mass cancels out of a gravity-driven roll — a heavier train is not a
+    // faster one. The train's LENGTH does matter, which is why this uses a
+    // short stretch of constant slope where every car feels the same grade.
+    RC.track.pieces = [];
+    RC.track.start = { i: 6, j: 20, dir: 0, k: 24, g: 0 };
+    RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
+    for (const id of ['flat-to-gentle-down'].concat(new Array(8).fill('gentle-down'))) {
+      if (!RC.place(id)) return `${id} refused`;
+    }
+    RC.sim.friction = false;
+    RC.sim.releaseS = 6;                 // on the constant grade
+
+    const run = n => {
+      RC.sim.cars = n;
+      RC.resetSim();
+      const m = RC.trainMass();
+      runFor(1.2);
+      return { v: RC.sim.v, m, e: RC.energy() };
+    };
+    const one = run(1);
+    const two = run(2);
+    RC.sim.cars = 4;
+    RC.sim.releaseS = null;
+
+    if (!near(two.m, one.m * 2, 1e-9)) return `two cars weigh ${two.m} kg, one weighs ${one.m}`;
+    if (Math.abs(two.v - one.v) / one.v > 0.02) {
+      return `speed depends on mass: ${one.v.toFixed(3)} m/s with one car, ` +
+             `${two.v.toFixed(3)} with two`;
+    }
+    // Energy, though, scales with the mass.
+    if (Math.abs(two.e.ke - one.e.ke * 2) / (one.e.ke * 2) > 0.03) {
+      return `kinetic energy did not double with the mass: ` +
+             `${one.e.ke.toFixed(0)} J -> ${two.e.ke.toFixed(0)} J`;
+    }
+  });
+
+  check('friction with both losses zeroed matches a frictionless run', () => {
+    // Guards the friction plumbing: if the toggle did anything beyond
+    // applying mu and kDrag, this would drift apart.
+    const runWith = (friction, mu, drag) => {
+      RC.loadPrefab('first-drop');
+      RC.sim.cars = 4;
+      RC.sim.friction = friction;
+      RC.sim.mu = mu;
+      RC.sim.kDrag = drag;
+      RC.resetSim();
+      runFor(20);
+      return { v: RC.sim.v, s: RC.sim.s, th: RC.sim.eThermal };
+    };
+    const off = runWith(false, 0.02, 0.0012);
+    const zeroed = runWith(true, 0, 0);
+    RC.sim.mu = 0.02;
+    RC.sim.kDrag = 0.0012;
+    RC.sim.friction = false;
+
+    if (Math.abs(zeroed.v - off.v) > 1e-6) {
+      return `speeds differ: ${off.v.toFixed(6)} vs ${zeroed.v.toFixed(6)}`;
+    }
+    if (Math.abs(zeroed.s - off.s) > 1e-6) return 'positions differ';
+    if (zeroed.th !== off.th) return `thermal differs: ${off.th} vs ${zeroed.th}`;
+  });
+
+  check('more friction means a slower ride and more heat', () => {
+    const runMu = mu => {
+      RC.loadPrefab('first-drop');
+      RC.sim.cars = 4;
+      RC.sim.friction = true;
+      RC.sim.mu = mu;
+      RC.sim.kDrag = 0.0012;
+      RC.resetSim();
+      runFor(20);
+      return { v: Math.abs(RC.sim.v), th: RC.sim.eThermal };
+    };
+    const light = runMu(0.005);
+    const heavy = runMu(0.05);
+    RC.sim.mu = 0.02;
+    RC.sim.friction = false;
+
+    if (!(heavy.th > light.th)) {
+      return `more rolling resistance made less heat: ${light.th.toFixed(0)} J vs ${heavy.th.toFixed(0)} J`;
+    }
+    if (!(heavy.v < light.v)) {
+      return `more rolling resistance did not slow the train: ${light.v.toFixed(2)} vs ${heavy.v.toFixed(2)} m/s`;
+    }
+  });
+
+  check('a faster chain lift does more work on the train', () => {
+    const runLift = speed => {
+      RC.loadPrefab('first-drop');
+      RC.sim.cars = 4;
+      RC.sim.friction = false;
+      RC.sim.liftSpeed = speed;
+      RC.resetSim();
+      runFor(12);
+      return { motor: RC.sim.eMotor, s: RC.sim.s };
+    };
+    const slow = runLift(2);
+    const fast = runLift(8);
+    RC.sim.liftSpeed = 4;
+
+    if (!(fast.s > slow.s)) return 'a faster lift did not get the train further along';
+    if (!(fast.motor > slow.motor)) {
+      return `motor work did not rise with lift speed: ${slow.motor.toFixed(0)} J vs ${fast.motor.toFixed(0)} J`;
+    }
+  });
+
   /* ---- report ---------------------------------------------------------- */
   const ul = document.getElementById('results');
   let failed = 0;

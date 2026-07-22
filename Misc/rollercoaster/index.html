@@ -35,6 +35,7 @@
 
   <div class="tb-group" role="group" aria-label="Windows">
     <button class="tb-btn" data-window="win-build" type="button">Build</button>
+    <button class="tb-btn" data-window="win-train" type="button">Train</button>
     <button class="tb-btn" data-window="win-energy" type="button">Energy</button>
     <button class="tb-btn" data-window="win-graph" type="button">Graph</button>
     <button class="tb-btn" data-window="win-report" type="button">Report</button>
@@ -101,6 +102,96 @@
     </div>
 
     <div class="build-msg" id="build-msg"></div>
+
+  </div>
+</section>
+
+<section class="window" id="win-train" hidden style="right: 24px; top: 76px; width: 300px;">
+  <div class="window-hd">
+    <span>Train &amp; losses</span>
+    <button class="window-x" type="button" aria-label="Close">×</button>
+  </div>
+  <div class="window-body">
+
+    <div class="control-group">
+      <label>Cars <span class="muted">each 500 kg with riders</span></label>
+      <div class="slider-row">
+        <input type="range" id="sl-cars" min="1" max="8" step="1" value="4">
+        <input type="number" id="val-cars" class="num-input" min="1" max="8" step="1" value="4">
+        <span class="slider-unit">cars</span>
+      </div>
+      <div class="readout-row"><span>Train mass</span><span id="ro-train-mass">—</span></div>
+    </div>
+
+    <div class="control-group">
+      <label>Release point <span class="muted">along the track</span></label>
+      <div class="slider-row">
+        <input type="range" id="sl-release" min="0" max="100" step="0.5" value="14">
+        <input type="number" id="val-release" class="num-input" min="0" max="100" step="0.5" value="14">
+        <span class="slider-unit">m</span>
+      </div>
+      <div class="readout-row"><span>Starts at</span><span id="ro-release-h">—</span></div>
+      <div class="auto-row" style="margin-top:0.35rem">
+        <button class="pal-wide" id="btn-release-station" type="button">Back to the station</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <label>Friction</label>
+      <div class="auto-row">
+        <button class="pal-wide" id="btn-friction" type="button"
+                title="Rolling resistance and air drag; losses show up in the Heat bar">Friction off</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <label>Rolling resistance <span class="muted">&mu;</span></label>
+      <div class="slider-row">
+        <input type="range" id="sl-mu" min="0" max="0.06" step="0.002" value="0.02">
+        <input type="number" id="val-mu" class="num-input" min="0" max="0.06" step="0.002" value="0.020">
+      </div>
+    </div>
+
+    <div class="control-group">
+      <label>Air drag <span class="muted">a = k v²</span></label>
+      <div class="slider-row">
+        <input type="range" id="sl-drag" min="0" max="0.005" step="0.0002" value="0.0012">
+        <input type="number" id="val-drag" class="num-input" min="0" max="0.005" step="0.0002" value="0.0012">
+        <span class="slider-unit">m⁻¹</span>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <label>Chain lift speed</label>
+      <div class="slider-row">
+        <input type="range" id="sl-lift" min="1" max="12" step="0.5" value="4">
+        <input type="number" id="val-lift" class="num-input" min="1" max="12" step="0.5" value="4.0">
+        <span class="slider-unit">m/s</span>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <label>Brake run speed</label>
+      <div class="slider-row">
+        <input type="range" id="sl-brake" min="0" max="12" step="0.5" value="3">
+        <input type="number" id="val-brake" class="num-input" min="0" max="12" step="0.5" value="3.0">
+        <span class="slider-unit">m/s</span>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <label>Launch speed <span class="muted">shuttle tracks</span></label>
+      <div class="slider-row">
+        <input type="range" id="sl-launch" min="5" max="40" step="1" value="22">
+        <input type="number" id="val-launch" class="num-input" min="5" max="40" step="1" value="22">
+        <span class="slider-unit">m/s</span>
+      </div>
+    </div>
+
+    <p class="hint">
+      Changing anything here puts the train back to its release point, since a
+      run measured under two different sets of numbers would mean nothing.
+    </p>
 
   </div>
 </section>
@@ -207,6 +298,7 @@
 <script src="ui.js"></script>
 <script src="icons.js"></script>
 <script src="energy.js"></script>
+<script src="controls.js"></script>
 <script src="build.js"></script>
 <script src="script.js"></script>
 </body>
