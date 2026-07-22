@@ -190,6 +190,40 @@
   const btnTest = document.getElementById('btn-test');
   const roRide = document.getElementById('ro-ride');
 
+  /* Only redraw a display when its window is actually open. */
+  function visible(id) {
+    const el = document.getElementById(id);
+    return el && !el.hidden;
+  }
+
+  function setText(id, text) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  }
+
+  function updateEnergyPanels() {
+    const sim = RC.sim;
+    const e = RC.energy();
+
+    if (visible('win-energy')) {
+      RC.drawEnergyBars(document.getElementById('energy-bars'));
+      setText('ro-e-v', (Math.abs(sim.v) * 3.6).toFixed(1) + ' km/h');
+      setText('ro-e-h', e.h.toFixed(2) + ' m');
+      setText('ro-e-ke', RC.fmtEnergy(e.ke));
+      setText('ro-e-pe', RC.fmtEnergy(e.pe));
+      setText('ro-e-tot', RC.fmtEnergy(e.total));
+      setText('e-mass', `Train: ${sim.cars} cars, ${(RC.trainMass() / 1000).toFixed(1)} t. ` +
+                        `Heights are measured from ground level.`);
+    }
+    if (visible('win-graph')) {
+      RC.drawEnergyGraph(document.getElementById('energy-graph'));
+    }
+    if (visible('win-report')) {
+      RC.updateReport();
+    }
+  }
+  RC.updateEnergyPanels = updateEnergyPanels;
+
   function updateRideUI() {
     const sim = RC.sim;
     const running = sim.state === 'running';
@@ -205,6 +239,7 @@
     } else {
       roRide.textContent = 'Train at the station';
     }
+    updateEnergyPanels();
   }
   RC.updateRideUI = updateRideUI;
 
@@ -217,9 +252,17 @@
 
   document.getElementById('btn-ride-reset').addEventListener('click', () => {
     RC.resetSim();
+    RC.resetEnergyScale();
     updateRideUI();
     state.dirty = true;
   });
+
+  /* Opening a window mid-run should draw it immediately, not on the next
+     frame — which may never come if the sim is paused. */
+  document.querySelectorAll('[data-window]').forEach(btn => {
+    btn.addEventListener('click', () => updateEnergyPanels());
+  });
+  window.addEventListener('resize', () => updateEnergyPanels());
 
   window.addEventListener('keydown', (e) => {
     if (e.code !== 'Space' || e.target.matches('input, textarea, button')) return;
@@ -233,6 +276,7 @@
   RC.onTrackEdit = function () {
     RC.pauseSim();
     RC.resetSim();
+    RC.resetEnergyScale();
     updateRideUI();
   };
 
@@ -261,6 +305,7 @@
   RC.resetTrack();
   RC.initBuild();
   RC.resetSim();
+  RC.resetEnergyScale();
   updateRideUI();
   resize();
   requestAnimationFrame(frame);

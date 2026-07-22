@@ -123,8 +123,10 @@
     lift.type = 'button';
     lift.className = 'rct-btn rct-btn-wide';
     lift.id = 'btn-lift';
-    lift.innerHTML = RC.icon('chain');
-    lift.setAttribute('aria-label', 'Chain lift');
+    // Deliberately a word, not an icon: it toggles a property of the pieces
+    // you build rather than choosing a shape, so it shouldn't look like the
+    // shape buttons beside it.
+    lift.textContent = 'Chain';
     lift.title = 'Put a chain lift on uphill pieces as you build them';
     lift.addEventListener('click', () => {
       sel.lift = !sel.lift;

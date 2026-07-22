@@ -33,6 +33,7 @@
     E0: 0, eMotor: 0, eThermal: 0,
     maxV: 0, maxG: 0, maxZ: 0,
     warnings: [],
+    trace: [],
     note: ''
   };
 
@@ -142,6 +143,7 @@
     sim.maxG = 0;
     sim.maxZ = 0;
     sim.warnings = [];
+    sim.trace = [];
     sim.note = '';
     sim.state = 'ready';
     sim.reversals = 0;
@@ -283,6 +285,22 @@
     }
   }
 
+  /* ---- trace ------------------------------------------------------------
+     One sample per frame, not per substep — the graph only needs enough
+     points to draw a smooth line, and 240 Hz would fill the cap in seconds. */
+  const TRACE_CAP = 4000;
+
+  function record() {
+    const sim = RC.sim;
+    if (sim.trace.length >= TRACE_CAP) return;
+    const e = RC.energy();
+    sim.trace.push({
+      s: sim.s, t: sim.time, v: Math.abs(sim.v), h: e.h,
+      ke: e.ke, pe: e.pe, th: e.thermal, total: e.total, supplied: e.supplied
+    });
+  }
+  RC.recordTrace = record;
+
   /* ---- frame ----------------------------------------------------------- */
   RC.stepSim = function (dtFrame) {
     const sim = RC.sim;
@@ -293,6 +311,7 @@
       substep(step);
       dt -= step;
     }
+    record();
     return true;
   };
 

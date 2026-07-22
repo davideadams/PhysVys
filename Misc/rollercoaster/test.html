@@ -714,6 +714,52 @@
     }
   });
 
+  check('the recorded trace agrees with the energy at every sample', () => {
+    // The graph and bars are drawn straight from these numbers, so if a
+    // sample can disagree with the physics the display can lie.
+    const err = buildTestCircuit();
+    if (err) return err;
+    RC.sim.cars = 3;
+    RC.sim.friction = true;
+    RC.resetSim(13);
+    if (RC.sim.trace.length !== 0) return 'trace was not cleared on reset';
+    runFor(8);
+
+    const tr = RC.sim.trace;
+    if (tr.length < 20) return `only ${tr.length} samples recorded`;
+    for (let n = 0; n < tr.length; n++) {
+      const p = tr[n];
+      if (p.ke < -1e-9) return `sample ${n} has negative kinetic energy`;
+      if (p.th < -1e-9) return `sample ${n} has negative thermal energy`;
+      if (!near(p.ke + p.pe + p.th, p.total, 1e-6)) {
+        return `sample ${n}: components sum to ${(p.ke + p.pe + p.th).toFixed(2)} ` +
+               `but total says ${p.total.toFixed(2)}`;
+      }
+      if (Math.abs(p.total - p.supplied) / Math.max(1, p.supplied) > 0.01) {
+        return `sample ${n}: total ${p.total.toFixed(1)} J vs supplied ${p.supplied.toFixed(1)} J`;
+      }
+      if (n > 0 && p.t < tr[n - 1].t) return `time goes backwards at sample ${n}`;
+    }
+    RC.sim.friction = false;
+  });
+
+  check('thermal energy only ever grows', () => {
+    const err = buildTestCircuit();
+    if (err) return err;
+    RC.sim.cars = 3;
+    RC.sim.friction = true;
+    RC.resetSim(13);
+    runFor(8);
+    const tr = RC.sim.trace;
+    for (let n = 1; n < tr.length; n++) {
+      if (tr[n].th < tr[n - 1].th - 1e-9) {
+        return `heat went down at sample ${n}: ${tr[n - 1].th.toFixed(2)} -> ${tr[n].th.toFixed(2)}`;
+      }
+    }
+    if (!(tr[tr.length - 1].th > 0)) return 'friction was on but nothing was lost to heat';
+    RC.sim.friction = false;
+  });
+
   check('train length changes the effective slope (mean over cars)', () => {
     // A long train straddling a crest still has cars on the climb behind it,
     // so it feels a slope the lead car alone does not. This is the whole
