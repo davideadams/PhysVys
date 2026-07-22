@@ -714,6 +714,99 @@
     }
   });
 
+  /* ---- g-forces --------------------------------------------------------- */
+  check('standing still on level track is 1 g vertical and nothing else', () => {
+    RC.resetTrack();
+    const p = RC.pathAt(6, false);
+    const g = RC.gForces(p, 0, 0);
+    if (!near(g.vert, 1, 1e-6)) return `vertical is ${g.vert.toFixed(4)}, expected 1`;
+    if (!near(g.lat, 0, 1e-6)) return `lateral is ${g.lat.toFixed(4)}, expected 0`;
+    if (!near(g.long, 0, 1e-6)) return `longitudinal is ${g.long.toFixed(4)}, expected 0`;
+  });
+
+  check('standing on a slope splits gravity into vertical and fore-aft', () => {
+    RC.track.pieces = [];
+    RC.track.start = { i: 6, j: 20, dir: 0, k: 20, g: 0 };
+    RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
+    for (const id of ['flat-to-gentle-down', 'gentle-down', 'gentle-down']) {
+      if (!RC.place(id)) return `${id} refused`;
+    }
+    const p = RC.pathAt(6.5, false);          // on the constant gentle grade
+    const sinT = 2 / Math.sqrt(4 * 4 + 2 * 2);
+    const cosT = 4 / Math.sqrt(4 * 4 + 2 * 2);
+    if (!near(Math.abs(p.dzds), sinT, 1e-3)) {
+      return `expected to be on the gentle grade, dzds = ${p.dzds.toFixed(4)}`;
+    }
+    const g = RC.gForces(p, 0, 0);
+    if (!near(g.vert, cosT, 2e-3)) return `vertical is ${g.vert.toFixed(4)}, expected ${cosT.toFixed(4)}`;
+    if (!near(g.lat, 0, 1e-6)) return `lateral is ${g.lat.toFixed(4)} on a straight slope`;
+    // On a downhill the restraint holds the rider back, so fore-aft is negative.
+    if (!near(g.long, -sinT, 2e-3)) return `fore-aft is ${g.long.toFixed(4)}, expected ${(-sinT).toFixed(4)}`;
+    // The three components must account for exactly 1 g of gravity.
+    const mag = Math.hypot(g.vert, g.lat, g.long);
+    if (!near(mag, 1, 2e-3)) return `total specific force is ${mag.toFixed(4)} g, expected 1`;
+  });
+
+  check('an unbanked turn puts v^2/r sideways and leaves vertical at 1 g', () => {
+    RC.resetTrack();
+    if (!RC.place('turn-right-tight')) return 'turn refused';
+    const path = RC.trackPath();
+    // Midpoint of the turn, clear of the joints.
+    const turnStart = path.pts.find(p => p.def.kind === 'turn').s;
+    const p = RC.pathAt(turnStart + 4, false);
+    if (p.def.kind !== 'turn') return 'sample landed off the turn';
+
+    const v = 10;
+    const R = 1.5 * RC.TILE_M;                 // tight turn radius, 6 m
+    const expect = v * v / (R * 9.81);
+    const g = RC.gForces(p, v, 0);
+
+    if (!near(g.vert, 1, 5e-3)) return `vertical is ${g.vert.toFixed(4)} on a flat turn, expected 1`;
+    if (Math.abs(Math.abs(g.lat) - expect) / expect > 0.05) {
+      return `lateral is ${Math.abs(g.lat).toFixed(3)} g, expected about ${expect.toFixed(3)}`;
+    }
+  });
+
+  check('turn direction sets the sign of the lateral force', () => {
+    const sample = id => {
+      RC.resetTrack();
+      RC.place(id);
+      const path = RC.trackPath();
+      const turnStart = path.pts.find(p => p.def.kind === 'turn').s;
+      return RC.gForces(RC.pathAt(turnStart + 4, false), 10, 0).lat;
+    };
+    const right = sample('turn-right-tight');
+    const left = sample('turn-left-tight');
+    if (!(right > 0)) return `a right turn gave lateral ${right.toFixed(3)}, expected positive`;
+    if (!(left < 0)) return `a left turn gave lateral ${left.toFixed(3)}, expected negative`;
+    if (!near(Math.abs(right), Math.abs(left), 1e-6)) {
+      return `mirror turns disagree: ${right.toFixed(4)} vs ${left.toFixed(4)}`;
+    }
+  });
+
+  check('a crest lightens the riders and a dip presses them down', () => {
+    RC.track.pieces = [];
+    RC.track.start = { i: 6, j: 20, dir: 0, k: 8, g: 0 };
+    RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
+    for (const id of ['flat-to-gentle-up', 'gentle-up-to-flat', 'flat-to-gentle-down',
+                      'gentle-down', 'gentle-down-to-flat', 'flat-to-gentle-up',
+                      'gentle-up-to-flat']) {
+      if (!RC.place(id)) return `${id} refused`;
+    }
+    const pts = RC.trackPath().pts;
+    let crest = pts[0], dip = pts[0];
+    for (const p of pts) {
+      if (p.z > crest.z) crest = p;
+      if (p.z < dip.z) dip = p;
+    }
+    const vCrest = RC.gForces(RC.pathAt(crest.s, false), 12, 0).vert;
+    const vDip = RC.gForces(RC.pathAt(dip.s, false), 12, 0).vert;
+    if (!(vCrest < 1)) return `crest gives ${vCrest.toFixed(3)} g, expected under 1`;
+    if (!(vDip > 1)) return `dip gives ${vDip.toFixed(3)} g, expected over 1`;
+  });
+
   check('the recorded trace agrees with the energy at every sample', () => {
     // The graph and bars are drawn straight from these numbers, so if a
     // sample can disagree with the physics the display can lie.

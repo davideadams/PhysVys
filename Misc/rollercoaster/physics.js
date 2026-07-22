@@ -32,6 +32,8 @@
 
     E0: 0, eMotor: 0, eThermal: 0,
     maxV: 0, maxG: 0, maxZ: 0,
+    g: { vert: 1, lat: 0, long: 0 },
+    maxVertG: 1, minVertG: 1, maxLatG: 0,
     warnings: [],
     trace: [],
     note: ''
@@ -78,16 +80,18 @@
     if (fl < 1e-9) { fx = 1; fy = 0; fz = 0; fl = 1; }
     fx /= fl; fy /= fl; fz /= fl;
 
-    // r = f x (0,0,1), which has no vertical component.
-    let rx = fy, ry = -fx;
+    // Right, horizontal by construction. The sign matters: a right turn from
+    // heading +i curves towards +j, so +j has to be the rider's right, and
+    // this must come out as (0,1,0) when f is (1,0,0).
+    let rx = -fy, ry = fx;
     const rl = Math.hypot(rx, ry);
-    if (rl < 1e-9) { rx = 1; ry = 0; }       // track pointing straight up
+    if (rl < 1e-9) { rx = 0; ry = 1; }       // track pointing straight up
     else { rx /= rl; ry /= rl; }
 
-    // u = r x f
-    let ux = ry * fz;
-    let uy = -rx * fz;
-    let uz = rx * fy - ry * fx;
+    // u = f x r, giving a right-handed (forward, right, up) triad.
+    let ux = -fz * ry;
+    let uy = fz * rx;
+    let uz = fx * ry - fy * rx;
     const ul = Math.hypot(ux, uy, uz) || 1;
     ux /= ul; uy /= ul; uz /= ul;
 
@@ -95,6 +99,39 @@
       f: { x: fx, y: fy, z: fz },
       r: { x: rx, y: ry, z: 0 },
       u: { x: ux, y: uy, z: uz }
+    };
+  };
+
+  /* What the rider feels, resolved onto the car's own axes.
+
+     The seat has to supply the train's acceleration AND hold the rider up
+     against gravity, so the specific force is (a - g_vector). Projected onto
+     the car frame that gives:
+
+       vertical    +1 sitting still on level track; 0 is weightless and
+                   negative is airtime, being lifted out of the seat
+       lateral     sideways, the force an unbanked turn throws at you
+       longitudinal fore and aft, from braking and the chain lift
+
+     Signs follow the car's axes: lateral is positive towards the rider's
+     right, longitudinal positive forwards. */
+  RC.gForces = function (p, v, aTangential) {
+    if (!p) return { vert: 1, lat: 0, long: 0 };
+    const fr = RC.carFrame(p);
+    const vv = v * v;
+
+    // Acceleration = along the track + towards the centre of curvature.
+    const ax = aTangential * fr.f.x + vv * (p.kx || 0);
+    const ay = aTangential * fr.f.y + vv * (p.ky || 0);
+    const az = aTangential * fr.f.z + vv * (p.kz || 0);
+
+    // Specific force: subtract gravity, which points down.
+    const Ax = ax, Ay = ay, Az = az + G;
+
+    return {
+      vert: (Ax * fr.u.x + Ay * fr.u.y + Az * fr.u.z) / G,
+      lat: (Ax * fr.r.x + Ay * fr.r.y + Az * fr.r.z) / G,
+      long: (Ax * fr.f.x + Ay * fr.f.y + Az * fr.f.z) / G
     };
   };
 
@@ -144,6 +181,14 @@
     sim.maxZ = 0;
     sim.warnings = [];
     sim.trace = [];
+
+    // Seed the g extremes from the train standing still, so an untouched
+    // report reads 1.00 g rather than an empty range.
+    const rest = RC.gForces(RC.pathAt(sim.s, closed()), 0, 0);
+    sim.g = rest;
+    sim.maxVertG = rest.vert;
+    sim.minVertG = rest.vert;
+    sim.maxLatG = Math.abs(rest.lat);
     sim.note = '';
     sim.state = 'ready';
     sim.reversals = 0;
@@ -219,12 +264,20 @@
     sim.maxV = Math.max(sim.maxV, Math.abs(sim.v));
     sim.maxZ = Math.max(sim.maxZ, lead.z * RC.LEVEL_M);
 
-    // Vertical g: centripetal term plus the component of gravity the track
-    // has to carry. Negative means the train is being lifted off the rails.
-    const n = (sim.v * sim.v * lead.curv) / G + cosPitch;
-    sim.maxG = Math.max(sim.maxG, Math.abs(n));
-    if (n < 0) addWarning('Train would leave the track — not enough speed for this curve');
-    if (Math.abs(n) > 6) addWarning(`Ride is too rough — ${Math.abs(n).toFixed(1)} g on a curve`);
+    // G-forces at the front car, where the ride is most extreme.
+    const g = RC.gForces(lead, sim.v, a);
+    sim.g = g;
+    sim.maxVertG = Math.max(sim.maxVertG, g.vert);
+    sim.minVertG = Math.min(sim.minVertG, g.vert);
+    sim.maxLatG = Math.max(sim.maxLatG, Math.abs(g.lat));
+    sim.maxG = Math.max(sim.maxG, Math.abs(g.vert));
+
+    // Thresholds roughly follow real ride-comfort limits.
+    if (g.vert < 0) addWarning('Airtime — riders are lifted out of their seats here');
+    if (g.vert < -1.5) addWarning(`Dangerous negative g (${g.vert.toFixed(1)}) — riders would be thrown from the train`);
+    if (g.vert > 5) addWarning(`Punishing vertical g (${g.vert.toFixed(1)}) on a curve`);
+    if (Math.abs(g.lat) > 1.8) addWarning(`Violent sideways force (${Math.abs(g.lat).toFixed(1)} g) — this turn needs banking`);
+    else if (Math.abs(g.lat) > 1.0) addWarning(`Uncomfortable sideways force (${Math.abs(g.lat).toFixed(1)} g) on a turn`);
     if (sim.maxV > 45) addWarning(`Train reaches ${(sim.maxV * 3.6).toFixed(0)} km/h — too fast to be safe`);
 
     // Valleying: sign changes with no forward progress.
@@ -296,7 +349,8 @@
     const e = RC.energy();
     sim.trace.push({
       s: sim.s, t: sim.time, v: Math.abs(sim.v), h: e.h,
-      ke: e.ke, pe: e.pe, th: e.thermal, total: e.total, supplied: e.supplied
+      ke: e.ke, pe: e.pe, th: e.thermal, total: e.total, supplied: e.supplied,
+      vg: sim.g.vert, lg: sim.g.lat
     });
   }
   RC.recordTrace = record;

@@ -259,6 +259,36 @@
     return `<div class="readout-row"><span>${label}</span><span>${value}</span></div>`;
   }
 
+  /* A plain-English read on how the ride feels, from the g extremes. */
+  RC.rideVerdict = function (sim) {
+    if (sim.minVertG < -1.5) {
+      return 'This ride would throw riders out of the train. It needs less speed over ' +
+             'the crests, or gentler ones.';
+    }
+    if (sim.maxLatG > 1.8) {
+      return 'The sideways forces are violent. Wider turns, or less speed entering them, ' +
+             'would fix it.';
+    }
+    if (sim.maxVertG > 5) return 'Brutally heavy through the dips — riders would grey out.';
+    if (sim.minVertG < 0) return 'Has genuine airtime over the crests without being dangerous.';
+    if (sim.maxVertG < 1.4 && sim.maxLatG < 0.4) return 'A very gentle ride.';
+    return 'Forces stay within comfortable limits.';
+  };
+
+  /* Colour a live g reading by how comfortable it is. */
+  function gColour(value, kind) {
+    const m = Math.abs(value);
+    if (kind === 'vert') {
+      if (value < -1.5 || value > 5) return '#b3261e';
+      if (value < 0 || value > 3.5) return '#b06a12';
+      return '#15304d';
+    }
+    if (m > 1.8) return '#b3261e';
+    if (m > 1.0) return '#b06a12';
+    return '#15304d';
+  }
+  RC.gColour = gColour;
+
   RC.updateReport = function () {
     const el = document.getElementById('report-body');
     if (!el) return;
@@ -283,9 +313,17 @@
     html += `<div class="report-hd">Ride</div>`;
     html += row('Top speed', (sim.maxV * 3.6).toFixed(0) + ' km/h');
     html += row('Highest point', sim.maxZ.toFixed(1) + ' m');
-    html += row('Greatest g-force', sim.maxG.toFixed(2) + ' g');
     html += row('Ride time', sim.time.toFixed(1) + ' s');
     html += row('Track length', RC.trackLength().toFixed(0) + ' m');
+
+    html += `<div class="report-hd">G-force</div>`;
+    html += row('Vertical, greatest', sim.maxVertG.toFixed(2) + ' g');
+    html += row('Vertical, least', sim.minVertG.toFixed(2) + ' g');
+    html += row('Lateral, greatest', sim.maxLatG.toFixed(2) + ' g');
+    html += `<p class="hint">Vertical is 1.00&nbsp;g sitting still; below zero the riders ` +
+            `leave their seats. Lateral is sideways — none of the track banks, so every ` +
+            `turn puts its whole centripetal force through the riders.</p>`;
+    html += `<p class="hint">${RC.rideVerdict(sim)}</p>`;
 
     html += `<div class="report-hd">Energy</div>`;
     html += row('Started with', fmt(sim.E0));

@@ -212,6 +212,20 @@
       setText('ro-e-ke', RC.fmtEnergy(e.ke));
       setText('ro-e-pe', RC.fmtEnergy(e.pe));
       setText('ro-e-tot', RC.fmtEnergy(e.total));
+
+      const g = sim.g || { vert: 1, lat: 0 };
+      const vEl = document.getElementById('ro-g-vert');
+      const lEl = document.getElementById('ro-g-lat');
+      if (vEl) {
+        vEl.textContent = g.vert.toFixed(2) + ' g';
+        vEl.style.color = RC.gColour(g.vert, 'vert');
+      }
+      if (lEl) {
+        // Sign is only meaningful as a direction, so show it as one.
+        const side = Math.abs(g.lat) < 0.05 ? '' : (g.lat > 0 ? ' right' : ' left');
+        lEl.textContent = Math.abs(g.lat).toFixed(2) + ' g' + side;
+        lEl.style.color = RC.gColour(g.lat, 'lat');
+      }
       setText('e-mass', `Train: ${sim.cars} cars, ${(RC.trainMass() / 1000).toFixed(1)} t. ` +
                         `Heights are measured from ground level.`);
     }

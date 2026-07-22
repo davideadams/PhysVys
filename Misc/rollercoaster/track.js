@@ -211,13 +211,23 @@
     }
 
     /* Per-point slope and curvature, in metres, for the physics. dz/ds is the
-       sine of the track's pitch — the whole of the gravitational term. */
+       sine of the track's pitch — the whole of the gravitational term.
+
+       Curvature is kept as a VECTOR, not just a magnitude: it is d(unit
+       tangent)/ds, which points towards the centre of curvature. The g-force
+       calculation needs that direction to tell a rider being pressed into
+       their seat from one being thrown sideways. */
     for (let n = 0; n < pts.length; n++) {
       const a = pts[Math.max(0, n - 1)];
       const b = pts[Math.min(pts.length - 1, n + 1)];
       const ds = b.s - a.s;
       pts[n].dzds = ds > 1e-9 ? (b.z - a.z) * RC.LEVEL_M / ds : 0;
-      pts[n].curv = curvature(a, pts[n], b);
+
+      const k = curvatureVector(a, pts[n], b);
+      pts[n].kx = k[0];
+      pts[n].ky = k[1];
+      pts[n].kz = k[2];
+      pts[n].curv = Math.hypot(k[0], k[1], k[2]);
     }
 
     pathCache = { pts, total: s };
@@ -225,25 +235,23 @@
     return pathCache;
   };
 
-  /* Curvature as the reciprocal of the circumradius of three points, in
-     metres. Used for the centripetal term in the g-force estimate. */
-  function curvature(a, b, c) {
+  /* Curvature vector at b, from its neighbours a and c: the rate of change of
+     the unit tangent with arc length. Magnitude is 1/radius; direction points
+     towards the centre of curvature. All in metres. */
+  function curvatureVector(a, b, c) {
     const P = p => [p.x * RC.TILE_M, p.y * RC.TILE_M, p.z * RC.LEVEL_M];
-    const [ax, ay, az] = P(a), [bx, by, bz] = P(b), [cx, cy, cz] = P(c);
-    const u = [bx - ax, by - ay, bz - az];
-    const v = [cx - bx, cy - by, cz - bz];
-    const w = [cx - ax, cy - ay, cz - az];
-    const cross = [
-      u[1] * v[2] - u[2] * v[1],
-      u[2] * v[0] - u[0] * v[2],
-      u[0] * v[1] - u[1] * v[0]
+    const A = P(a), B = P(b), C = P(c);
+    const t1 = [B[0] - A[0], B[1] - A[1], B[2] - A[2]];
+    const t2 = [C[0] - B[0], C[1] - B[1], C[2] - B[2]];
+    const l1 = Math.hypot(t1[0], t1[1], t1[2]);
+    const l2 = Math.hypot(t2[0], t2[1], t2[2]);
+    if (l1 < 1e-9 || l2 < 1e-9) return [0, 0, 0];
+    const ds = (l1 + l2) / 2;
+    return [
+      (t2[0] / l2 - t1[0] / l1) / ds,
+      (t2[1] / l2 - t1[1] / l1) / ds,
+      (t2[2] / l2 - t1[2] / l1) / ds
     ];
-    const lu = Math.hypot(u[0], u[1], u[2]);
-    const lv = Math.hypot(v[0], v[1], v[2]);
-    const lw = Math.hypot(w[0], w[1], w[2]);
-    const lc = Math.hypot(cross[0], cross[1], cross[2]);
-    if (lu < 1e-9 || lv < 1e-9 || lw < 1e-9) return 0;
-    return 2 * lc / (lu * lv * lw);
   }
 
   /* Distance along the track between two arc positions. On a closed circuit
@@ -289,6 +297,9 @@
       z: mix(a.z, b.z),
       dzds: mix(a.dzds, b.dzds),
       curv: mix(a.curv, b.curv),
+      kx: mix(a.kx, b.kx),
+      ky: mix(a.ky, b.ky),
+      kz: mix(a.kz, b.kz),
       piece: f < 0.5 ? a.piece : b.piece,
       def: f < 0.5 ? a.def : b.def
     };
