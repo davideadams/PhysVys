@@ -207,13 +207,21 @@
 
   check('a full rectangular circuit closes and is reported as closed', () => {
     RC.resetTrack();                       // 3 station pieces from (4,9) heading +i
-    const straights = 4;
+    // Four quarter turns cancel exactly, so the straights alone must carry the
+    // head from (7,9) back to the start at (4,9) — a displacement of (-3, 0).
+    // Hence the -i side is 3 longer than the +i side and the two j sides match.
+    // Kept small so the turns' 2.5-tile radius stays inside the 20x20 park.
+    const sides = [2, 2, 5, 2];
     for (let side = 0; side < 4; side++) {
-      const n = side === 0 ? straights : straights + 3;
-      for (let s = 0; s < n; s++) {
-        if (!RC.place('flat')) return `side ${side}: flat piece rejected`;
+      for (let s = 0; s < sides[side]; s++) {
+        const why = RC.canPlace(RC.pieceDef('flat'), RC.track.head).why;
+        if (!RC.place('flat')) return `side ${side}, straight ${s + 1}: ${why}`;
       }
-      if (!RC.place('turn-right-wide')) return `side ${side}: turn rejected`;
+      const why = RC.canPlace(RC.pieceDef('turn-right-wide'), RC.track.head).why;
+      if (!RC.place('turn-right-wide')) {
+        const h = RC.track.head;
+        return `side ${side} turn at (${h.i},${h.j},dir ${h.dir}): ${why}`;
+      }
     }
     const st = RC.circuitStatus();
     if (st.kind !== 'closed') {
