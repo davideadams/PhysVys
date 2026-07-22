@@ -1340,21 +1340,25 @@
     RC.resetSim();
     runFor(240);
 
-    // Skip the entire lift, not just the first couple of seconds. The chain
-    // pins the train at lift speed for ~10 s while potential energy climbs
-    // 16 m, so those samples have almost no kinetic variance but large
-    // potential variance — enough to swamp the genuine anti-correlation of
-    // the drops. Peak potential energy is the top of the lift, so start there.
+    // Correlate over the FREE-COASTING section only. Two things dump or add
+    // energy and would swamp the gravity-driven swap: the lift (adds ~motor
+    // energy while pinning speed) and the station brake (dumps ~290 kJ of
+    // kinetic energy against zero potential as it stops the train). Both show
+    // up in the trace — "supplied" rises only while the lift works, "th" rises
+    // only while the brakes bite — so the coasting window is where supplied is
+    // at its max and thermal at its min.
     const trace = RC.sim.trace;
-    let peak = 0;
-    for (let i = 1; i < trace.length; i++) if (trace[i].pe > trace[peak].pe) peak = i;
-    const tr = trace.slice(peak);
-    if (tr.length < 100) return `only ${tr.length} samples after the lift crest`;
+    let maxSupplied = -Infinity, minTh = Infinity;
+    for (const p of trace) {
+      if (p.supplied > maxSupplied) maxSupplied = p.supplied;
+      if (p.th < minTh) minTh = p.th;
+    }
+    const tr = trace.filter(p => p.supplied > maxSupplied - 1 && p.th < minTh + 1);
+    if (tr.length < 100) return `only ${tr.length} free-coasting samples`;
 
-    // As the train drops and climbs, kinetic and potential energy trade back
-    // and forth — so across the ride they must be strongly anti-correlated.
-    // The correlation coefficient captures "swaps energy" without the
-    // fragility of hunting for individual peaks.
+    // Over that window total mechanical energy is constant, so as the train
+    // drops and climbs kinetic and potential trade back and forth and must be
+    // strongly anti-correlated.
     let sk = 0, sp = 0;
     for (const p of tr) { sk += p.ke; sp += p.pe; }
     const mk = sk / tr.length, mp = sp / tr.length;
