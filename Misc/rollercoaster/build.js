@@ -1,135 +1,216 @@
-/* Build palette: piece selection, placement, undo, and the RCT-style
-   greying-out of pieces that don't match the build head's current slope. */
+/* Build palette, modelled on RCT's construction window.
+
+   The important idea borrowed from RCT is that a piece is not chosen from a
+   flat list of every combination. You choose a DIRECTION and the SLOPE you
+   want to be travelling at, and the game works out which piece that implies —
+   including inserting the transition piece for you. So going from level to a
+   gentle climb is one click of "gentle up", not a click of "flat to gentle up"
+   followed by a click of "gentle up". Selecting a slope and pressing build
+   repeatedly walks the track up through the transitions on its own.
+
+   Anything unreachable from the current build head greys out, which is how RCT
+   teaches its own constraints without a word of explanation. */
 (function () {
   const RC = window.RC || (window.RC = {});
 
-  const GROUPS = [
-    { label: 'Straight', ids: ['flat', 'gentle-up', 'steep-up', 'gentle-down', 'steep-down'] },
-    {
-      label: 'Transitions', ids: [
-        'flat-to-gentle-up', 'gentle-up-to-flat', 'gentle-to-steep-up', 'steep-to-gentle-up',
-        'flat-to-gentle-down', 'gentle-down-to-flat', 'gentle-to-steep-down', 'steep-to-gentle-down'
-      ]
-    },
-    { label: 'Turns', ids: ['turn-left-wide', 'turn-right-wide', 'turn-left-tight', 'turn-right-tight'] },
-    { label: 'Special', ids: ['station', 'brake', 'launch'] }
+  const S = { STEEP_DOWN: -6, GENTLE_DOWN: -2, LEVEL: 0, GENTLE_UP: 2, STEEP_UP: 6 };
+
+  const DIRECTIONS = [
+    { id: 'left-tight',  glyph: '⤺', label: 'Tight left',  piece: 'turn-left-tight' },
+    { id: 'left-wide',   glyph: '↰', label: 'Left',        piece: 'turn-left-wide' },
+    { id: 'straight',    glyph: '↑', label: 'Straight',    piece: null },
+    { id: 'right-wide',  glyph: '↱', label: 'Right',       piece: 'turn-right-wide' },
+    { id: 'right-tight', glyph: '⤻', label: 'Tight right', piece: 'turn-right-tight' }
   ];
 
-  /* Compact glyphs so the palette reads at a glance rather than as prose. */
-  const GLYPH = {
-    'flat': '—',
-    'gentle-up': '／', 'steep-up': '⟋',
-    'gentle-down': '＼', 'steep-down': '⟍',
-    'flat-to-gentle-up': '—／', 'gentle-up-to-flat': '／—',
-    'gentle-to-steep-up': '／⟋', 'steep-to-gentle-up': '⟋／',
-    'flat-to-gentle-down': '—＼', 'gentle-down-to-flat': '＼—',
-    'gentle-to-steep-down': '＼⟍', 'steep-to-gentle-down': '⟍＼',
-    'turn-left-wide': '↰', 'turn-right-wide': '↱',
-    'turn-left-tight': '⤺', 'turn-right-tight': '⤻',
-    'station': '▤', 'brake': '▥', 'launch': '»'
-  };
+  const SLOPES = [
+    { g: S.STEEP_DOWN,  glyph: '⟍', label: 'Steep down' },
+    { g: S.GENTLE_DOWN, glyph: '＼', label: 'Gentle down' },
+    { g: S.LEVEL,       glyph: '—', label: 'Level' },
+    { g: S.GENTLE_UP,   glyph: '／', label: 'Gentle up' },
+    { g: S.STEEP_UP,    glyph: '⟋', label: 'Steep up' }
+  ];
 
-  const state = { selected: 'flat', lift: false };
-  RC.build = state;
+  const SPECIALS = [
+    { id: 'station', glyph: '▤', label: 'Station' },
+    { id: 'brake',   glyph: '▥', label: 'Brakes' },
+    { id: 'launch',  glyph: '»', label: 'Launch' }
+  ];
 
-  const buttons = new Map();   // defId -> button element
-  let paletteEl = null;
-
-  function buildPalette() {
-    paletteEl = document.getElementById('palette');
-    if (!paletteEl) return;
-    paletteEl.innerHTML = '';
-
-    for (const group of GROUPS) {
-      const wrap = document.createElement('div');
-      wrap.className = 'pal-group';
-
-      const lab = document.createElement('div');
-      lab.className = 'pal-label';
-      lab.textContent = group.label;
-      wrap.appendChild(lab);
-
-      const grid = document.createElement('div');
-      grid.className = 'pal-grid';
-
-      for (const id of group.ids) {
-        const def = RC.pieceDef(id);
-        if (!def) continue;
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'pal-btn';
-        b.dataset.piece = id;
-        b.innerHTML = `<span class="pal-glyph">${GLYPH[id] || '?'}</span>` +
-                      `<span class="pal-name">${def.label}</span>`;
-        b.addEventListener('click', () => selectAndPlace(id));
-        b.addEventListener('pointerenter', () => preview(id));
-        b.addEventListener('pointerleave', () => preview(null));
-        grid.appendChild(b);
-        buttons.set(id, b);
-      }
-      wrap.appendChild(grid);
-      paletteEl.appendChild(wrap);
-    }
+  /* Straight pieces indexed by "entry slope > exit slope", so a direction plus
+     a target slope resolves to exactly one piece. Specials are excluded so
+     they don't shadow plain flat track. */
+  const STRAIGHTS = new Map();
+  for (const def of RC.PIECES) {
+    if (def.kind !== 'straight') continue;
+    if (def.station || def.brake || def.launch) continue;
+    STRAIGHTS.set(def.gIn + '>' + def.gOut, def);
   }
 
-  /* Hovering a palette button previews that piece instead of the selected
-     one, so you can see where something lands before committing. */
-  let previewId = null;
-  function preview(id) {
-    previewId = id;
+  const sel = { dir: 'straight', slope: S.LEVEL, special: null, lift: false };
+  RC.build = sel;
+
+  const dirBtns = new Map(), slopeBtns = new Map(), specialBtns = new Map();
+
+  /* What would "build" place, for a given selection? */
+  function resolveWith(dirId, slopeG, specialId) {
+    if (specialId) return RC.pieceDef(specialId);
+    const dir = DIRECTIONS.find(d => d.id === dirId);
+    if (dir && dir.piece) return RC.pieceDef(dir.piece);
+    const head = RC.track.head;
+    if (!head) return null;
+    return STRAIGHTS.get(head.g + '>' + slopeG) || null;
+  }
+
+  function resolve() { return resolveWith(sel.dir, sel.slope, sel.special); }
+
+  /* Hovering a button previews that choice without committing to it. */
+  let hover = null;
+  RC.ghostDef = function () {
+    if (hover) return resolveWith(hover.dir, hover.slope, hover.special);
+    return resolve();
+  };
+
+  function setHover(h) {
+    hover = h;
     RC.requestRender && RC.requestRender();
   }
 
-  RC.ghostDef = function () {
-    const id = previewId || state.selected;
-    return id ? RC.pieceDef(id) : null;
-  };
+  /* ---- construction ----------------------------------------------------- */
+  function makeBtn(row, glyph, label, onClick, onHover) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'rct-btn';
+    b.innerHTML = `<span class="rct-glyph">${glyph}</span>`;
+    b.setAttribute('aria-label', label);
+    b.addEventListener('click', onClick);
+    b.addEventListener('pointerenter', () => onHover && setHover(onHover()));
+    b.addEventListener('pointerleave', () => setHover(null));
+    row.appendChild(b);
+    return b;
+  }
 
-  function selectAndPlace(id) {
-    state.selected = id;
-    const def = RC.pieceDef(id);
-    const check = RC.canPlace(def, RC.track.head);
-    if (check.ok) {
-      RC.place(id, { lift: state.lift });
-      flash(id, 'ok');
-    } else {
-      flash(id, 'bad');
-      setStatus(check.why);
+  function buildRows() {
+    const dirRow = document.getElementById('row-dir');
+    const slopeRow = document.getElementById('row-slope');
+    const specialRow = document.getElementById('row-special');
+    if (!dirRow || !slopeRow || !specialRow) return;
+    dirRow.innerHTML = slopeRow.innerHTML = specialRow.innerHTML = '';
+
+    for (const d of DIRECTIONS) {
+      const b = makeBtn(dirRow, d.glyph, d.label, () => {
+        sel.dir = d.id;
+        sel.special = null;
+        // Turns are level-only for now, so keep the slope row honest.
+        if (d.piece) sel.slope = S.LEVEL;
+        refresh();
+      }, () => ({ dir: d.id, slope: d.piece ? S.LEVEL : sel.slope, special: null }));
+      dirBtns.set(d.id, b);
     }
+
+    for (const s of SLOPES) {
+      const b = makeBtn(slopeRow, s.glyph, s.label, () => {
+        sel.slope = s.g;
+        sel.special = null;
+        sel.dir = 'straight';
+        refresh();
+      }, () => ({ dir: 'straight', slope: s.g, special: null }));
+      slopeBtns.set(s.g, b);
+    }
+
+    // Chain lift lives with the slope controls, as it does in RCT.
+    const lift = document.createElement('button');
+    lift.type = 'button';
+    lift.className = 'rct-btn rct-btn-wide';
+    lift.id = 'btn-lift';
+    lift.textContent = 'Chain';
+    lift.title = 'Put a chain lift on uphill pieces as you build them';
+    lift.addEventListener('click', () => {
+      sel.lift = !sel.lift;
+      setStatus(sel.lift ? 'Chain lift on — applies to uphill pieces' : 'Chain lift off');
+      refresh();
+    });
+    slopeRow.appendChild(lift);
+
+    for (const sp of SPECIALS) {
+      const b = makeBtn(specialRow, sp.glyph, sp.label, () => {
+        sel.special = sp.id;
+        refresh();
+      }, () => ({ dir: sel.dir, slope: sel.slope, special: sp.id }));
+      specialBtns.set(sp.id, b);
+    }
+  }
+
+  /* ---- build ------------------------------------------------------------ */
+  function buildSelected() {
+    const def = resolve();
+    if (!def) { setStatus('Nothing to build from here'); return; }
+    const check = RC.canPlace(def, RC.track.head);
+    if (!check.ok) { setStatus(check.why); return; }
+    RC.place(def.id, { lift: sel.lift });
+    // A special is a one-shot choice; drop back to plain track afterwards.
+    if (sel.special) sel.special = null;
     refresh();
   }
 
-  function flash(id, cls) {
-    const b = buttons.get(id);
-    if (!b) return;
-    b.classList.add('flash-' + cls);
-    setTimeout(() => b.classList.remove('flash-' + cls), 180);
-  }
-
-  /* ---- status ---------------------------------------------------------- */
   let statusTimer = null;
   function setStatus(msg) {
     const el = document.getElementById('build-msg');
     if (!el) return;
     el.textContent = msg || '';
     clearTimeout(statusTimer);
-    if (msg) statusTimer = setTimeout(() => { el.textContent = ''; }, 2600);
+    if (msg) statusTimer = setTimeout(() => { el.textContent = ''; }, 2800);
   }
 
+  /* ---- refresh ---------------------------------------------------------- */
   function refresh() {
     const head = RC.track.head;
 
-    // Grey out anything whose entry slope doesn't match the head.
-    for (const [id, b] of buttons) {
-      const def = RC.pieceDef(id);
-      const check = RC.canPlace(def, head);
+    for (const d of DIRECTIONS) {
+      const b = dirBtns.get(d.id);
+      if (!b) continue;
+      const def = resolveWith(d.id, d.piece ? S.LEVEL : sel.slope, null);
+      const check = def ? RC.canPlace(def, head) : { ok: false, why: 'Not possible here' };
       b.disabled = !check.ok;
-      b.title = check.ok ? def.label : `${def.label} — ${check.why}`;
-      b.classList.toggle('selected', id === state.selected);
+      b.title = check.ok ? d.label : `${d.label} — ${check.why}`;
+      b.classList.toggle('selected', !sel.special && sel.dir === d.id);
+    }
+
+    for (const s of SLOPES) {
+      const b = slopeBtns.get(s.g);
+      if (!b) continue;
+      const def = resolveWith('straight', s.g, null);
+      const check = def ? RC.canPlace(def, head) : { ok: false, why: 'Not possible from this slope' };
+      b.disabled = !check.ok;
+      // The label says where you'll end up, not which piece it takes to get there.
+      b.title = check.ok
+        ? (def.gIn === def.gOut ? s.label : `${s.label} (via ${def.label.toLowerCase()})`)
+        : `${s.label} — ${check.why}`;
+      b.classList.toggle('selected', !sel.special && sel.dir === 'straight' && sel.slope === s.g);
+    }
+
+    for (const sp of SPECIALS) {
+      const b = specialBtns.get(sp.id);
+      if (!b) continue;
+      const check = RC.canPlace(RC.pieceDef(sp.id), head);
+      b.disabled = !check.ok;
+      b.title = check.ok ? sp.label : `${sp.label} — ${check.why}`;
+      b.classList.toggle('selected', sel.special === sp.id);
     }
 
     const liftBtn = document.getElementById('btn-lift');
-    if (liftBtn) liftBtn.classList.toggle('active', state.lift);
+    if (liftBtn) liftBtn.classList.toggle('active', sel.lift);
+
+    // Preview: name what will be built, or say why it can't be.
+    const def = resolve();
+    const check = def ? RC.canPlace(def, head) : { ok: false, why: 'Nothing to build from here' };
+    const nameEl = document.getElementById('preview-name');
+    const whyEl = document.getElementById('preview-why');
+    if (nameEl) nameEl.textContent = def ? def.label : '—';
+    if (whyEl) whyEl.textContent = check.ok ? '' : check.why;
+
+    const buildBtn = document.getElementById('btn-build');
+    if (buildBtn) buildBtn.disabled = !check.ok;
 
     const undoBtn = document.getElementById('btn-undo');
     if (undoBtn) undoBtn.disabled = RC.track.pieces.length === 0;
@@ -143,13 +224,11 @@
         : 'Join the track back to the station with plain filler track';
     }
 
-    // Head + circuit readouts.
-    const st = RC.circuitStatus();
     const roHead = document.getElementById('ro-head');
     if (roHead && head) {
-      roHead.textContent =
-        `(${head.i}, ${head.j}) · ${head.k} m · ${RC.slopeName(head.g)}`;
+      roHead.textContent = `(${head.i}, ${head.j}) · ${head.k} m · ${RC.slopeName(head.g)}`;
     }
+    const st = RC.circuitStatus();
     const roCircuit = document.getElementById('ro-circuit');
     if (roCircuit) {
       roCircuit.textContent = st.label;
@@ -158,38 +237,26 @@
     const roLength = document.getElementById('ro-length');
     if (roLength) roLength.textContent = RC.trackLength().toFixed(0) + ' m';
 
-    // Editing the track invalidates any run in progress.
-    if (RC.onTrackEdit) RC.onTrackEdit();
-
+    // Only a real track edit should throw away a run in progress — merely
+    // clicking a different slope button shouldn't.
+    if (RC.version !== lastVersion) {
+      lastVersion = RC.version;
+      if (RC.onTrackEdit) RC.onTrackEdit();
+    }
     RC.requestRender && RC.requestRender();
   }
+  let lastVersion = -1;
   RC.refreshBuild = refresh;
 
-  /* ---- wiring ---------------------------------------------------------- */
+  /* ---- wiring ----------------------------------------------------------- */
   RC.initBuild = function () {
-    buildPalette();
+    buildRows();
+
+    const build = document.getElementById('btn-build');
+    if (build) build.addEventListener('click', buildSelected);
 
     const undo = document.getElementById('btn-undo');
     if (undo) undo.addEventListener('click', () => { RC.undo(); refresh(); });
-
-    const finish = document.getElementById('btn-finish');
-    if (finish) finish.addEventListener('click', () => {
-      finish.disabled = true;
-      finish.textContent = 'Working…';
-      // Yield a frame so the button actually repaints before the search runs.
-      requestAnimationFrame(() => {
-        const t0 = performance.now();
-        const res = RC.completeTrack();
-        const ms = performance.now() - t0;
-        finish.textContent = 'Finish track';
-        if (res.ok) {
-          setStatus(`Joined up with ${res.added} pieces (${ms.toFixed(0)} ms)`);
-        } else {
-          setStatus(res.why);
-        }
-        refresh();
-      });
-    });
 
     const clear = document.getElementById('btn-clear');
     if (clear) clear.addEventListener('click', () => {
@@ -198,13 +265,21 @@
       refresh();
     });
 
-    const lift = document.getElementById('btn-lift');
-    if (lift) lift.addEventListener('click', () => {
-      state.lift = !state.lift;
-      setStatus(state.lift
-        ? 'Chain lift on — applies to uphill pieces as you build'
-        : 'Chain lift off');
-      refresh();
+    const finish = document.getElementById('btn-finish');
+    if (finish) finish.addEventListener('click', () => {
+      finish.disabled = true;
+      const was = finish.textContent;
+      finish.textContent = 'Working…';
+      requestAnimationFrame(() => {
+        const t0 = performance.now();
+        const res = RC.completeTrack();
+        const ms = performance.now() - t0;
+        finish.textContent = was;
+        setStatus(res.ok
+          ? `Joined up with ${res.added} pieces (${ms.toFixed(0)} ms)`
+          : res.why);
+        refresh();
+      });
     });
 
     window.addEventListener('keydown', (e) => {
@@ -215,7 +290,7 @@
         refresh();
       } else if (e.key === 'Enter') {
         e.preventDefault();
-        selectAndPlace(state.selected);
+        buildSelected();
       }
     });
 

@@ -379,6 +379,66 @@
     }
   });
 
+  /* ---- construction UI's piece resolution -------------------------------
+     The build window picks pieces by looking up "entry slope > exit slope".
+     That only works if the piece table covers every reachable pair exactly
+     once, which is a property of the data, not of the UI. */
+  function straightMap() {
+    const m = new Map();
+    for (const def of RC.PIECES) {
+      if (def.kind !== 'straight') continue;
+      if (def.station || def.brake || def.launch) continue;
+      const key = def.gIn + '>' + def.gOut;
+      if (m.has(key)) return { dupe: key, a: m.get(key).id, b: def.id };
+      m.set(key, def);
+    }
+    return m;
+  }
+
+  check('slope pairs resolve to exactly one piece each', () => {
+    const m = straightMap();
+    if (m.dupe) return `two pieces claim "${m.dupe}": ${m.a} and ${m.b}`;
+    // Every slope must at least be able to hold itself.
+    for (const g of [-6, -2, 0, 2, 6]) {
+      if (!m.has(g + '>' + g)) return `no piece holds slope ${g}`;
+    }
+  });
+
+  check('every slope can be reached from level in single steps', () => {
+    const m = straightMap();
+    if (m.dupe) return 'duplicate mapping';
+    // Walking outwards from level, each step changes slope by one grade.
+    const chains = [[0, 2, 6], [0, -2, -6]];
+    for (const chain of chains) {
+      for (let n = 0; n + 1 < chain.length; n++) {
+        const up = chain[n] + '>' + chain[n + 1];
+        const down = chain[n + 1] + '>' + chain[n];
+        if (!m.has(up)) return `no piece goes from slope ${chain[n]} to ${chain[n + 1]}`;
+        if (!m.has(down)) return `no way back from slope ${chain[n + 1]} to ${chain[n]}`;
+      }
+    }
+  });
+
+  check('holding a slope selection walks up through the transitions', () => {
+    // This is the behaviour the build window depends on: pick "steep up" and
+    // press build repeatedly, and the track should climb 0 -> gentle -> steep
+    // without the student ever naming a transition piece.
+    const m = straightMap();
+    RC.resetTrack();
+    const target = 6;
+    const seen = [];
+    for (let n = 0; n < 4; n++) {
+      const g = RC.track.head.g;
+      const def = m.get(g + '>' + target) || m.get(g + '>' + (g < 2 ? 2 : target));
+      if (!def) return `stuck at slope ${g} with no piece toward ${target}`;
+      if (!RC.place(def.id)) return `${def.id} refused at slope ${g}`;
+      seen.push(RC.track.head.g);
+    }
+    if (seen[0] !== 2) return `first build left slope ${seen[0]}, expected gentle (2)`;
+    if (seen[1] !== 6) return `second build left slope ${seen[1]}, expected steep (6)`;
+    if (seen[2] !== 6) return `third build left slope ${seen[2]}, expected to hold steep`;
+  });
+
   /* ---- finish track ----------------------------------------------------- */
   check('finish track closes a circuit from the bare station', () => {
     RC.resetTrack();

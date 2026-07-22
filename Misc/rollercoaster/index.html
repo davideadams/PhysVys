@@ -59,29 +59,37 @@
   </div>
   <div class="window-body">
 
+    <div class="pal-group">
+      <div class="pal-label">Direction</div>
+      <div class="rct-row" id="row-dir"></div>
+    </div>
+
+    <div class="pal-group">
+      <div class="pal-label">Slope</div>
+      <div class="rct-row" id="row-slope"></div>
+    </div>
+
+    <div class="pal-group">
+      <div class="pal-label">Special</div>
+      <div class="rct-row" id="row-special"></div>
+    </div>
+
+    <div class="rct-preview">
+      <div class="rct-preview-name" id="preview-name">—</div>
+      <div class="rct-preview-why" id="preview-why"></div>
+      <button class="rct-build" id="btn-build" type="button">Build this</button>
+    </div>
+
+    <div class="auto-row">
+      <button class="pal-wide" id="btn-undo" type="button" title="Remove the last piece (Backspace)">◀◀ Remove</button>
+      <button class="pal-wide" id="btn-finish" type="button">Finish track</button>
+    </div>
+    <div class="auto-row" style="margin-top:0.35rem">
+      <button class="pal-wide" id="btn-clear" type="button" title="Clear back to the station">Clear</button>
+    </div>
+
     <div class="head-card">
       <div class="readout-row"><span>Build head</span><span id="ro-head">—</span></div>
-    </div>
-
-    <div id="palette"></div>
-
-    <div class="pal-group">
-      <div class="pal-label">Options</div>
-      <div class="auto-row">
-        <button class="pal-wide" id="btn-lift" type="button"
-                title="Apply a chain lift to uphill pieces as you build">Chain lift</button>
-      </div>
-    </div>
-
-    <div class="pal-group">
-      <div class="auto-row">
-        <button class="pal-wide" id="btn-finish" type="button"
-                title="Join the track back to the station with plain filler track">Finish track</button>
-      </div>
-      <div class="auto-row" style="margin-top:0.35rem">
-        <button class="pal-wide" id="btn-undo" type="button" title="Remove the last piece (Backspace)">Undo piece</button>
-        <button class="pal-wide" id="btn-clear" type="button" title="Clear back to the station">Clear</button>
-      </div>
     </div>
 
     <div class="build-msg" id="build-msg"></div>
@@ -109,10 +117,11 @@
       <strong>View.</strong> Drag to pan, scroll to zoom, ⟲ ⟳ to rotate the park.
     </p>
     <p class="hint">
-      <strong>Building.</strong> Pieces attach to the yellow arrow, which is the end of
-      the track so far. A piece is only offered if its entry matches the slope the track
-      is currently on, so a steep drop has to be levelled out before it can turn. Backspace
-      removes the last piece.
+      <strong>Building.</strong> Track grows from the yellow arrow. Pick a direction and
+      the slope you want to be travelling at, then press <em>Build this</em> — the
+      transition onto that slope is added for you, so holding a climb just means pressing
+      build again. Anything the track can't do from where it currently is goes grey.
+      Backspace removes the last piece.
     </p>
   </div>
 </section>
