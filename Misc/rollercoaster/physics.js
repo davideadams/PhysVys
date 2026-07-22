@@ -28,7 +28,10 @@
 
     friction: false,
     mu: 0.02,            // rolling resistance
-    kDrag: 0.0022,       // air drag, per unit mass
+    // Air drag per unit mass, so the deceleration is kDrag * v^2. This is
+    // half.rho.Cd.A / m: about 0.5 * 1.2 * 1.0 * 4 m^2 / 2000 kg for a
+    // four-car train.
+    kDrag: 0.0012,
 
     E0: 0, eMotor: 0, eThermal: 0,
     maxV: 0, maxG: 0, maxZ: 0,
