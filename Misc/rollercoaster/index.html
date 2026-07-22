@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rollercoaster Builder</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../miscellaneous.html">← Back</a>
+      <p class="eyebrow">Energy</p>
+      <h1>Rollercoaster Builder</h1>
+      <p class="intro">
+        Build a coaster piece by piece, send a train around it, and watch the energy move.
+        Every metre the train climbs is gravitational potential energy bought with kinetic
+        energy — <em>E<sub>p</sub> = mgh</em> and <em>E<sub>k</sub> = ½mv²</em> trading back and
+        forth along the track. The chain lift is the only thing adding energy to the ride.
+      </p>
+    </div>
+  </section>
+
+  <section class="layout">
+    <aside class="panel controls">
+
+      <div class="control-group">
+        <label>View</label>
+        <div class="auto-row">
+          <button id="btn-rot-ccw" class="play-btn ghost" type="button" title="Rotate view left">⟲</button>
+          <button id="btn-rot-cw"  class="play-btn ghost" type="button" title="Rotate view right">⟳</button>
+          <button id="btn-zoom-out" class="play-btn ghost" type="button" title="Zoom out">−</button>
+          <button id="btn-zoom-in"  class="play-btn ghost" type="button" title="Zoom in">+</button>
+        </div>
+        <div class="auto-row" style="margin-top:0.4rem">
+          <button id="btn-view-reset" class="play-btn ghost" type="button">Reset view</button>
+        </div>
+      </div>
+
+      <div class="explain-card">
+        <div class="readout-hd">Scene</div>
+        <div class="readout-row"><span>Tile under cursor</span><span id="ro-tile">—</span></div>
+        <div class="readout-row"><span>Ground size</span><span id="ro-extent">—</span></div>
+        <div class="readout-row"><span>Tile</span><span id="ro-tilesize">—</span></div>
+      </div>
+
+      <div class="explain-card">
+        <strong>Scale.</strong> One tile is 4&nbsp;m square and one height step is 1&nbsp;m, so a
+        lift hill of 10 steps is a 10&nbsp;m climb. Heights are measured from ground level.
+      </div>
+
+    </aside>
+
+    <section class="panel visual-panel">
+      <div class="canvas-wrap">
+        <canvas id="park-canvas"></canvas>
+        <div class="scene-note">Drag to pan&nbsp;&nbsp;·&nbsp;&nbsp;Scroll to zoom&nbsp;&nbsp;·&nbsp;&nbsp;⟲ ⟳ to rotate</div>
+      </div>
+    </section>
+  </section>
+
+</main>
+
+<script src="iso.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
