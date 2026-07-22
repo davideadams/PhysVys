@@ -427,7 +427,12 @@
     let cur = null, tN = 0, lN = 0;
     for (const p of pts) {
       if (!cur || cur.pi !== p.pi) {
-        cur = { pi: p.pi, defId: p.piece.defId, kind: p.def.kind, s0: p.s, s1: p.s, label: null };
+        // The joint point (a piece's t=1) is recorded against the previous
+        // piece, and the new piece's first recorded point is one sample in.
+        // Start the new span at the previous span's end so they stay
+        // contiguous rather than leaving the joint gap uncovered.
+        cur = { pi: p.pi, defId: p.piece.defId, kind: p.def.kind,
+                s0: cur ? cur.s1 : p.s, s1: p.s, label: null };
         spans.push(cur);
       } else {
         cur.s1 = p.s;
