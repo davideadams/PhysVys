@@ -786,6 +786,134 @@
     }
   });
 
+  /* ---- vertical loops ----------------------------------------------------
+     The loop is the only piece that inverts the train, which is why the
+     orientation frame is parallel-transported rather than rebuilt from the
+     horizontal at each point. These check that it actually turns over. */
+  function loopTrack(id) {
+    RC.resetTrack();
+    RC.place('flat');
+    if (!RC.place(id)) return null;
+    RC.place('flat');
+    return RC.trackPath();
+  }
+
+  check('a loop advances four tiles and one to the side, level at both ends', () => {
+    for (const id of ['loop-left', 'loop-right']) {
+      const def = RC.pieceDef(id);
+      for (let dir = 0; dir < 4; dir++) {
+        const node = { i: 20, j: 20, dir, k: 5, g: 0 };
+        const exit = RC.exitNode(def, node);
+        if (exit.dir !== dir) return `${id} dir ${dir}: direction changed`;
+        if (exit.k !== node.k) return `${id} dir ${dir}: height changed by ${exit.k - node.k}`;
+        if (exit.g !== 0) return `${id} dir ${dir}: does not finish level`;
+
+        const d = RC.DIRS[dir];
+        const along = (exit.i - node.i) * d[0] + (exit.j - node.j) * d[1];
+        const across = Math.abs((exit.i - node.i) * d[1] - (exit.j - node.j) * d[0]);
+        if (along !== 4) return `${id} dir ${dir}: advanced ${along} tiles, expected 4`;
+        if (across !== 1) return `${id} dir ${dir}: moved ${across} tiles sideways, expected 1`;
+
+        // And the drawn centreline has to end where the node says it does.
+        const end = RC.centreline(def, node, 1);
+        const ep = RC.entryPoint(exit);
+        if (!near(ep.x, end.x, 1e-9) || !near(ep.y, end.y, 1e-9) || !near(end.z, exit.k, 1e-9)) {
+          return `${id} dir ${dir}: centreline ends (${end.x},${end.y},${end.z}) ` +
+                 `but the exit node is at (${ep.x},${ep.y},${exit.k})`;
+        }
+      }
+    }
+  });
+
+  check('a loop actually goes over the top and comes back down', () => {
+    const def = RC.pieceDef('loop-right');
+    const node = { i: 20, j: 20, dir: 0, k: 0, g: 0 };
+    let peak = 0, backwards = false;
+    const d = RC.DIRS[0];
+    const E = RC.entryPoint(node);
+    let prevAlong = 0;
+    for (let n = 1; n <= 96; n++) {
+      const c = RC.centreline(def, node, n / 96);
+      peak = Math.max(peak, c.z);
+      const along = (c.x - E.x) * d[0] + (c.y - E.y) * d[1];
+      if (along < prevAlong - 1e-9) backwards = true;    // the loop doubles back
+      prevAlong = along;
+    }
+    if (!near(peak, 2 * RC.LOOP_R, 0.01)) {
+      return `loop peaks at ${peak.toFixed(2)} m, expected ${2 * RC.LOOP_R}`;
+    }
+    if (!backwards) return 'the path never doubles back — that is a hump, not a loop';
+  });
+
+  check('the train turns upside down at the top of a loop', () => {
+    // The whole reason the frame is transported: a horizontal-right
+    // construction can only ever produce an upward "up".
+    const path = loopTrack('loop-right');
+    if (!path) return 'loop was refused';
+    let top = path.pts[0];
+    for (const p of path.pts) if (p.z > top.z) top = p;
+    if (top.z < 2 * RC.LOOP_R - 0.5) return `highest point is only ${top.z.toFixed(1)} m`;
+
+    const fr = RC.carFrame(top);
+    if (!(fr.u.z < -0.8)) {
+      return `at the top of the loop "up" points ${fr.u.z.toFixed(3)} vertically — ` +
+             `the train is not inverted`;
+    }
+  });
+
+  check('the frame stays orthonormal all the way round a loop', () => {
+    const path = loopTrack('loop-right');
+    if (!path) return 'loop was refused';
+    const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z;
+    const len = a => Math.hypot(a.x, a.y, a.z);
+    for (let n = 0; n < path.pts.length; n++) {
+      const fr = RC.carFrame(path.pts[n]);
+      for (const [name, v] of [['f', fr.f], ['r', fr.r], ['u', fr.u]]) {
+        if (!near(len(v), 1, 1e-6)) return `${name} not unit length at point ${n}`;
+      }
+      if (!near(dot(fr.f, fr.r), 0, 1e-6)) return `f and r not perpendicular at point ${n}`;
+      if (!near(dot(fr.f, fr.u), 0, 1e-6)) return `f and u not perpendicular at point ${n}`;
+      if (!near(dot(fr.r, fr.u), 0, 1e-6)) return `r and u not perpendicular at point ${n}`;
+    }
+  });
+
+  check('the frame does not flip about on ordinary track', () => {
+    // Transport must not introduce twist where there is none: on flat and
+    // sloped straight track, "up" should stay upright.
+    RC.resetTrack();
+    for (const id of ['flat', 'flat-to-gentle-up', 'gentle-up', 'gentle-up-to-flat',
+                      'flat', 'turn-right-wide', 'flat']) {
+      if (!RC.place(id)) return `${id} refused`;
+    }
+    for (const p of RC.trackPath().pts) {
+      const fr = RC.carFrame(p);
+      if (fr.u.z < 0.7) return `up tilted to ${fr.u.z.toFixed(3)} on unbanked track`;
+    }
+  });
+
+  check('a train needs enough speed at the top of a loop or it is warned', () => {
+    RC.track.pieces = [];
+    RC.track.start = { i: 6, j: 20, dir: 0, k: 20, g: 0 };
+    RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
+    // Drop in, then loop.
+    const seq = ['flat-to-gentle-down'].concat(new Array(6).fill('gentle-down'))
+      .concat(['gentle-down-to-flat', 'flat', 'loop-right', 'flat', 'flat']);
+    for (const id of seq) {
+      if (!RC.place(id)) return `${id} refused: ` + RC.canPlace(RC.pieceDef(id), RC.track.head).why;
+    }
+    const path = RC.trackPath();
+    let top = path.pts[0];
+    for (const p of path.pts) if (p.z > top.z && p.def.kind === 'loop') top = p;
+
+    // Fast: the track pushes the rider down into the seat even inverted.
+    const fast = RC.gForces(top, 18, 0);
+    if (!(fast.vert > 0)) return `at 18 m/s the top of the loop gives ${fast.vert.toFixed(2)} g`;
+    // Slow: not enough to hold the train on, which must be flagged.
+    const slow = RC.gForces(top, 4, 0);
+    if (!(slow.vert < 0)) return `at 4 m/s the top of the loop gives ${slow.vert.toFixed(2)} g`;
+  });
+
   /* ---- banking ----------------------------------------------------------- */
   function bankedTurnSample(id, banked, sOffset) {
     RC.resetTrack();

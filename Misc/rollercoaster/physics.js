@@ -72,39 +72,30 @@
        u — up, perpendicular to the track surface (r x f)
 
      Returned in metre-space; the renderer divides back by TILE_M / LEVEL_M. */
-  function buildFrame(dx, dy, dz, bank) {
-    let fx = dx, fy = dy, fz = dz;
+  /* The frame is built once per track version by track.js, parallel-
+     transported along the path so it can invert through a loop, with any bank
+     already rolled in. Both entry points below just read it — interpolating
+     between two path points can leave the axes slightly non-orthogonal, so
+     they are tidied up here. */
+  function tidy(fx, fy, fz, ux, uy, uz) {
     let fl = Math.hypot(fx, fy, fz);
     if (fl < 1e-9) { fx = 1; fy = 0; fz = 0; fl = 1; }
     fx /= fl; fy /= fl; fz /= fl;
 
-    // Right, horizontal by construction. The sign matters: a right turn from
-    // heading +i curves towards +j, so +j has to be the rider's right, and
-    // this must come out as (0,1,0) when f is (1,0,0).
-    let rx = -fy, ry = fx, rz = 0;
-    const rl = Math.hypot(rx, ry);
-    if (rl < 1e-9) { rx = 0; ry = 1; }       // track pointing straight up
-    else { rx /= rl; ry /= rl; }
-
-    // u = f x r, giving a right-handed (forward, right, up) triad.
-    let ux = -fz * ry;
-    let uy = fz * rx;
-    let uz = fx * ry - fy * rx;
-    const ul = Math.hypot(ux, uy, uz) || 1;
+    // Re-orthogonalise up against forward.
+    const d = ux * fx + uy * fy + uz * fz;
+    ux -= d * fx; uy -= d * fy; uz -= d * fz;
+    let ul = Math.hypot(ux, uy, uz);
+    if (ul < 1e-9) {
+      ux = -fz * fx; uy = -fz * fy; uz = 1 - fz * fz;
+      ul = Math.hypot(ux, uy, uz) || 1;
+    }
     ux /= ul; uy /= ul; uz /= ul;
 
-    // Banking is a roll about the forward axis. A positive angle tips "up"
-    // towards the rider's right, which is what a right-hand turn needs: the
-    // outside of the curve rises. Everything downstream — the g-forces, the
-    // car, the rails — reads the rolled frame, so nothing else has to know
-    // banking exists.
-    if (bank) {
-      const c = Math.cos(bank), s = Math.sin(bank);
-      const nux = ux * c + rx * s, nuy = uy * c + ry * s, nuz = uz * c + rz * s;
-      const nrx = rx * c - ux * s, nry = ry * c - uy * s, nrz = rz * c - uz * s;
-      ux = nux; uy = nuy; uz = nuz;
-      rx = nrx; ry = nry; rz = nrz;
-    }
+    // r = u x f completes a right-handed triad.
+    const rx = uy * fz - uz * fy;
+    const ry = uz * fx - ux * fz;
+    const rz = ux * fy - uy * fx;
 
     return {
       f: { x: fx, y: fy, z: fz },
@@ -114,28 +105,13 @@
   }
 
   RC.carFrame = function (p) {
-    const cl = closed();
-    const a = RC.pathAt(p.s - 0.6, cl) || p;
-    const b = RC.pathAt(p.s + 0.6, cl) || p;
-    return buildFrame(
-      (b.x - a.x) * RC.TILE_M,
-      (b.y - a.y) * RC.TILE_M,
-      (b.z - a.z) * RC.LEVEL_M,
-      p.bank || 0
-    );
+    if (p.fx === undefined) return tidy(1, 0, 0, 0, 0, 1);
+    return tidy(p.fx, p.fy, p.fz, p.ux, p.uy, p.uz);
   };
 
-  /* Same frame for a point in the path array, using its neighbours directly
-     rather than a lookup — the renderer needs one per point, every frame. */
   RC.frameAtPoint = function (pts, idx) {
-    const a = pts[Math.max(0, idx - 1)];
-    const b = pts[Math.min(pts.length - 1, idx + 1)];
-    return buildFrame(
-      (b.x - a.x) * RC.TILE_M,
-      (b.y - a.y) * RC.TILE_M,
-      (b.z - a.z) * RC.LEVEL_M,
-      pts[idx].bank || 0
-    );
+    const p = pts[idx];
+    return tidy(p.fx, p.fy, p.fz, p.ux, p.uy, p.uz);
   };
 
   /* What the rider feels, resolved onto the car's own axes.

@@ -57,6 +57,31 @@
     };
   }
 
+  /* Vertical loop, following RCT's footprint: 4 tiles long, 2 wide, finishing
+     one tile to the left or right of where it started so the exit clears the
+     entry. Entry and exit are both level.
+
+     Side view is a circle of radius LOOP_R combined with a steady forward
+     drift, which is what gives a genuine loop (the path crosses itself, and
+     the train is moving backwards at the top) while still advancing 4 tiles:
+
+       forward(t) = L·t + R·sin(2πt)
+       height(t)  = R·(1 − cos(2πt))
+
+     Both derivatives of height vanish at t = 0 and t = 1, so the piece joins
+     level track without a kink. */
+  const LOOP_LEN = 4;    // tiles advanced
+  const LOOP_LAT = 1;    // tiles sideways
+  const LOOP_R = 6;      // metres — the loop stands 2R = 12 m tall
+  RC.LOOP_R = LOOP_R;
+
+  function loop(id, label, side) {
+    return {
+      id, label, kind: 'loop', gIn: FLAT, gOut: FLAT,
+      side, L: LOOP_LEN, lat: LOOP_LAT, R: LOOP_R, dH: 0
+    };
+  }
+
   const PIECES = [
     straight('flat', 'Flat', FLAT, FLAT),
 
@@ -79,6 +104,9 @@
     turn('turn-right-tight', 'Right, tight', 1, 1.5),
     turn('turn-left-wide', 'Left, wide', -1, 2.5),
     turn('turn-right-wide', 'Right, wide', 1, 2.5),
+
+    loop('loop-left', 'Loop, exits left', -1),
+    loop('loop-right', 'Loop, exits right', 1),
 
     straight('station', 'Station', FLAT, FLAT, { station: true }),
     straight('brake', 'Brake run', FLAT, FLAT, { brake: true }),
@@ -114,6 +142,16 @@
   /* Where does this piece put the head? */
   RC.exitNode = function (def, node) {
     const k = node.k + def.dH;
+    if (def.kind === 'loop') {
+      const d = D[node.dir];
+      const lat = D[(node.dir + def.side + 4) & 3];
+      return {
+        i: node.i + d[0] * def.L + lat[0] * def.lat,
+        j: node.j + d[1] * def.L + lat[1] * def.lat,
+        dir: node.dir,
+        k, g: def.gOut
+      };
+    }
     if (def.kind === 'straight') {
       const d = D[node.dir];
       return {
@@ -149,6 +187,21 @@
   RC.centreline = function (def, node, t) {
     const z = node.k + def.dH * heightFrac(def, t);
     const E = entryPoint(node);
+    if (def.kind === 'loop') {
+      const d = D[node.dir];
+      const latDir = D[(node.dir + def.side + 4) & 3];
+      const th = 2 * Math.PI * t;
+      const rTiles = def.R / RC.TILE_M;
+      const fwd = def.L * t + rTiles * Math.sin(th);
+      // Smoothstep, so the sideways drift is flat at both ends and the piece
+      // enters and leaves pointing straight down the track.
+      const lat = def.lat * t * t * (3 - 2 * t);
+      return {
+        x: E.x + d[0] * fwd + latDir[0] * lat,
+        y: E.y + d[1] * fwd + latDir[1] * lat,
+        z: node.k + (def.R / RC.LEVEL_M) * (1 - Math.cos(th))
+      };
+    }
     if (def.kind === 'straight') {
       const d = D[node.dir];
       return { x: E.x + d[0] * def.L * t, y: E.y + d[1] * def.L * t, z };
@@ -165,8 +218,23 @@
     };
   };
 
-  /* Path length in metres. */
+  /* Path length in metres. Loops are measured by sampling, since their
+     centreline isn't a shape with a closed-form length. */
   RC.pieceLength = function (def) {
+    if (def.kind === 'loop') {
+      const node = { i: 10, j: 10, dir: 0, k: 10, g: def.gIn };
+      let total = 0, prev = RC.centreline(def, node, 0);
+      for (let n = 1; n <= 96; n++) {
+        const c = RC.centreline(def, node, n / 96);
+        total += Math.hypot(
+          (c.x - prev.x) * RC.TILE_M,
+          (c.y - prev.y) * RC.TILE_M,
+          (c.z - prev.z) * RC.LEVEL_M
+        );
+        prev = c;
+      }
+      return total;
+    }
     const horiz = def.kind === 'straight'
       ? def.L * RC.TILE_M
       : def.R * RC.TILE_M * Math.PI / 2;
@@ -178,7 +246,7 @@
      checks, collision and (later) support placement. */
   RC.pieceTiles = function (def, node) {
     const seen = new Map();
-    const N = def.kind === 'straight' ? 8 : 20;
+    const N = def.kind === 'straight' ? 8 : (def.kind === 'loop' ? 48 : 20);
     for (let s = 0; s <= N; s++) {
       const p = RC.centreline(def, node, s / N);
       const i = Math.floor(p.x), j = Math.floor(p.y);
@@ -214,7 +282,7 @@
     for (let pi = 0; pi < RC.track.pieces.length; pi++) {
       const p = RC.track.pieces[pi];
       const def = BY_ID.get(p.defId);
-      const n = def.kind === 'straight' ? 8 : 24;   // ~0.5 m resolution
+      const n = def.kind === 'straight' ? 8 : (def.kind === 'loop' ? 64 : 24);
       for (let q = 0; q <= n; q++) {
         if (q === 0 && pi > 0) continue;            // joint shared with previous piece
         const t = q / n;
@@ -255,10 +323,80 @@
       pts[n].curv = Math.hypot(k[0], k[1], k[2]);
     }
 
+    buildFrames(pts);
+
     pathCache = { pts, total: s };
     pathCacheVersion = RC.version;
     return pathCache;
   };
+
+  /* ---- orientation frames -----------------------------------------------
+     Each path point carries an orthonormal (forward, right, up) frame, and it
+     is CARRIED ALONG the track rather than rebuilt at each point.
+
+     The obvious construction — take the tangent, make "right" horizontal,
+     derive "up" from those — cannot work, because it always produces an "up"
+     with a positive vertical component. It can never invert, so a train would
+     stay upright through a loop.
+
+     Instead the frame is parallel-transported: at each point the previous
+     "up" is projected perpendicular to the new tangent and renormalised. That
+     carries orientation continuously, inverts naturally through a loop, and
+     reduces to the obvious answer on ordinary track. Piece bank is then
+     applied on top as a roll about the forward axis. */
+  function buildFrames(pts) {
+    if (!pts.length) return;
+
+    let ux = 0, uy = 0, uz = 1;   // seeded upright; track starts level
+
+    for (let n = 0; n < pts.length; n++) {
+      const a = pts[Math.max(0, n - 1)];
+      const b = pts[Math.min(pts.length - 1, n + 1)];
+      let fx = (b.x - a.x) * RC.TILE_M;
+      let fy = (b.y - a.y) * RC.TILE_M;
+      let fz = (b.z - a.z) * RC.LEVEL_M;
+      let fl = Math.hypot(fx, fy, fz);
+      if (fl < 1e-9) { fx = 1; fy = 0; fz = 0; fl = 1; }
+      fx /= fl; fy /= fl; fz /= fl;
+
+      // Project the carried "up" perpendicular to the new tangent.
+      let d = ux * fx + uy * fy + uz * fz;
+      let px = ux - d * fx, py = uy - d * fy, pz = uz - d * fz;
+      let pl = Math.hypot(px, py, pz);
+      if (pl < 1e-6) {
+        // The tangent turned through the carried up — fall back to world up,
+        // or to a sideways axis if the track is pointing straight at it.
+        px = -fz * fx; py = -fz * fy; pz = 1 - fz * fz;
+        pl = Math.hypot(px, py, pz);
+        if (pl < 1e-6) { px = 0; py = 1; pz = 0; pl = 1; }
+      }
+      ux = px / pl; uy = py / pl; uz = pz / pl;
+
+      // Right-handed triad: r = u x f.
+      let rx = uy * fz - uz * fy;
+      let ry = uz * fx - ux * fz;
+      let rz = ux * fy - uy * fx;
+      const rl = Math.hypot(rx, ry, rz) || 1;
+      rx /= rl; ry /= rl; rz /= rl;
+
+      let Ux = ux, Uy = uy, Uz = uz;
+      let Rx = rx, Ry = ry, Rz = rz;
+
+      // Banking rolls the frame about the forward axis.
+      const bank = pts[n].bank || 0;
+      if (bank) {
+        const c = Math.cos(bank), s = Math.sin(bank);
+        const nUx = Ux * c + Rx * s, nUy = Uy * c + Ry * s, nUz = Uz * c + Rz * s;
+        const nRx = Rx * c - Ux * s, nRy = Ry * c - Uy * s, nRz = Rz * c - Uz * s;
+        Ux = nUx; Uy = nUy; Uz = nUz;
+        Rx = nRx; Ry = nRy; Rz = nRz;
+      }
+
+      pts[n].fx = fx; pts[n].fy = fy; pts[n].fz = fz;
+      pts[n].rx = Rx; pts[n].ry = Ry; pts[n].rz = Rz;
+      pts[n].ux = Ux; pts[n].uy = Uy; pts[n].uz = Uz;
+    }
+  }
 
   /* Curvature vector at b, from its neighbours a and c: the rate of change of
      the unit tangent with arc length. Magnitude is 1/radius; direction points
@@ -326,6 +464,9 @@
       ky: mix(a.ky, b.ky),
       kz: mix(a.kz, b.kz),
       bank: mix(a.bank, b.bank),
+      // Frame axes, interpolated; RC.carFrame re-orthonormalises them.
+      fx: mix(a.fx, b.fx), fy: mix(a.fy, b.fy), fz: mix(a.fz, b.fz),
+      ux: mix(a.ux, b.ux), uy: mix(a.uy, b.uy), uz: mix(a.uz, b.uz),
       piece: f < 0.5 ? a.piece : b.piece,
       def: f < 0.5 ? a.def : b.def
     };
@@ -408,6 +549,16 @@
     const exit = RC.exitNode(def, head);
     if (exit.k < 0) return { ok: false, why: 'Would go below ground' };
     if (exit.k > MAX_H) return { ok: false, why: 'Too high' };
+
+    // A loop rises well above both its ends, so checking the exit alone isn't
+    // enough — the whole centreline has to clear the ground and the ceiling.
+    if (def.kind === 'loop') {
+      for (let n = 0; n <= 24; n++) {
+        const z = RC.centreline(def, head, n / 24).z;
+        if (z < 0) return { ok: false, why: 'The loop would go below ground' };
+        if (z > MAX_H) return { ok: false, why: 'The loop would be too high' };
+      }
+    }
     for (const t of RC.pieceTiles(def, head)) {
       if (!RC.inBounds(t.i, t.j)) return { ok: false, why: 'Off the edge of the park' };
     }

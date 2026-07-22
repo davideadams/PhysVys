@@ -88,6 +88,19 @@
       `<path d="M16 6.5 L21.5 12 L16 17.5"/>`
     ),
 
+    /* Vertical loop, seen from the side: track in, round, and out one tile
+       over. The gap at the crossing shows the path passing over itself. */
+    'loop-right': svg(
+      `<path d="M2 19 H7"/>` +
+      `<path d="M7 19 A6.5 6.5 0 1 1 15.5 18.4"/>` +
+      `<path d="M15.5 18.4 H22" stroke-dasharray="0"/>`
+    ),
+    'loop-left': svg(
+      `<path d="M22 19 H17"/>` +
+      `<path d="M17 19 A6.5 6.5 0 1 0 8.5 18.4"/>` +
+      `<path d="M8.5 18.4 H2"/>`
+    ),
+
     /* Track cross-sections, seen head on: level rails, then rolled 45. */
     'roll-none': svg(
       `<path d="M4 14 H20"/>` +

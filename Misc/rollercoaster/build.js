@@ -32,9 +32,11 @@
   ];
 
   const SPECIALS = [
-    { id: 'station', icon: 'station', label: 'Station' },
-    { id: 'brake',   icon: 'brake',   label: 'Brakes' },
-    { id: 'launch',  icon: 'launch',  label: 'Launch' }
+    { id: 'station',    icon: 'station',    label: 'Station' },
+    { id: 'brake',      icon: 'brake',      label: 'Brakes' },
+    { id: 'launch',     icon: 'launch',     label: 'Launch' },
+    { id: 'loop-left',  icon: 'loop-left',  label: 'Loop, exits left' },
+    { id: 'loop-right', icon: 'loop-right', label: 'Loop, exits right' }
   ];
 
   /* Straight pieces indexed by "entry slope > exit slope", so a direction plus
