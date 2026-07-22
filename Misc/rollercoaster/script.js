@@ -316,7 +316,13 @@
   RC.requestRender = function () { state.dirty = true; };
 
   RC.initWindows();
-  RC.resetTrack();
+  // Start with a working ride standing, so the page is useful before anything
+  // is clicked. Falls back to a bare station if the prefab ever fails to build.
+  const prefab = RC.loadPrefab('first-drop');
+  if (!prefab.ok) {
+    console.warn('Prefab failed to build:', prefab.why);
+    RC.resetTrack();
+  }
   RC.initBuild();
   RC.resetSim();
   RC.resetEnergyScale();

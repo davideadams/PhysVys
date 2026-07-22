@@ -30,6 +30,7 @@
 <script src="iso.js"></script>
 <script src="track.js"></script>
 <script src="physics.js"></script>
+<script src="prefabs.js"></script>
 <script>
 (function () {
   const RC = window.RC;
@@ -1029,6 +1030,68 @@
     }
     if (!sawPitch) return 'never found a sloped section to check';
     if (!sawFlat) return 'never found a flat section to check';
+  });
+
+  /* ---- prefabs -----------------------------------------------------------
+     A prefab that doesn't close is the worst kind of bug here: the page loads
+     looking fine and Test silently refuses. */
+  check('every prefab builds and closes its circuit', () => {
+    for (const key of Object.keys(RC.PREFABS)) {
+      const res = RC.loadPrefab(key);
+      if (!res.ok) return res.why;
+      const st = RC.circuitStatus();
+      if (st.kind !== 'closed') {
+        const h = RC.track.head, s = RC.track.start;
+        return `"${key}" ended as "${st.kind}" — head (${h.i},${h.j},dir ${h.dir},k ${h.k}) ` +
+               `vs start (${s.i},${s.j},dir ${s.dir},k ${s.k})`;
+      }
+    }
+  });
+
+  check('every prefab has a station, a lift hill and returns to ground', () => {
+    for (const key of Object.keys(RC.PREFABS)) {
+      RC.loadPrefab(key);
+      const pieces = RC.track.pieces;
+      if (!pieces.some(p => RC.pieceDef(p.defId).station)) return `"${key}" has no station`;
+      if (!pieces.some(p => p.lift)) return `"${key}" has no chain lift`;
+      const pts = RC.trackPath().pts;
+      const high = Math.max(...pts.map(p => p.z));
+      if (high < 5) return `"${key}" only reaches ${high} m — not much of a coaster`;
+      if (!near(RC.track.head.k, 0, 1e-9)) return `"${key}" does not finish at ground level`;
+    }
+  });
+
+  check('the default prefab completes a lap under gravity alone', () => {
+    // If the lift hill is too short or a turn too tight, the train valleys and
+    // a teacher opening the page watches it stall.
+    const res = RC.loadPrefab('first-drop');
+    if (!res.ok) return res.why;
+    RC.sim.cars = 4;
+    RC.sim.friction = true;          // the harder case
+    RC.resetSim();
+    runFor(240);
+    if (RC.sim.state !== 'finished') {
+      return `state "${RC.sim.state}" after 240 s — ` +
+             `s = ${RC.sim.s.toFixed(1)} of ${RC.trackPath().total.toFixed(1)} m, ` +
+             `v = ${RC.sim.v.toFixed(2)} m/s, note "${RC.sim.note}"`;
+    }
+    RC.sim.friction = false;
+  });
+
+  check('the default prefab is a comfortable ride', () => {
+    RC.loadPrefab('first-drop');
+    RC.sim.cars = 4;
+    RC.sim.friction = false;
+    RC.resetSim();
+    runFor(240);
+    if (RC.sim.maxLatG > 1.0) {
+      return `lateral reaches ${RC.sim.maxLatG.toFixed(2)} g — the banked turns aren't doing their job`;
+    }
+    if (RC.sim.minVertG < -0.5) {
+      return `vertical drops to ${RC.sim.minVertG.toFixed(2)} g — riders would come out of their seats`;
+    }
+    if (RC.sim.maxVertG > 4) return `vertical reaches ${RC.sim.maxVertG.toFixed(2)} g`;
+    if (RC.sim.maxV * 3.6 > 100) return `top speed ${(RC.sim.maxV * 3.6).toFixed(0)} km/h is excessive`;
   });
 
   /* ---- report ---------------------------------------------------------- */
