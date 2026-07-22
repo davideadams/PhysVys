@@ -55,16 +55,23 @@ Five files, plain `<script>` tags — **no ES modules**, so the page works from
 
 ```
 index.html   markup: canvas, top bar, status bar, floating windows
+test.html    geometry self-test — open it in a browser after touching iso/track
 style.css    full-bleed game chrome (NOT the standard PhysVys sim stylesheet)
 iso.js       isometric projection, camera, ground + sky + compass rendering
+track.js     piece catalogue, build head, circuit validation  (no camera knowledge)
+render.js    depth-sorted draw list: rails, sleepers, supports, head, ghost
 ui.js        generic floating-window system
+build.js     build palette UI: selection, placement, undo, lift toggle
 script.js    canvas sizing, camera interaction, render loop, wiring
 ```
 
+Load order matters (`track.js` uses `RC.inBounds` and `RC.TILE_M` from `iso.js`;
+`script.js` uses `RC.ghostDef` from `build.js`). See the script tags in
+`index.html`.
+
 This is a deliberate deviation from the repo's "three files per sim" convention,
-agreed with the teacher up front because of the size of this build. Later phases
-should add `track.js`, `physics.js` and `render.js` rather than growing
-`script.js` without bound.
+agreed with the teacher up front because of the size of this build. Phase 4
+should add `physics.js` rather than growing `script.js` without bound.
 
 ### The rotation design (load-bearing — read before editing `iso.js`)
 
@@ -148,20 +155,23 @@ on the toggle, and Escape-closes-topmost. No per-window JavaScript.
       look.
 - [x] **Layout rework.** Full-bleed canvas, floating window chrome, `ui.js`. Done
       out of phase order at the teacher's request after seeing phase 1.
-- [ ] **Phase 2 — Track piece model and build head.** `track.js`. A piece is
-      `{ turn: -90|0|+90, dHeight, entrySlope, exitSlope, footprint, centreline(t), length }`.
-      Build head carries `{tile, direction, height, slope}`; the palette greys out
-      any piece whose `entrySlope` doesn't match the head's current slope, exactly
-      like RCT. Click to extend, backspace to remove the last piece. Piece set:
-      flat · flat↔gentle · gentle · gentle↔steep · steep · quarter turns (1- and
-      2-tile radius, flat and sloped) · station · brake run · chain lift (a *flag*
-      on a piece, not a separate piece) · launch (shuttle) · vertical loop (prefab,
-      multi-tile footprint). Circuit validity walks the piece chain: closed if the
-      head returns to the station entry with matching direction and height;
-      shuttle if it dead-ends and a launch exists.
-- [ ] **Phase 3 — Track rendering with depth sorting.** `render.js`. Sample piece
-      centrelines into an arc-length table, draw chunky rails + sleepers + support
-      struts, sort against ground and train by `RC.depth`.
+- [x] **Phase 2 — Track piece model and build head.** `track.js` + `build.js`.
+      Nodes are `{i, j, dir, k, g}`; pieces declare `gIn`/`gOut` and are offered
+      only when `gIn` matches the head, which produces the RCT greyed-out palette
+      with no special-casing. Slopes are levels per tile — `GENTLE = 2` (27°),
+      `STEEP = 6` (56°) — chosen **even** so that every height change
+      `L*(gIn+gOut)/2` is an integer and the track stays grid-snapped. Quarter
+      turns use **half-integer radii** (1.5 and 2.5 tiles) because that is the only
+      way the arc's exit lands on a tile edge midpoint. Shipped: flat, gentle,
+      steep, all four transitions each way, four quarter turns, station, brake,
+      launch, chain-lift flag, undo, clear, circuit/shuttle status.
+      *Not yet done:* sloped turns, the vertical loop, and piece-vs-piece collision
+      (only bounds and ground level are checked, so track can currently be built
+      through itself).
+- [ ] **Phase 3 — Track rendering with depth sorting.** `render.js` already has the
+      depth-sorted draw list and support struts; this phase is the **artwork** —
+      chunky RCT-style rails, proper sleepers, support bents rather than single
+      struts. The sorting structure should not need changing.
 - [ ] **Phase 4 — Physics and train.** `physics.js`. Bead on a wire along arc
       length `s`, semi-implicit Euler with substeps. See **Physics design** below.
 - [ ] **Phase 5 — Energy analysis.** Stacked KE/GPE/thermal bars with the total
@@ -234,11 +244,18 @@ had no working Chrome extension and no Node install, so:
 - The DOM, CSS, event wiring and window system have **never been observed
   working**. Treat phase 1 as "written and reasoned about", not "tested".
 
-**First thing a new session should do is open `index.html` in a browser and check
-it actually renders and pans**, before building anything on top of it. Two known
-bug classes were already caught by inspection alone (a missing devicePixelRatio in
-the ground cache, and the unbounded cache allocation), which is a fair warning
-that more may be lurking.
+**First thing a new session should do is open `test.html` and then `index.html` in
+a browser**, before building anything on top of them. Three bugs were already
+caught by inspection alone (a missing devicePixelRatio in the ground cache, the
+unbounded cache allocation, and an over-constrained `left`/`right` on windows
+positioned from the right), which is fair warning that more may be lurking.
+
+`test.html` exists because there is no JS runtime on the build machine — it puts
+the assertions somewhere a browser can run them. It covers the projection
+round-trips, the piece-geometry invariant (a piece's declared exit node must sit
+exactly where its drawn centreline ends — if these drift, track looks connected
+but the physics path has gaps), slope continuity, circuit closure and the
+palette's slope-matching rules. **Add to it as you add geometry.**
 
 Git note: the repo normalises LF→CRLF on checkout, so `git` prints line-ending
 warnings on every add. They're harmless.
