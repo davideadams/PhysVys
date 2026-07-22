@@ -1,35 +1,38 @@
 /* Track rendering. Everything drawable is collected into one list, sorted
-   back-to-front by RC.depth, then drawn — so track that crosses over other
-   track occludes it correctly. Phase 3 refines the artwork; the sorting
-   structure here is the part that matters. */
+   back-to-front by RC.depth, then drawn — so track crossing over other track
+   occludes it correctly.
+
+   Geometry comes from RC.trackPath(), the arc-length table, so sleepers and
+   supports are spaced evenly in METRES rather than per piece (which would
+   bunch them up on turns and stretch them on straights). */
 (function () {
   const RC = window.RC || (window.RC = {});
 
-  const RAIL = '#e8eef3';
-  const RAIL_DARK = '#7d909f';
+  const RAIL_TOP = '#eef3f7';
+  const RAIL_DARK = '#5f7080';
+  const SPINE = '#4a5a68';
+  const SPINE_DARK = '#33404b';
+
   const SLEEPER = '#6d4c33';
   const LIFT_SLEEPER = '#b8860b';
-  const STATION_SLEEPER = '#5b6670';
+  const STATION_SLEEPER = '#59636d';
   const BRAKE_SLEEPER = '#8c3b3b';
-  const LAUNCH_SLEEPER = '#7a3f9d';
-  const SUPPORT = '#8a949c';
-  const SUPPORT_DARK = '#5d666d';
+  const LAUNCH_SLEEPER = '#6f3f96';
 
-  /* Sample every piece's centreline into short segments. */
-  RC.trackSegments = function () {
-    const out = [];
-    for (const p of RC.track.pieces) {
-      const def = RC.pieceDef(p.defId);
-      const n = def.kind === 'straight' ? 4 : 14;
-      let prev = RC.centreline(def, p.node, 0);
-      for (let s = 1; s <= n; s++) {
-        const cur = RC.centreline(def, p.node, s / n);
-        out.push({ a: prev, b: cur, piece: p, def, t: (s - 0.5) / n });
-        prev = cur;
-      }
-    }
-    return out;
-  };
+  const POST = '#9aa4ac';
+  const POST_DARK = '#68727a';
+  const BRACE = '#7d878f';
+
+  const PLATFORM = '#c9b18b';
+  const PLATFORM_EDGE = '#9c8259';
+
+  const CHAIN = '#3d3428';
+
+  /* Half the track gauge, in tiles. 0.2 tiles = 0.8 m each side. */
+  const HG = 0.2;
+  const SLEEPER_M = 1.6;    // metres between sleepers
+  const SUPPORT_M = 6.0;    // metres between support bents
+  const BENT_RUNG_M = 5.0;  // metres between cross-braces up a tall bent
 
   function sleeperColour(def, piece) {
     if (piece && piece.lift) return LIFT_SLEEPER;
@@ -39,121 +42,200 @@
     return SLEEPER;
   }
 
-  /* Screen-space perpendicular to a segment, for offsetting the two rails. */
-  function perp(pa, pb) {
-    let dx = pb.x - pa.x, dy = pb.y - pa.y;
+  /* Tangent from neighbouring path points, and the horizontal normal to it.
+     Offsets are done in WORLD space then projected, so the track's width
+     foreshortens correctly instead of staying a constant number of pixels. */
+  function normalAt(pts, idx) {
+    const a = pts[Math.max(0, idx - 1)];
+    const b = pts[Math.min(pts.length - 1, idx + 1)];
+    const dx = b.x - a.x, dy = b.y - a.y;
     const len = Math.hypot(dx, dy);
-    if (len < 1e-6) return { x: 0, y: 0 };
+    if (len < 1e-9) return { x: 0, y: 0 };
     return { x: -dy / len, y: dx / len };
   }
 
-  function drawSegment(ctx, item, cam, view) {
-    const { a, b, def, piece } = item;
-    const pa = RC.toScreen(a.x, a.y, a.z, cam, view);
-    const pb = RC.toScreen(b.x, b.y, b.z, cam, view);
-    const n = perp(pa, pb);
-    const half = 3.2 * cam.zoom;
-
-    // Sleeper first, so the rails sit on top of it.
-    ctx.strokeStyle = sleeperColour(def, piece);
-    ctx.lineWidth = Math.max(1, 4.5 * cam.zoom);
-    ctx.lineCap = 'butt';
+  function line(ctx, p, q, colour, width) {
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = width;
     ctx.beginPath();
-    ctx.moveTo(pa.x + n.x * half * 1.35, pa.y + n.y * half * 1.35);
-    ctx.lineTo(pa.x - n.x * half * 1.35, pa.y - n.y * half * 1.35);
+    ctx.moveTo(p.x, p.y);
+    ctx.lineTo(q.x, q.y);
     ctx.stroke();
+  }
 
-    // Two rails.
+  /* ---- drawables -------------------------------------------------------- */
+
+  function drawRail(ctx, d, cam, view) {
+    const { a, b, na, nb } = d;
+    const z = cam.zoom;
+    const S = (p, n, s, dz) => RC.toScreen(p.x + n.x * HG * s, p.y + n.y * HG * s, p.z + (dz || 0), cam, view);
+
+    // Spine below the rails, which is what gives the track visual mass.
+    const sa = S(a, na, 0, -0.35), sb = S(b, nb, 0, -0.35);
+    line(ctx, sa, sb, SPINE_DARK, Math.max(2, 5.2 * z));
+    line(ctx, sa, sb, SPINE, Math.max(1, 3.0 * z));
+
     ctx.lineCap = 'round';
     for (const s of [1, -1]) {
-      ctx.strokeStyle = RAIL_DARK;
-      ctx.lineWidth = Math.max(1.6, 2.6 * cam.zoom);
-      ctx.beginPath();
-      ctx.moveTo(pa.x + n.x * half * s, pa.y + n.y * half * s);
-      ctx.lineTo(pb.x + n.x * half * s, pb.y + n.y * half * s);
-      ctx.stroke();
+      const pa = S(a, na, s), pb = S(b, nb, s);
+      line(ctx, pa, pb, RAIL_DARK, Math.max(1.8, 3.4 * z));
+      line(ctx, pa, pb, RAIL_TOP, Math.max(0.8, 1.5 * z));
+    }
+    ctx.lineCap = 'butt';
+  }
 
-      ctx.strokeStyle = RAIL;
-      ctx.lineWidth = Math.max(0.8, 1.3 * cam.zoom);
+  function drawSleeper(ctx, d, cam, view) {
+    const { p, n, colour } = d;
+    const z = cam.zoom;
+    const l = RC.toScreen(p.x + n.x * HG * 1.5, p.y + n.y * HG * 1.5, p.z - 0.3, cam, view);
+    const r = RC.toScreen(p.x - n.x * HG * 1.5, p.y - n.y * HG * 1.5, p.z - 0.3, cam, view);
+    line(ctx, l, r, colour, Math.max(1.5, 4.0 * z));
+  }
+
+  /* Chain dogs along a lift hill, so it reads as powered rather than just
+     coloured differently. */
+  function drawChain(ctx, d, cam, view) {
+    const { p, n } = d;
+    const z = cam.zoom;
+    const l = RC.toScreen(p.x + n.x * HG * 0.35, p.y + n.y * HG * 0.35, p.z - 0.15, cam, view);
+    const r = RC.toScreen(p.x - n.x * HG * 0.35, p.y - n.y * HG * 0.35, p.z - 0.15, cam, view);
+    line(ctx, l, r, CHAIN, Math.max(1.2, 2.4 * z));
+  }
+
+  /* A support bent: two legs under the rails, cross-braced up its height. */
+  function drawBent(ctx, d, cam, view) {
+    const { p, n } = d;
+    const z = cam.zoom;
+    const legW = Math.max(1.5, 3.6 * z);
+
+    const feet = [], tops = [];
+    for (const s of [1, -1]) {
+      const x = p.x + n.x * HG * s, y = p.y + n.y * HG * s;
+      tops.push(RC.toScreen(x, y, p.z - 0.4, cam, view));
+      feet.push(RC.toScreen(x, y, 0, cam, view));
+    }
+
+    // Cross-bracing first so the legs draw over it.
+    const rungs = Math.max(1, Math.floor(p.z / BENT_RUNG_M));
+    for (let r = 1; r <= rungs; r++) {
+      const h = p.z * (r / (rungs + 1));
+      const a = RC.toScreen(p.x + n.x * HG, p.y + n.y * HG, h, cam, view);
+      const b = RC.toScreen(p.x - n.x * HG, p.y - n.y * HG, h, cam, view);
+      line(ctx, a, b, BRACE, Math.max(1, 1.8 * z));
+      // Alternating diagonal, giving the lattice its zig-zag.
+      const hNext = p.z * ((r + 0.5) / (rungs + 1));
+      const c = RC.toScreen(
+        p.x + n.x * HG * (r % 2 ? -1 : 1),
+        p.y + n.y * HG * (r % 2 ? -1 : 1),
+        hNext, cam, view);
+      line(ctx, r % 2 ? a : b, c, BRACE, Math.max(0.8, 1.4 * z));
+    }
+
+    for (let s = 0; s < 2; s++) {
+      line(ctx, tops[s], feet[s], POST_DARK, legW);
+      line(ctx, tops[s], feet[s], POST, Math.max(0.8, legW * 0.45));
+    }
+  }
+
+  /* Station platforms, one either side of the track. */
+  function drawPlatform(ctx, d, cam, view) {
+    const { a, b, na, nb } = d;
+    for (const s of [1, -1]) {
+      const q = [
+        RC.toScreen(a.x + na.x * HG * 1.6 * s, a.y + na.y * HG * 1.6 * s, a.z - 0.4, cam, view),
+        RC.toScreen(a.x + na.x * HG * 4.2 * s, a.y + na.y * HG * 4.2 * s, a.z - 0.4, cam, view),
+        RC.toScreen(b.x + nb.x * HG * 4.2 * s, b.y + nb.y * HG * 4.2 * s, b.z - 0.4, cam, view),
+        RC.toScreen(b.x + nb.x * HG * 1.6 * s, b.y + nb.y * HG * 1.6 * s, b.z - 0.4, cam, view)
+      ];
       ctx.beginPath();
-      ctx.moveTo(pa.x + n.x * half * s, pa.y + n.y * half * s);
-      ctx.lineTo(pb.x + n.x * half * s, pb.y + n.y * half * s);
+      ctx.moveTo(q[0].x, q[0].y);
+      for (let n = 1; n < 4; n++) ctx.lineTo(q[n].x, q[n].y);
+      ctx.closePath();
+      ctx.fillStyle = PLATFORM;
+      ctx.fill();
+      ctx.strokeStyle = PLATFORM_EDGE;
+      ctx.lineWidth = 1;
       ctx.stroke();
     }
   }
 
-  function drawSupport(ctx, item, cam, view) {
-    const p = item.p;
-    const top = RC.toScreen(p.x, p.y, p.z, cam, view);
-    const foot = RC.toScreen(p.x, p.y, 0, cam, view);
-    ctx.strokeStyle = SUPPORT_DARK;
-    ctx.lineWidth = Math.max(1.5, 3.4 * cam.zoom);
-    ctx.beginPath();
-    ctx.moveTo(top.x, top.y);
-    ctx.lineTo(foot.x, foot.y);
-    ctx.stroke();
-    ctx.strokeStyle = SUPPORT;
-    ctx.lineWidth = Math.max(0.8, 1.6 * cam.zoom);
-    ctx.beginPath();
-    ctx.moveTo(top.x, top.y);
-    ctx.lineTo(foot.x, foot.y);
-    ctx.stroke();
-  }
-
-  /* Support struts every few sample points, wherever the track is off the
-     ground. Drawn as part of the same sorted list so they occlude properly. */
-  function collectSupports(segments) {
-    const out = [];
-    const seen = new Set();
-    for (const s of segments) {
-      const p = s.a;
-      if (p.z < 0.6) continue;
-      const key = Math.round(p.x * 2) + ',' + Math.round(p.y * 2);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push({ type: 'support', p });
-    }
-    return out;
-  }
+  /* ---- assembly --------------------------------------------------------- */
 
   RC.drawTrack = function (ctx, cam, view, extras) {
-    const segs = RC.trackSegments();
+    const path = RC.trackPath();
+    const pts = path.pts;
     const list = [];
 
-    for (const s of segs) {
-      const mx = (s.a.x + s.b.x) / 2, my = (s.a.y + s.b.y) / 2, mz = (s.a.z + s.b.z) / 2;
-      list.push({ type: 'seg', item: s, depth: RC.depth(mx, my, mz, cam.rot) });
+    if (pts.length > 1) {
+      const normals = pts.map((_, n) => normalAt(pts, n));
+
+      for (let n = 1; n < pts.length; n++) {
+        const a = pts[n - 1], b = pts[n];
+        const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 };
+        const d = RC.depth(mid.x, mid.y, mid.z, cam.rot);
+        list.push({
+          depth: d, draw: drawRail,
+          a, b, na: normals[n - 1], nb: normals[n]
+        });
+        if (b.def.station) {
+          list.push({
+            depth: d - 0.5, draw: drawPlatform,
+            a, b, na: normals[n - 1], nb: normals[n]
+          });
+        }
+      }
+
+      // Evenly spaced sleepers, chain dogs and support bents.
+      let nextSleeper = 0, nextSupport = 0;
+      for (let n = 0; n < pts.length; n++) {
+        const p = pts[n];
+        if (p.s >= nextSleeper) {
+          nextSleeper = p.s + SLEEPER_M;
+          list.push({
+            depth: RC.depth(p.x, p.y, p.z, cam.rot) - 0.3,
+            draw: drawSleeper, p, n: normals[n],
+            colour: sleeperColour(p.def, p.piece)
+          });
+          if (p.piece.lift) {
+            list.push({
+              depth: RC.depth(p.x, p.y, p.z, cam.rot) + 0.2,
+              draw: drawChain, p, n: normals[n]
+            });
+          }
+        }
+        if (p.s >= nextSupport && p.z > 0.8) {
+          nextSupport = p.s + SUPPORT_M;
+          // Sorted at the foot, so anything in front of the bent draws later.
+          list.push({
+            depth: RC.depth(p.x, p.y, 0, cam.rot),
+            draw: drawBent, p, n: normals[n]
+          });
+        } else if (p.s >= nextSupport) {
+          nextSupport = p.s + SUPPORT_M;
+        }
+      }
     }
-    for (const sp of collectSupports(segs)) {
-      // Supports sort at their foot, so track above them draws later.
-      list.push({ type: 'support', item: sp, depth: RC.depth(sp.p.x, sp.p.y, 0, cam.rot) });
-    }
-    for (const e of (extras || [])) {
-      list.push(e);
-    }
+
+    for (const e of (extras || [])) list.push(e);
 
     list.sort((p, q) => p.depth - q.depth);
-
-    for (const d of list) {
-      if (d.type === 'seg') drawSegment(ctx, d.item, cam, view);
-      else if (d.type === 'support') drawSupport(ctx, d.item, cam, view);
-      else if (d.draw) d.draw(ctx, cam, view);
-    }
+    for (const d of list) d.draw(ctx, d, cam, view);
   };
 
   /* ---- build head and ghost preview ----------------------------------- */
 
-  /* An arrow on the ground plane showing where the next piece leaves from
-     and which way it points. */
-  RC.drawHead = function (ctx, cam, view, head) {
+  RC.drawHead = function (ctx, d, cam, view) {
+    const head = d.head;
     if (!head) return;
     const E = RC.entryPoint(head);
-    const d = RC.DIRS[head.dir];
-    const tip = RC.toScreen(E.x + d[0] * 0.55, E.y + d[1] * 0.55, head.k, cam, view);
-    const base = RC.toScreen(E.x, E.y, head.k, cam, view);
-    const perpD = [-d[1], d[0]];
-    const l = RC.toScreen(E.x + perpD[0] * 0.28, E.y + perpD[1] * 0.28, head.k, cam, view);
-    const r = RC.toScreen(E.x - perpD[0] * 0.28, E.y - perpD[1] * 0.28, head.k, cam, view);
+    const dir = RC.DIRS[head.dir];
+    const per = [-dir[1], dir[0]];
+    const P = (fx, fy) => RC.toScreen(E.x + fx, E.y + fy, head.k, cam, view);
+
+    const tip = P(dir[0] * 0.55, dir[1] * 0.55);
+    const base = P(0, 0);
+    const l = P(per[0] * 0.28, per[1] * 0.28);
+    const r = P(-per[0] * 0.28, -per[1] * 0.28);
 
     ctx.save();
     ctx.beginPath();
@@ -170,14 +252,14 @@
     ctx.restore();
   };
 
-  /* Translucent preview of the piece currently selected in the palette. */
-  RC.drawGhost = function (ctx, cam, view, def, head, ok) {
+  RC.drawGhost = function (ctx, d, cam, view) {
+    const { def, head, ok } = d;
     if (!def || !head) return;
-    const n = def.kind === 'straight' ? 6 : 18;
+    const n = def.kind === 'straight' ? 8 : 20;
     ctx.save();
-    ctx.globalAlpha = 0.55;
+    ctx.globalAlpha = 0.5;
     ctx.strokeStyle = ok ? '#0d9488' : '#c62828';
-    ctx.lineWidth = Math.max(2.5, 5 * cam.zoom);
+    ctx.lineWidth = Math.max(3, 6 * cam.zoom);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.beginPath();
@@ -188,10 +270,9 @@
     }
     ctx.stroke();
 
-    // Mark where the head would end up.
     const end = RC.centreline(def, head, 1);
     const pe = RC.toScreen(end.x, end.y, end.z, cam, view);
-    ctx.globalAlpha = 0.9;
+    ctx.globalAlpha = 0.92;
     ctx.fillStyle = ok ? '#0d9488' : '#c62828';
     ctx.beginPath();
     ctx.arc(pe.x, pe.y, Math.max(3, 4.5 * cam.zoom), 0, Math.PI * 2);

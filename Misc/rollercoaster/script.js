@@ -167,18 +167,16 @@
 
     if (head) {
       extras.push({
-        type: 'custom',
         depth: RC.depth(head.i + 0.5, head.j + 0.5, head.k, cam.rot) + 0.5,
-        draw: (c, cm, v) => RC.drawHead(c, cm, v, head)
+        draw: RC.drawHead, head
       });
     }
     if (ghostDef && head) {
-      const ok = RC.canPlace(ghostDef, head).ok;
       const mid = RC.centreline(ghostDef, head, 0.5);
       extras.push({
-        type: 'custom',
         depth: RC.depth(mid.x, mid.y, mid.z, cam.rot) + 0.6,
-        draw: (c, cm, v) => RC.drawGhost(c, cm, v, ghostDef, head, ok)
+        draw: RC.drawGhost,
+        def: ghostDef, head, ok: RC.canPlace(ghostDef, head).ok
       });
     }
 

@@ -174,10 +174,89 @@
     head: null       // node the next piece would leave from
   };
 
+  /* Bumped whenever the track changes, so derived data can cache against it. */
+  RC.version = 0;
+
+  /* ---- arc-length path -------------------------------------------------
+     Every piece sampled into one continuous polyline with cumulative distance
+     in METRES. The renderer uses it to space sleepers and supports evenly
+     (rather than per-piece, which would bunch them up on turns), and the
+     physics runs along the same table so what you see is what is simulated. */
+  let pathCache = null, pathCacheVersion = -1;
+
+  RC.trackPath = function () {
+    if (pathCache && pathCacheVersion === RC.version) return pathCache;
+
+    const pts = [];
+    let s = 0, prev = null;
+
+    for (let pi = 0; pi < RC.track.pieces.length; pi++) {
+      const p = RC.track.pieces[pi];
+      const def = BY_ID.get(p.defId);
+      const n = def.kind === 'straight' ? 8 : 24;   // ~0.5 m resolution
+      for (let q = 0; q <= n; q++) {
+        if (q === 0 && pi > 0) continue;            // joint shared with previous piece
+        const t = q / n;
+        const c = RC.centreline(def, p.node, t);
+        if (prev) {
+          s += Math.hypot(
+            (c.x - prev.x) * RC.TILE_M,
+            (c.y - prev.y) * RC.TILE_M,
+            (c.z - prev.z) * RC.LEVEL_M
+          );
+        }
+        pts.push({ x: c.x, y: c.y, z: c.z, s, pi, t, piece: p, def });
+        prev = c;
+      }
+    }
+
+    pathCache = { pts, total: s };
+    pathCacheVersion = RC.version;
+    return pathCache;
+  };
+
   function sameNode(a, b) {
     return a && b && a.i === b.i && a.j === b.j && a.dir === b.dir && a.k === b.k && a.g === b.g;
   }
   RC.sameNode = sameNode;
+
+  /* ---- collision -------------------------------------------------------
+     Track may cross over itself, but not run through itself. Two bits of
+     track conflict when they share a tile with less than CLEARANCE levels
+     between them.
+
+     Only the INTERIOR of a piece is tested (t in 0.2..0.8) and the piece
+     immediately behind the head is skipped, because neighbouring pieces
+     legitimately share their joint tile. Without both of those, ordinary
+     S-bends and U-turns would be refused. */
+  const CLEARANCE = 3;   // levels = metres
+
+  function interiorCells(def, node) {
+    const cells = [];
+    const n = def.kind === 'straight' ? 10 : 24;
+    for (let q = 0; q <= n; q++) {
+      const t = q / n;
+      if (t < 0.2 || t > 0.8) continue;
+      const c = RC.centreline(def, node, t);
+      cells.push({ i: Math.floor(c.x), j: Math.floor(c.y), z: c.z });
+    }
+    return cells;
+  }
+
+  function collides(def, head) {
+    const mine = interiorCells(def, head);
+    const pieces = RC.track.pieces;
+    for (let pi = 0; pi < pieces.length - 1; pi++) {   // skip the piece at the head
+      const other = pieces[pi];
+      const theirs = interiorCells(BY_ID.get(other.defId), other.node);
+      for (const a of mine) {
+        for (const b of theirs) {
+          if (a.i === b.i && a.j === b.j && Math.abs(a.z - b.z) < CLEARANCE) return true;
+        }
+      }
+    }
+    return false;
+  }
 
   /* Can this piece go on the head right now, and if not, why? */
   RC.canPlace = function (def, head) {
@@ -192,6 +271,7 @@
       if (!RC.inBounds(t.i, t.j)) return { ok: false, why: 'Off the edge of the park' };
     }
     if (!RC.inBounds(exit.i, exit.j)) return { ok: false, why: 'Off the edge of the park' };
+    if (collides(def, head)) return { ok: false, why: 'Runs into track already built' };
     return { ok: true, exit };
   };
 
@@ -207,6 +287,7 @@
       lift: !!(opts && opts.lift) && !!def.liftable
     });
     RC.track.head = check.exit;
+    RC.version++;
     return true;
   };
 
@@ -215,6 +296,7 @@
     if (!t.pieces.length) return false;
     const last = t.pieces.pop();
     t.head = { i: last.node.i, j: last.node.j, dir: last.node.dir, k: last.node.k, g: last.node.g };
+    RC.version++;
     return true;
   };
 
@@ -253,6 +335,7 @@
   RC.resetTrack = function () {
     const t = RC.track;
     t.pieces = [];
+    RC.version++;
     // Near the middle of the park, so it's on screen at the default zoom and
     // there's room to build in every direction.
     t.start = { i: 16, j: 19, dir: 0, k: 0, g: FLAT };

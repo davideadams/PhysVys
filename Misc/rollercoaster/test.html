@@ -180,8 +180,9 @@
   check('four same-radius turns return to the starting node', () => {
     for (const id of ['turn-left-tight', 'turn-right-tight', 'turn-left-wide', 'turn-right-wide']) {
       RC.track.pieces = [];
-      RC.track.start = { i: 9, j: 9, dir: 0, k: 0, g: 0 };
+      RC.track.start = { i: 20, j: 20, dir: 0, k: 0, g: 0 };
       RC.track.head = Object.assign({}, RC.track.start);
+      RC.version++;
       for (let n = 0; n < 4; n++) {
         if (!RC.place(id)) return `${id}: placement ${n + 1} was rejected`;
       }
@@ -194,8 +195,9 @@
 
   check('a hill returns to its starting height', () => {
     RC.track.pieces = [];
-    RC.track.start = { i: 2, j: 9, dir: 0, k: 0, g: 0 };
+    RC.track.start = { i: 4, j: 20, dir: 0, k: 0, g: 0 };
     RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
     const seq = ['flat-to-gentle-up', 'gentle-up', 'gentle-up-to-flat', 'flat',
                  'flat-to-gentle-down', 'gentle-down', 'gentle-down-to-flat'];
     for (const id of seq) {
@@ -265,6 +267,103 @@
     let placed = 0;
     for (let n = 0; n < 40; n++) if (RC.place('flat')) placed++;
     if (placed >= 40) return 'ran off the edge of the park without being stopped';
+  });
+
+  /* ---- collision -------------------------------------------------------
+     The risk here is false positives: a collision rule that is too eager
+     silently refuses ordinary shapes and makes the builder feel broken. */
+  check('an S-bend is allowed (adjacent turns are not a collision)', () => {
+    RC.resetTrack();
+    if (!RC.place('turn-right-tight')) return 'first turn refused';
+    if (!RC.place('turn-left-tight')) {
+      return 'S-bend refused: ' + RC.canPlace(RC.pieceDef('turn-left-tight'), RC.track.head).why;
+    }
+  });
+
+  check('a U-turn is allowed (two turns the same way)', () => {
+    RC.resetTrack();
+    if (!RC.place('turn-right-tight')) return 'first turn refused';
+    if (!RC.place('turn-right-tight')) {
+      return 'U-turn refused: ' + RC.canPlace(RC.pieceDef('turn-right-tight'), RC.track.head).why;
+    }
+  });
+
+  check('a long straight run is allowed', () => {
+    RC.resetTrack();
+    for (let n = 0; n < 12; n++) {
+      if (!RC.place('flat')) return `straight ${n + 1} refused: ` +
+        RC.canPlace(RC.pieceDef('flat'), RC.track.head).why;
+    }
+  });
+
+  check('track may cross over itself with clearance', () => {
+    RC.resetTrack();                       // stations on j=19 at ground level
+    const seq = []
+      .concat(['flat', 'flat'])
+      .concat(['flat-to-gentle-up', 'gentle-up', 'gentle-up', 'gentle-up',
+               'gentle-up', 'gentle-up', 'gentle-up-to-flat'])   // up to k = 12
+      .concat(['turn-right-tight', 'turn-right-tight'])          // now heading -i
+      .concat(new Array(10).fill('flat'))                        // back along j = 22
+      .concat(['turn-right-tight'])                              // now heading -j
+      .concat(['flat', 'flat', 'flat']);   // the middle one crosses over (16,19)
+    for (const id of seq) {
+      const why = RC.canPlace(RC.pieceDef(id), RC.track.head).why;
+      if (!RC.place(id)) {
+        const h = RC.track.head;
+        return `${id} refused at (${h.i},${h.j},dir ${h.dir},k ${h.k}): ${why}`;
+      }
+    }
+    if (RC.track.head.k !== 12) return `expected to finish at 12 m, got ${RC.track.head.k}`;
+  });
+
+  check('track may not be built back through itself', () => {
+    // No station here: a four-turn loop at ground level would otherwise be
+    // refused for running through the station, which is correct behaviour.
+    RC.track.pieces = [];
+    RC.track.start = { i: 9, j: 9, dir: 0, k: 0, g: 0 };
+    RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
+    for (let n = 0; n < 4; n++) {
+      if (!RC.place('turn-right-tight')) {
+        return `turn ${n + 1} refused while closing the loop: ` +
+          RC.canPlace(RC.pieceDef('turn-right-tight'), RC.track.head).why;
+      }
+    }
+    // The head is back at the start, so a fifth turn would retrace the first.
+    if (RC.canPlace(RC.pieceDef('turn-right-tight'), RC.track.head).ok) {
+      return 'a piece was allowed to retrace track already built';
+    }
+  });
+
+  /* ---- arc-length path -------------------------------------------------- */
+  check('path is continuous and its length matches the pieces', () => {
+    RC.resetTrack();
+    for (const id of ['flat', 'flat-to-gentle-up', 'gentle-up', 'gentle-up-to-flat', 'turn-right-wide']) {
+      if (!RC.place(id)) return `${id} refused`;
+    }
+    const path = RC.trackPath();
+    if (path.pts.length < 10) return `only ${path.pts.length} path points`;
+    if (!near(path.pts[0].s, 0)) return `path starts at s=${path.pts[0].s}`;
+
+    for (let n = 1; n < path.pts.length; n++) {
+      const a = path.pts[n - 1], b = path.pts[n];
+      if (b.s < a.s) return `distance goes backwards at point ${n}`;
+      const gap = Math.hypot((b.x - a.x) * RC.TILE_M, (b.y - a.y) * RC.TILE_M, (b.z - a.z) * RC.LEVEL_M);
+      if (gap > 2.0) return `gap of ${gap.toFixed(2)} m between points ${n - 1} and ${n}`;
+      if (!near(b.s - a.s, gap, 1e-9)) return `s increment ${(b.s - a.s).toFixed(6)} != step ${gap.toFixed(6)}`;
+    }
+    if (path.total < 15) return `total length ${path.total.toFixed(1)} m looks too short`;
+  });
+
+  check('path cache refreshes when the track changes', () => {
+    RC.resetTrack();
+    const before = RC.trackPath().total;
+    RC.place('flat');
+    const after = RC.trackPath().total;
+    if (!(after > before)) return `length did not grow: ${before} -> ${after}`;
+    RC.undo();
+    const back = RC.trackPath().total;
+    if (!near(back, before, 1e-9)) return `after undo ${back} != ${before}`;
   });
 
   check('a placed piece reports a sensible length', () => {
