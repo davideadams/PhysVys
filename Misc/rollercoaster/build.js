@@ -16,25 +16,25 @@
   const S = { STEEP_DOWN: -6, GENTLE_DOWN: -2, LEVEL: 0, GENTLE_UP: 2, STEEP_UP: 6 };
 
   const DIRECTIONS = [
-    { id: 'left-tight',  glyph: '⤺', label: 'Tight left',  piece: 'turn-left-tight' },
-    { id: 'left-wide',   glyph: '↰', label: 'Left',        piece: 'turn-left-wide' },
-    { id: 'straight',    glyph: '↑', label: 'Straight',    piece: null },
-    { id: 'right-wide',  glyph: '↱', label: 'Right',       piece: 'turn-right-wide' },
-    { id: 'right-tight', glyph: '⤻', label: 'Tight right', piece: 'turn-right-tight' }
+    { id: 'left-tight',  icon: 'dir-left-tight',  label: 'Tight left',  piece: 'turn-left-tight' },
+    { id: 'left-wide',   icon: 'dir-left-wide',   label: 'Left',        piece: 'turn-left-wide' },
+    { id: 'straight',    icon: 'dir-straight',    label: 'Straight',    piece: null },
+    { id: 'right-wide',  icon: 'dir-right-wide',  label: 'Right',       piece: 'turn-right-wide' },
+    { id: 'right-tight', icon: 'dir-right-tight', label: 'Tight right', piece: 'turn-right-tight' }
   ];
 
   const SLOPES = [
-    { g: S.STEEP_DOWN,  glyph: '⟍', label: 'Steep down' },
-    { g: S.GENTLE_DOWN, glyph: '＼', label: 'Gentle down' },
-    { g: S.LEVEL,       glyph: '—', label: 'Level' },
-    { g: S.GENTLE_UP,   glyph: '／', label: 'Gentle up' },
-    { g: S.STEEP_UP,    glyph: '⟋', label: 'Steep up' }
+    { g: S.STEEP_DOWN,  icon: 'slope-steep-down',  label: 'Steep down' },
+    { g: S.GENTLE_DOWN, icon: 'slope-gentle-down', label: 'Gentle down' },
+    { g: S.LEVEL,       icon: 'slope-level',       label: 'Level' },
+    { g: S.GENTLE_UP,   icon: 'slope-gentle-up',   label: 'Gentle up' },
+    { g: S.STEEP_UP,    icon: 'slope-steep-up',    label: 'Steep up' }
   ];
 
   const SPECIALS = [
-    { id: 'station', glyph: '▤', label: 'Station' },
-    { id: 'brake',   glyph: '▥', label: 'Brakes' },
-    { id: 'launch',  glyph: '»', label: 'Launch' }
+    { id: 'station', icon: 'station', label: 'Station' },
+    { id: 'brake',   icon: 'brake',   label: 'Brakes' },
+    { id: 'launch',  icon: 'launch',  label: 'Launch' }
   ];
 
   /* Straight pieces indexed by "entry slope > exit slope", so a direction plus
@@ -77,11 +77,11 @@
   }
 
   /* ---- construction ----------------------------------------------------- */
-  function makeBtn(row, glyph, label, onClick, onHover) {
+  function makeBtn(row, icon, label, onClick, onHover) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'rct-btn';
-    b.innerHTML = `<span class="rct-glyph">${glyph}</span>`;
+    b.innerHTML = RC.icon(icon);
     b.setAttribute('aria-label', label);
     b.addEventListener('click', onClick);
     b.addEventListener('pointerenter', () => onHover && setHover(onHover()));
@@ -98,7 +98,7 @@
     dirRow.innerHTML = slopeRow.innerHTML = specialRow.innerHTML = '';
 
     for (const d of DIRECTIONS) {
-      const b = makeBtn(dirRow, d.glyph, d.label, () => {
+      const b = makeBtn(dirRow, d.icon, d.label, () => {
         sel.dir = d.id;
         sel.special = null;
         // Turns are level-only for now, so keep the slope row honest.
@@ -109,7 +109,7 @@
     }
 
     for (const s of SLOPES) {
-      const b = makeBtn(slopeRow, s.glyph, s.label, () => {
+      const b = makeBtn(slopeRow, s.icon, s.label, () => {
         sel.slope = s.g;
         sel.special = null;
         sel.dir = 'straight';
@@ -123,7 +123,8 @@
     lift.type = 'button';
     lift.className = 'rct-btn rct-btn-wide';
     lift.id = 'btn-lift';
-    lift.textContent = 'Chain';
+    lift.innerHTML = RC.icon('chain');
+    lift.setAttribute('aria-label', 'Chain lift');
     lift.title = 'Put a chain lift on uphill pieces as you build them';
     lift.addEventListener('click', () => {
       sel.lift = !sel.lift;
@@ -133,7 +134,7 @@
     slopeRow.appendChild(lift);
 
     for (const sp of SPECIALS) {
-      const b = makeBtn(specialRow, sp.glyph, sp.label, () => {
+      const b = makeBtn(specialRow, sp.icon, sp.label, () => {
         sel.special = sp.id;
         refresh();
       }, () => ({ dir: sel.dir, slope: sel.slope, special: sp.id }));
