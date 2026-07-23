@@ -70,28 +70,41 @@
     };
   }
 
-  /* Vertical loop, following RCT's footprint: 4 tiles long, 2 wide, finishing
-     one tile to the left or right of where it started so the exit clears the
-     entry. Entry and exit are both level.
+  /* Vertical loop. Footprint: L tiles long, finishing one tile to the left or
+     right so the exit clears the entry. Entry and exit are both level.
 
-     Side view is a circle of radius LOOP_R combined with a steady forward
-     drift, which is what gives a genuine loop (the path crosses itself, and
-     the train is moving backwards at the top) while still advancing 4 tiles:
+     NOT a circle. A circular loop has a constant radius, so with the train
+     fastest at the bottom the centripetal g there (v^2/r) is brutal while the
+     top needs a small radius just to stay on. Real coasters use a clothoid /
+     teardrop: a large radius at the bottom where the train is fast, tightening
+     to a small radius at the top where it is slow, which keeps the g-forces
+     manageable all the way round.
 
-       forward(t) = L·t + R·sin(2πt)
-       height(t)  = R·(1 − cos(2πt))
+     The shape is built in the vertical plane by sweeping the tangent angle phi
+     from 0 to 2pi with a radius of curvature that varies as r(phi) = A + B cos
+     phi, so r = A + B = R at the bottom (phi = 0) and r = A - B = a*R at the
+     top (phi = pi). Integrating the tangent gives closed forms for the forward
+     (u) and vertical (w) excursion; a linear forward drift is added on top so
+     the piece still advances exactly L tiles and grid-snaps. LOOP_A is the
+     bottom/top radius ratio's complement — smaller means a pointier teardrop.
 
-     Both derivatives of height vanish at t = 0 and t = 1, so the piece joins
-     level track without a kink. */
-  const LOOP_LEN = 4;    // tiles advanced
-  const LOOP_LAT = 1;    // tiles sideways
-  const LOOP_R = 6;      // metres — the loop stands 2R = 12 m tall
+     r(phi) = A + B cos phi          A = R(1+a)/2,  B = R(1-a)/2
+     u(phi) = A sin phi + B(phi/2 + sin 2phi / 4)
+     w(phi) = A(1 - cos phi) + B sin^2 phi / 2      peaks at w(pi) = R(1+a) */
+  const LOOP_LEN = 4;      // tiles advanced
+  const LOOP_LAT = 1;      // tiles sideways
+  const LOOP_R = 7;        // metres — the bottom radius of curvature
+  const LOOP_A = 0.35;     // top radius = LOOP_A * R; the teardrop's pointiness
   RC.LOOP_R = LOOP_R;
+  RC.LOOP_A = LOOP_A;
+  /* The clothoid's own forward reach before the grid-snapping drift is added,
+     so the drift can be computed to land the exit on L tiles exactly. */
+  RC.loopHeight = (R, a) => R * (1 + (a == null ? LOOP_A : a));
 
   function loop(id, label, side) {
     return {
       id, label, kind: 'loop', gIn: FLAT, gOut: FLAT,
-      side, L: LOOP_LEN, lat: LOOP_LAT, R: LOOP_R, dH: 0
+      side, L: LOOP_LEN, lat: LOOP_LAT, R: LOOP_R, a: LOOP_A, dH: 0
     };
   }
 
@@ -203,16 +216,23 @@
     if (def.kind === 'loop') {
       const d = D[node.dir];
       const latDir = D[(node.dir + def.side + 4) & 3];
-      const th = 2 * Math.PI * t;
-      const rTiles = def.R / RC.TILE_M;
-      const fwd = def.L * t + rTiles * Math.sin(th);
-      // Smoothstep, so the sideways drift is flat at both ends and the piece
-      // enters and leaves pointing straight down the track.
+      // Per-piece size if set (resized loops), else the definition's default.
+      const R = node.loopR != null ? node.loopR : def.R;
+      const a = node.loopA != null ? node.loopA : def.a;
+      const A = R * (1 + a) / 2, B = R * (1 - a) / 2;
+      const phi = 2 * Math.PI * t;
+      // Clothoid teardrop in the vertical plane, in metres.
+      const uc = A * Math.sin(phi) + B * (phi / 2 + Math.sin(2 * phi) / 4);
+      const wc = A * (1 - Math.cos(phi)) + B * Math.sin(phi) * Math.sin(phi) / 2;
+      // Linear forward drift added so the piece advances exactly L tiles and
+      // still grid-snaps; uc(1) = B*pi is the shape's own forward reach.
+      const fwdM = uc + (def.L * RC.TILE_M - B * Math.PI) * t;
+      // Smoothstep sideways drift, flat at both ends.
       const lat = def.lat * t * t * (3 - 2 * t);
       return {
-        x: E.x + d[0] * fwd + latDir[0] * lat,
-        y: E.y + d[1] * fwd + latDir[1] * lat,
-        z: node.k + (def.R / RC.LEVEL_M) * (1 - Math.cos(th))
+        x: E.x + d[0] * (fwdM / RC.TILE_M) + latDir[0] * lat,
+        y: E.y + d[1] * (fwdM / RC.TILE_M) + latDir[1] * lat,
+        z: node.k + wc / RC.LEVEL_M
       };
     }
     if (def.kind === 'straight') {

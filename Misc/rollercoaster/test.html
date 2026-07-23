@@ -891,10 +891,36 @@
       if (along < prevAlong - 1e-9) backwards = true;    // the loop doubles back
       prevAlong = along;
     }
-    if (!near(peak, 2 * RC.LOOP_R, 0.01)) {
-      return `loop peaks at ${peak.toFixed(2)} m, expected ${2 * RC.LOOP_R}`;
+    // Teardrop height is R(1+a), reached at the top (t = 0.5).
+    const expected = RC.loopHeight(def.R, def.a);
+    if (!near(peak, expected, 0.05)) {
+      return `loop peaks at ${peak.toFixed(2)} m, expected ${expected.toFixed(2)}`;
     }
     if (!backwards) return 'the path never doubles back — that is a hump, not a loop';
+  });
+
+  check('the loop is a teardrop, not a circle', () => {
+    // A circle has constant curvature everywhere; a teardrop is much tighter
+    // at the top than in its body. Comparing the interior (away from the
+    // entry/exit transitions) tells the two apart — the top's curvature must
+    // clearly exceed the loosest part of the loop.
+    RC.resetTrack();
+    RC.place('loop-right');
+    const interior = RC.trackPath().pts.filter(p => p.def.kind === 'loop' && p.t > 0.15 && p.t < 0.85);
+    if (interior.length < 10) return 'loop not sampled';
+    let maxC = -Infinity, minC = Infinity, topC = 0, topZ = -Infinity;
+    for (const p of interior) {
+      maxC = Math.max(maxC, p.curv);
+      minC = Math.min(minC, p.curv);
+      if (p.z > topZ) { topZ = p.z; topC = p.curv; }
+    }
+    if (!(maxC > minC * 1.8)) {
+      return `curvature is nearly constant (${minC.toFixed(3)}..${maxC.toFixed(3)}) — this is a circle`;
+    }
+    // ...and the tightest part is the top.
+    if (!near(topC, maxC, 1e-6)) {
+      return `the tightest point (curv ${maxC.toFixed(3)}) is not the top (${topC.toFixed(3)})`;
+    }
   });
 
   check('the train turns upside down at the top of a loop', () => {
@@ -904,7 +930,8 @@
     if (!path) return 'loop was refused';
     let top = path.pts[0];
     for (const p of path.pts) if (p.z > top.z) top = p;
-    if (top.z < 2 * RC.LOOP_R - 0.5) return `highest point is only ${top.z.toFixed(1)} m`;
+    const expected = RC.loopHeight(RC.LOOP_R, RC.LOOP_A);
+    if (top.z < expected - 0.5) return `highest point is only ${top.z.toFixed(1)} m`;
 
     const fr = RC.carFrame(top);
     if (!(fr.u.z < -0.8)) {
