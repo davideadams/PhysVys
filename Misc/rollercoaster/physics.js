@@ -15,7 +15,8 @@
 
   const SUBSTEP = 1 / 240;   // s — fixed physics step
   const MAX_FRAME = 0.1;     // s — ignore huge gaps after a tab switch
-  const STATION_BRAKE = 5;   // m/s^2 once the lap is done
+  const STATION_BRAKE = 5;      // m/s^2 once the lap is done
+  const STATION_DISPATCH = 2.5; // m/s — drive tyres pushing the train out
 
   RC.sim = {
     state: 'ready',      // ready | running | finished | valleyed | stopped
@@ -250,6 +251,19 @@
     }
 
     sim.v += a * dt;
+
+    // Station dispatch: while the train is still in the station on its way out
+    // (before it has completed a lap), the station's drive tyres push it
+    // forward onto the lift. Without this a train parked at the station exit
+    // just creeps backward down the faint uphill of the lift ahead and never
+    // reaches the chain. Booked as motor work, like the lift and launch.
+    const onStation = cars.some(p => p.def && p.def.station);
+    if (onStation && !sim.lapDone && sim.v < STATION_DISPATCH && sim.state === 'running') {
+      const before = 0.5 * m * sim.v * sim.v;
+      const after = 0.5 * m * STATION_DISPATCH * STATION_DISPATCH;
+      sim.eMotor += after - before;
+      sim.v = STATION_DISPATCH;
+    }
 
     // Chain lift: holds the train at lift speed. The kinetic energy it has
     // to put back in is exactly the motor's work.

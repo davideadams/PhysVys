@@ -1491,6 +1491,23 @@
     RC.sim.cars = 4;
   });
 
+  check('the train dispatches forward from the station, not backward', () => {
+    // Parked at the station exit the train is not yet on the lift, and the
+    // faint uphill of the lift ahead would drift it backward. The station's
+    // drive tyres must push it out onto the chain instead.
+    RC.loadPrefab('first-drop');
+    RC.sim.releaseS = null;
+    RC.sim.cars = 4;
+    RC.sim.friction = false;
+    RC.resetSim();
+    const startS = RC.sim.s;
+    runFor(4);
+    if (RC.sim.v < 0) return `train is rolling backward out of the station (v = ${RC.sim.v.toFixed(2)})`;
+    if (RC.sim.s <= startS + 1) {
+      return `train barely left the station: ${startS.toFixed(1)} -> ${RC.sim.s.toFixed(1)} m`;
+    }
+  });
+
   check('a release point beyond the track is clamped, not run off the end', () => {
     RC.loadPrefab('first-drop');
     const total = RC.trackPath().total;
