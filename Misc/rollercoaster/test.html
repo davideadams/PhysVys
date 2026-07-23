@@ -1054,6 +1054,37 @@
     }
   });
 
+  check('end and in-situ loops resize alike until the footprint is full', () => {
+    // Below the fixed-footprint limit, both keep the default footprint.
+    RC.resetTrack(); RC.place('loop-right'); RC.place('flat');
+    const inSitu = RC.track.pieces.findIndex(p => RC.pieceDef(p.defId).kind === 'loop');
+    RC.setLoopR(inSitu, 5);
+    const footLow = RC.loopFootprint(inSitu);
+
+    RC.resetTrack(); RC.place('loop-right');
+    const end = RC.track.pieces.length - 1;
+    RC.setLoopR(end, 5);
+    if (RC.loopFootprint(end) !== footLow) return 'end and in-situ differ below the limit';
+
+    // In-situ caps at the radius its fixed footprint holds and cannot grow it.
+    RC.resetTrack(); RC.place('loop-right'); RC.place('flat');
+    const iw = RC.track.pieces.findIndex(p => RC.pieceDef(p.defId).kind === 'loop');
+    RC.setLoopR(iw, 999);
+    const inSituMaxR = RC.loopR(iw), inSituFoot = RC.loopFootprint(iw);
+    if (inSituFoot !== footLow) return `in-situ footprint grew to ${inSituFoot}`;
+
+    // The end loop keeps going past that, growing its footprint.
+    RC.resetTrack(); RC.place('loop-right');
+    const ew = RC.track.pieces.length - 1;
+    RC.setLoopR(ew, 999);
+    if (!(RC.loopR(ew) > inSituMaxR)) {
+      return `end loop max ${RC.loopR(ew)} m is not bigger than in-situ ${inSituMaxR} m`;
+    }
+    if (!(RC.loopFootprint(ew) > inSituFoot)) {
+      return `end footprint ${RC.loopFootprint(ew)} did not exceed in-situ ${inSituFoot}`;
+    }
+  });
+
   check('a bigger in-situ radius makes a taller loop within the same footprint', () => {
     RC.resetTrack();
     RC.place('loop-right');

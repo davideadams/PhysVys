@@ -668,23 +668,29 @@
   /* ---- loop sizing -----------------------------------------------------
      A loop's radius can be changed after it's built, in discrete metre steps.
 
-     There are two cases, per the teacher's design:
-       - A loop at the END of the track (the last piece) may grow its FOOTPRINT
-         as it grows — a bigger radius gets a longer intro/outro. Its exit is
-         the build head, so moving it disturbs nothing.
-       - A loop IN SITU (with track after it) keeps its footprint fixed, so the
-         exit node never moves and nothing downstream shifts. Only the shape and
-         height change within the existing span.
+     Both end and in-situ loops behave identically until the FIXED footprint
+     can no longer hold a bigger loop. Up to that point the footprint stays put
+     and only the height changes. Past it:
+       - A loop at the END (the last piece) grows its footprint — a longer
+         intro/outro — and moves the build head, which disturbs nothing.
+       - A loop IN SITU (track after it) simply caps there, since growing its
+         footprint would move its exit and shift everything downstream.
 
-     Footprint L (tiles advanced) is coupled to radius by loopFootprintFor, set
-     so R = 7 m gives the default L = 4. */
+     A footprint of L tiles holds a loop up to radius 2L metres (its horizontal
+     excursion is about 2R m = R/2 tiles, so it fits when R/2 <= L). So the
+     default L = 4 holds up to R = 8; beyond that the footprint must grow. */
   const LOOP_R_MIN = 5, LOOP_R_MAX = 12, LOOP_R_STEP = 1;
   RC.LOOP_R_MIN = LOOP_R_MIN;
   RC.LOOP_R_MAX = LOOP_R_MAX;
   RC.LOOP_R_STEP = LOOP_R_STEP;
 
+  /* Smallest footprint (tiles) that holds a loop of radius R. */
   function loopFootprintFor(R, def) {
-    return Math.max(def.L, Math.round(R * 4 / 7));
+    return Math.max(def.L, Math.ceil(R / 2));
+  }
+  /* Largest radius a fixed footprint of L tiles can hold. */
+  function loopMaxRForFootprint(L) {
+    return Math.min(LOOP_R_MAX, 2 * L);
   }
 
   RC.loopR = function (pieceIndex) {
@@ -708,10 +714,17 @@
     return pieceIndex === RC.track.pieces.length - 1;
   };
 
+  /* The largest radius this particular loop may take: the whole range if it's
+     at the end (footprint can grow), else only what its fixed footprint holds. */
+  RC.loopMaxR = function (pieceIndex) {
+    if (RC.loopGrowsFootprint(pieceIndex)) return LOOP_R_MAX;
+    return loopMaxRForFootprint(RC.loopFootprint(pieceIndex));
+  };
+
   /* Set a loop's radius, validating that the resized shape stays in the park,
      above ground, under the ceiling, and clear of other track. An end loop
-     also grows its footprint and moves the build head. On failure nothing
-     changes. */
+     grows its footprint past the fixed-footprint limit and moves the build
+     head; an in-situ loop is capped there. On failure nothing changes. */
   RC.setLoopR = function (pieceIndex, newR) {
     const pieces = RC.track.pieces;
     const p = pieces[pieceIndex];
@@ -719,9 +732,12 @@
     const def = BY_ID.get(p.defId);
     if (def.kind !== 'loop') return { ok: false, why: 'That piece is not a loop' };
 
-    newR = Math.min(LOOP_R_MAX, Math.max(LOOP_R_MIN, newR));
     const isEnd = pieceIndex === pieces.length - 1;
     const curL = p.node.loopL != null ? p.node.loopL : def.L;
+    // Cap the radius: the full range at the end, else what the footprint holds.
+    const cap = isEnd ? LOOP_R_MAX : loopMaxRForFootprint(curL);
+    newR = Math.min(cap, Math.max(LOOP_R_MIN, newR));
+    // Only an end loop grows its footprint, and only once past the fixed limit.
     const newL = isEnd ? loopFootprintFor(newR, def) : curL;
     const testNode = Object.assign({}, p.node, { loopR: newR, loopL: newL });
 

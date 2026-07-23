@@ -397,7 +397,9 @@
       const sm = document.getElementById('btn-loop-smaller');
       const lg = document.getElementById('btn-loop-larger');
       if (sm) sm.disabled = R <= RC.LOOP_R_MIN + 1e-9;
-      if (lg) lg.disabled = R >= RC.LOOP_R_MAX - 1e-9;
+      // In-situ loops cap at what their fixed footprint holds; end loops can
+      // keep growing (the footprint follows).
+      if (lg) lg.disabled = R >= RC.loopMaxR(cursor) - 1e-9;
     }
 
     if (inspecting) {
