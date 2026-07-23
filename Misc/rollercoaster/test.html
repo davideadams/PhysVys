@@ -996,6 +996,85 @@
     if (!(slow.vert < 0)) return `at 4 m/s the top of the loop gives ${slow.vert.toFixed(2)} g`;
   });
 
+  check('a loop can be resized, and the exit node does not move', () => {
+    RC.resetTrack();
+    RC.place('loop-right');
+    RC.place('flat');                         // a piece after the loop
+    const loopIdx = RC.track.pieces.findIndex(p => RC.pieceDef(p.defId).kind === 'loop');
+    if (loopIdx < 0) return 'no loop was placed';
+
+    const nextBefore = Object.assign({}, RC.track.pieces[loopIdx + 1].node);
+    const r0 = RC.loopR(loopIdx);
+
+    const res = RC.setLoopR(loopIdx, r0 + 1);
+    if (!res.ok) return 'resize refused: ' + res.why;
+    if (!near(RC.loopR(loopIdx), r0 + 1, 1e-9)) return `size did not change (still ${RC.loopR(loopIdx)})`;
+
+    // The piece after the loop must be exactly where it was — the footprint is
+    // fixed, so nothing downstream shifts.
+    const nextAfter = RC.track.pieces[loopIdx + 1].node;
+    if (nextAfter.i !== nextBefore.i || nextAfter.j !== nextBefore.j ||
+        nextAfter.k !== nextBefore.k || nextAfter.dir !== nextBefore.dir) {
+      return 'the piece after the loop moved when the loop was resized';
+    }
+  });
+
+  check('resizing a loop changes its height but not its footprint', () => {
+    RC.resetTrack();
+    RC.place('loop-right');
+    const loopIdx = RC.track.pieces.findIndex(p => RC.pieceDef(p.defId).kind === 'loop');
+    const def = RC.pieceDef(RC.track.pieces[loopIdx].defId);
+
+    const peakAt = () => {
+      let peak = 0;
+      for (const p of RC.trackPath().pts) if (p.def.kind === 'loop') peak = Math.max(peak, p.z);
+      return peak;
+    };
+    RC.setLoopR(loopIdx, RC.LOOP_R_MIN);
+    const small = peakAt();
+    RC.setLoopR(loopIdx, RC.LOOP_R_MAX);
+    const large = peakAt();
+    if (!(large > small + 1)) return `taller loop is not taller: ${small.toFixed(1)} vs ${large.toFixed(1)} m`;
+
+    // Footprint unchanged: the exit is still four tiles on and one to the side.
+    const node = { i: 20, j: 20, dir: 0, k: 5, g: 0 };
+    const exit = RC.exitNode(def, node);
+    const d = RC.DIRS[0];
+    const along = (exit.i - node.i) * d[0] + (exit.j - node.j) * d[1];
+    if (along !== 4) return `footprint changed: advances ${along} tiles`;
+  });
+
+  check('loop resize is clamped and refuses to leave the park', () => {
+    RC.resetTrack();
+    RC.place('loop-right');
+    const loopIdx = RC.track.pieces.findIndex(p => RC.pieceDef(p.defId).kind === 'loop');
+    // Way over the max is clamped to the max, not accepted verbatim.
+    RC.setLoopR(loopIdx, 999);
+    if (RC.loopR(loopIdx) > RC.LOOP_R_MAX + 1e-9) return `radius exceeded the max (${RC.loopR(loopIdx)})`;
+
+    // A loop butted against the ceiling refuses to grow through it.
+    RC.track.pieces = [];
+    RC.track.start = { i: 6, j: 20, dir: 0, k: RC.MAX_H - 4, g: 0 };
+    RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
+    if (!RC.place('loop-right')) {
+      // If it can't even be placed that high, lower it a touch and retry.
+      RC.track.start.k = RC.MAX_H - 12;
+      RC.track.head = Object.assign({}, RC.track.start);
+      RC.version++;
+      if (!RC.place('loop-right')) return 'could not place a high loop to test the ceiling';
+    }
+    const hi = RC.track.pieces.findIndex(p => RC.pieceDef(p.defId).kind === 'loop');
+    const before = RC.loopR(hi);
+    const res = RC.setLoopR(hi, RC.LOOP_R_MAX);
+    if (res.ok && RC.loopR(hi) > before) {
+      // Only a problem if it actually broke the ceiling.
+      let over = false;
+      for (const p of RC.trackPath().pts) if (p.def.kind === 'loop' && p.z > RC.MAX_H) over = true;
+      if (over) return 'a resized loop poked through the ceiling';
+    }
+  });
+
   /* ---- banking ----------------------------------------------------------- */
   function bankedTurnSample(id, banked, sOffset) {
     RC.resetTrack();

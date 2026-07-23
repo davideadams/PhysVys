@@ -381,6 +381,21 @@
     const whyEl = document.getElementById('preview-why');
     const buildBtn = document.getElementById('btn-build');
 
+    // Loop-size stepper: only while a loop piece is selected.
+    const loopGroup = document.getElementById('loop-size-group');
+    const inspectingLoop = inspecting && RC.pieceDef(RC.track.pieces[cursor].defId).kind === 'loop';
+    if (loopGroup) loopGroup.hidden = !inspectingLoop;
+    if (inspectingLoop) {
+      const R = RC.loopR(cursor);
+      const def = RC.pieceDef(RC.track.pieces[cursor].defId);
+      const valEl = document.getElementById('loop-size-val');
+      if (valEl) valEl.textContent = `${RC.loopHeight(R, def.a).toFixed(1)} m tall`;
+      const sm = document.getElementById('btn-loop-smaller');
+      const lg = document.getElementById('btn-loop-larger');
+      if (sm) sm.disabled = R <= RC.LOOP_R_MIN + 1e-9;
+      if (lg) lg.disabled = R >= RC.LOOP_R_MAX - 1e-9;
+    }
+
     if (inspecting) {
       const pe = RC.track.pieces[cursor];
       const def = RC.pieceDef(pe.defId);
@@ -472,6 +487,17 @@
     if (prev) prev.addEventListener('click', () => RC.cursorStep(-1));
     const next = document.getElementById('btn-cursor-next');
     if (next) next.addEventListener('click', () => RC.cursorStep(1));
+
+    function stepLoop(delta) {
+      if (cursor === null) return;
+      const res = RC.setLoopR(cursor, RC.loopR(cursor) + delta);
+      setStatus(res.ok ? `Loop resized` : res.why);
+      refresh();
+    }
+    const smaller = document.getElementById('btn-loop-smaller');
+    if (smaller) smaller.addEventListener('click', () => stepLoop(-RC.LOOP_R_STEP));
+    const larger = document.getElementById('btn-loop-larger');
+    if (larger) larger.addEventListener('click', () => stepLoop(RC.LOOP_R_STEP));
 
     const specialBtn = document.getElementById('btn-special');
     if (specialBtn) specialBtn.addEventListener('click', (e) => {

@@ -663,6 +663,56 @@
     return true;
   };
 
+  /* ---- loop sizing -----------------------------------------------------
+     A loop's radius can be changed after it's built. The footprint (L tiles
+     forward, one to the side, level ends) is kept FIXED, so only the shape and
+     height change and the exit node never moves — nothing downstream shifts or
+     disconnects. Discrete metre steps suit the tile model. */
+  const LOOP_R_MIN = 5, LOOP_R_MAX = 10, LOOP_R_STEP = 1;
+  RC.LOOP_R_MIN = LOOP_R_MIN;
+  RC.LOOP_R_MAX = LOOP_R_MAX;
+  RC.LOOP_R_STEP = LOOP_R_STEP;
+
+  /* The size a loop piece is currently drawn at. */
+  RC.loopR = function (pieceIndex) {
+    const p = RC.track.pieces[pieceIndex];
+    if (!p) return null;
+    const def = BY_ID.get(p.defId);
+    if (def.kind !== 'loop') return null;
+    return p.node.loopR != null ? p.node.loopR : def.R;
+  };
+
+  /* Set a loop's radius, validating that the resized shape stays in the park,
+     above ground, under the ceiling, and clear of other track. On success the
+     change sticks; on failure nothing changes. */
+  RC.setLoopR = function (pieceIndex, newR) {
+    const p = RC.track.pieces[pieceIndex];
+    if (!p) return { ok: false, why: 'No such piece' };
+    const def = BY_ID.get(p.defId);
+    if (def.kind !== 'loop') return { ok: false, why: 'That piece is not a loop' };
+
+    newR = Math.min(LOOP_R_MAX, Math.max(LOOP_R_MIN, newR));
+    const testNode = Object.assign({}, p.node, { loopR: newR });
+
+    for (let n = 0; n <= 32; n++) {
+      const c = RC.centreline(def, testNode, n / 32);
+      if (!RC.inBounds(Math.floor(c.x), Math.floor(c.y))) {
+        return { ok: false, why: 'A bigger loop would leave the park' };
+      }
+      if (c.z < 0) return { ok: false, why: 'The loop would dip below ground' };
+      if (c.z > MAX_H) return { ok: false, why: 'The loop would be too tall' };
+    }
+    // Check the resized loop against every OTHER piece; occupancy still holds
+    // this loop's old cells at its own index, which collidesWith skips.
+    if (collidesWith(def, testNode, occupancy(), pieceIndex)) {
+      return { ok: false, why: 'A bigger loop would hit other track' };
+    }
+
+    p.node.loopR = newR;
+    RC.version++;
+    return { ok: true, R: newR };
+  };
+
   /* ---- circuit validation ---------------------------------------------
      Closed: the head has come back to exactly the node the track started
      from. Shuttle: it hasn't, but there's a launch piece to drive an
