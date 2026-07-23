@@ -282,26 +282,6 @@
     }
   };
 
-  /* ---- tile highlight -------------------------------------------------- */
-  RC.strokeTile = function (ctx, i, j, k, cam, view, style, width, fill) {
-    const c0 = RC.toScreen(i, j, k, cam, view);
-    const c1 = RC.toScreen(i + 1, j, k, cam, view);
-    const c2 = RC.toScreen(i + 1, j + 1, k, cam, view);
-    const c3 = RC.toScreen(i, j + 1, k, cam, view);
-    ctx.beginPath();
-    ctx.moveTo(c0.x, c0.y);
-    ctx.lineTo(c1.x, c1.y);
-    ctx.lineTo(c2.x, c2.y);
-    ctx.lineTo(c3.x, c3.y);
-    ctx.closePath();
-    if (fill) { ctx.fillStyle = fill; ctx.fill(); }
-    if (style) {
-      ctx.strokeStyle = style;
-      ctx.lineWidth = width || 2;
-      ctx.stroke();
-    }
-  };
-
   /* ---- compass --------------------------------------------------------- */
   RC.drawCompass = function (ctx, cam, view) {
     const cx = view.w - 46, cy = 46, r = 24;

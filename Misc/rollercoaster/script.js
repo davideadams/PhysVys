@@ -11,7 +11,6 @@
 
   const state = {
     view: { w: 960, h: 600, dpr: 1 },
-    hover: null,       // {i, j} tile under the cursor, or null
     showHeights: false,
     dragging: false,
     dragMoved: false,
@@ -71,18 +70,6 @@
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   }
 
-  function updateHover(p) {
-    const [wi, wj] = RC.screenToWorld(p.x, p.y, cam, state.view);
-    const i = Math.floor(wi), j = Math.floor(wj);
-    const next = RC.inBounds(i, j) ? { i, j } : null;
-    const a = state.hover, b = next;
-    if ((a === null) !== (b === null) || (a && b && (a.i !== b.i || a.j !== b.j))) {
-      state.hover = next;
-      state.dirty = true;
-      readTile();
-    }
-  }
-
   canvas.addEventListener('pointerdown', (e) => {
     canvas.setPointerCapture(e.pointerId);
     state.dragging = true;
@@ -104,7 +91,6 @@
       state.lastY = p.y;
       state.dirty = true;
     }
-    updateHover(p);
   });
 
   function endDrag(e) {
@@ -127,10 +113,6 @@
       RC.selectPiece(pi);
       state.dirty = true;
     }
-  });
-
-  canvas.addEventListener('pointerleave', () => {
-    if (state.hover) { state.hover = null; state.dirty = true; readTile(); }
   });
 
   canvas.addEventListener('wheel', (e) => {
@@ -157,28 +139,15 @@
   });
 
   /* ---- readouts -------------------------------------------------------- */
-  const roTile = document.getElementById('ro-tile');
-  const roScale = document.getElementById('ro-scale');
-
-  function readTile() {
-    roTile.textContent = state.hover
-      ? `tile (${state.hover.i}, ${state.hover.j})`
-      : `${RC.GRID} × ${RC.GRID} tiles`;
-  }
-
-  roScale.textContent = `1 tile = ${RC.TILE_M} m · 1 step = ${RC.LEVEL_M} m`;
-  readTile();
+  document.getElementById('ro-tile').textContent = `${RC.GRID} × ${RC.GRID} tiles`;
+  document.getElementById('ro-scale').textContent =
+    `1 tile = ${RC.TILE_M} m · 1 step = ${RC.LEVEL_M} m`;
 
   /* ---- render ---------------------------------------------------------- */
   function render() {
     const view = state.view;
     RC.drawSky(ctx, cam, view);
     RC.drawGround(ctx, cam, view);
-
-    if (state.hover) {
-      RC.strokeTile(ctx, state.hover.i, state.hover.j, 0, cam, view,
-        'rgba(255,255,255,0.85)', 2, 'rgba(255,255,255,0.16)');
-    }
 
     // The head arrow and the ghost preview join the depth-sorted list so
     // they're occluded by any track standing in front of them.
