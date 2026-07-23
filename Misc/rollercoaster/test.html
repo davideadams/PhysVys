@@ -917,9 +917,11 @@
     if (!(maxC > minC * 1.8)) {
       return `curvature is nearly constant (${minC.toFixed(3)}..${maxC.toFixed(3)}) — this is a circle`;
     }
-    // ...and the tightest part is the top.
-    if (!near(topC, maxC, 1e-6)) {
-      return `the tightest point (curv ${maxC.toFixed(3)}) is not the top (${topC.toFixed(3)})`;
+    // ...and the top is at the tight end (near the maximum — the small
+    // sideways drift keeps the exact tightest point from being dead centre).
+    if (!(topC > minC * 1.6) || !(topC > maxC * 0.85)) {
+      return `the top (curv ${topC.toFixed(3)}) is not among the tightest ` +
+             `(range ${minC.toFixed(3)}..${maxC.toFixed(3)})`;
     }
   });
 

@@ -200,6 +200,16 @@
     return { i: Math.round(cx - 0.5), j: Math.round(cy - 0.5), dir: dir2, k, g: def.gOut };
   };
 
+  /* Sideways drift for a loop, 0 -> 1, done in two smoothstepped halves so the
+     lateral speed is zero at t = 0, 0.5 and 1. The zero at 0.5 is the point:
+     it keeps ALL the sideways motion out of the top of the loop, where a
+     tilted path would stop the orientation frame fully inverting. (A single
+     smoothstep peaks its sideways speed exactly at the top.) */
+  function loopLatFrac(t) {
+    const ss = x => x * x * (3 - 2 * x);
+    return t < 0.5 ? 0.5 * ss(2 * t) : 0.5 + 0.5 * ss(2 * t - 1);
+  }
+
   /* Normalised height profile: 0 at t=0, 1 at t=1, with end slopes in the
      ratio gIn : gOut so slope stays continuous across joints. */
   function heightFrac(def, t) {
@@ -229,8 +239,7 @@
       // still grid-snaps; uc(1) = B*pi is the shape's own forward reach.
       const L = node.loopL != null ? node.loopL : def.L;
       const fwdM = uc + (L * RC.TILE_M - B * Math.PI) * t;
-      // Smoothstep sideways drift, flat at both ends.
-      const lat = def.lat * t * t * (3 - 2 * t);
+      const lat = def.lat * loopLatFrac(t);
       return {
         x: E.x + d[0] * (fwdM / RC.TILE_M) + latDir[0] * lat,
         y: E.y + d[1] * (fwdM / RC.TILE_M) + latDir[1] * lat,
