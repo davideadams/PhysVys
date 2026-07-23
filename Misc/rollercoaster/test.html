@@ -63,6 +63,11 @@
 <script src="physics.js"></script>
 <script src="energy.js"></script>
 <script src="prefabs.js"></script>
+<!-- render.js and build.js are IIFEs that touch no DOM at load and guard every
+     element lookup, so their pure logic (pickPiece, the build cursor) is testable
+     here without the construction window's markup. -->
+<script src="render.js"></script>
+<script src="build.js"></script>
 <script>
 (function () {
   const RC = window.RC;
@@ -1599,6 +1604,70 @@
     if (!(fast.motor > slow.motor)) {
       return `motor work did not rise with lift speed: ${slow.motor.toFixed(0)} J vs ${fast.motor.toFixed(0)} J`;
     }
+  });
+
+  /* ---- selecting existing pieces ----------------------------------------- */
+  check('selecting a piece lights up its type in the build menu', () => {
+    RC.resetTrack();
+    if (!RC.place('flat-to-gentle-up', { lift: true })) return 'lift piece refused';
+    if (!RC.place('turn-right-tight', { bank: true })) return 'banked turn refused';
+    const pieces = RC.track.pieces;
+    const liftIdx = pieces.findIndex(p => p.defId === 'flat-to-gentle-up');
+    const turnIdx = pieces.findIndex(p => p.defId === 'turn-right-tight');
+
+    RC.selectPiece(liftIdx);
+    if (RC.buildCursor() !== liftIdx) return `cursor did not land on the piece`;
+    if (RC.build.special) return `a straight piece read as special "${RC.build.special}"`;
+    if (RC.build.slope !== RC.SLOPE.GENTLE) return `slope came out ${RC.build.slope}, expected gentle up`;
+    if (!RC.build.lift) return 'the chain-lift flag was not reflected';
+
+    RC.selectPiece(turnIdx);
+    if (RC.build.dir !== 'right-tight') return `turn read as dir "${RC.build.dir}"`;
+    if (!RC.build.bank) return 'the bank flag was not reflected';
+
+    // A station piece reads as the station special.
+    RC.selectPiece(0);
+    if (RC.build.special !== 'station') return `first piece read as "${RC.build.special}", expected station`;
+
+    RC.clearSelection();
+    if (RC.buildCursor() !== null) return 'clearSelection left the cursor set';
+  });
+
+  check('the build cursor scrolls around the track and through the head', () => {
+    RC.resetTrack();
+    RC.place('flat');
+    RC.place('flat');
+    const n = RC.track.pieces.length;
+    RC.clearSelection();                 // start at the head (null)
+
+    RC.cursorStep(1);
+    if (RC.buildCursor() !== 0) return `forward from the head went to ${RC.buildCursor()}, expected 0`;
+    for (let i = 0; i < n - 1; i++) RC.cursorStep(1);
+    if (RC.buildCursor() !== n - 1) return `expected to reach the last piece (${n - 1}), at ${RC.buildCursor()}`;
+    RC.cursorStep(1);
+    if (RC.buildCursor() !== null) return `past the end should wrap to the head, got ${RC.buildCursor()}`;
+    RC.cursorStep(-1);
+    if (RC.buildCursor() !== n - 1) return `back from the head should select the last piece, got ${RC.buildCursor()}`;
+    RC.clearSelection();
+  });
+
+  check('double-click hit-test picks the nearest piece by screen position', () => {
+    RC.resetTrack();
+    RC.place('flat');
+    RC.place('flat');
+    RC.place('flat');
+    const cam = { zoom: 1, panX: 0, panY: 0, rot: 0 };
+    const view = { w: 960, h: 600 };
+    const pts = RC.trackPath().pts;
+
+    // Project a point two-thirds along and click exactly on it.
+    const target = pts[Math.floor(pts.length * 0.66)];
+    const s = RC.toScreen(target.x, target.y, target.z, cam, view);
+    const pi = RC.pickPiece(s.x, s.y, cam, view);
+    if (pi !== target.pi) return `clicked on piece ${target.pi} but picked ${pi}`;
+
+    // A click far from any track selects nothing.
+    if (RC.pickPiece(5, 5, cam, view) !== null) return 'a corner click picked a piece';
   });
 
   /* ---- graph overlay ----------------------------------------------------- */

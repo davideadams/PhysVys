@@ -391,6 +391,47 @@
     ctx.restore();
   };
 
+  /* ---- selecting an existing piece --------------------------------------
+     Hit-test the TRACK, not the ground tile: elevated track projects well
+     above the tile it sits over, so picking by the hovered ground tile would
+     select empty ground under raised track. Instead find the path point whose
+     projected position is nearest the click, and return its piece index. */
+  RC.pickPiece = function (sx, sy, cam, view) {
+    const pts = RC.trackPath().pts;
+    if (pts.length < 2) return null;
+    const threshold = 18;   // px
+    let best = Infinity, bestPi = null;
+    for (const p of pts) {
+      const s = RC.toScreen(p.x, p.y, p.z, cam, view);
+      const d = Math.hypot(s.x - sx, s.y - sy);
+      if (d < best) { best = d; bestPi = p.pi; }
+    }
+    return best <= threshold ? bestPi : null;
+  };
+
+  /* Bright outline over the selected piece, drawn on top so it's always
+     visible regardless of what stands in front of it. */
+  RC.drawSelection = function (ctx, cam, view, pieceIndex) {
+    if (pieceIndex == null) return;
+    const pts = RC.trackPath().pts.filter(p => p.pi === pieceIndex);
+    if (pts.length < 2) return;
+    ctx.save();
+    ctx.lineWidth = Math.max(3, 6 * cam.zoom);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = 'rgba(255, 214, 74, 0.95)';
+    ctx.beginPath();
+    for (let n = 0; n < pts.length; n++) {
+      const s = RC.toScreen(pts[n].x, pts[n].y, pts[n].z + 0.25, cam, view);
+      if (n === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
+    }
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(120, 80, 0, 0.6)';
+    ctx.lineWidth = Math.max(1, 1.5 * cam.zoom);
+    ctx.stroke();
+    ctx.restore();
+  };
+
   /* ---- build head and ghost preview ----------------------------------- */
 
   RC.drawHead = function (ctx, d, cam, view) {

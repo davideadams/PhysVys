@@ -116,6 +116,19 @@
   canvas.addEventListener('pointerup', endDrag);
   canvas.addEventListener('pointercancel', endDrag);
 
+  // Double-click a piece of track to select it: opens the build window with
+  // that piece's type lit up and highlights it on the map. Hit-tests the
+  // track geometry, not the ground tile, so raised track picks correctly.
+  canvas.addEventListener('dblclick', (e) => {
+    const p = pointerPos(e);
+    const pi = RC.pickPiece(p.x, p.y, cam, state.view);
+    if (pi != null) {
+      RC.setWindow('win-build', true);
+      RC.selectPiece(pi);
+      state.dirty = true;
+    }
+  });
+
   canvas.addEventListener('pointerleave', () => {
     if (state.hover) { state.hover = null; state.dirty = true; readTile(); }
   });
@@ -192,6 +205,7 @@
 
     RC.drawTrack(ctx, cam, view, extras);
     if (state.showHeights) RC.drawHeightLabels(ctx, cam, view);
+    RC.drawSelection(ctx, cam, view, RC.buildCursor());
     RC.drawCompass(ctx, cam, view);
   }
 

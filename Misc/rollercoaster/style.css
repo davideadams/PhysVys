@@ -294,6 +294,11 @@ html, body {
   color: var(--muted);
   border-color: var(--chrome-border);
 }
+/* "Remove from here" while a mid-track piece is selected. */
+.rct-build.danger {
+  background: #b3261e;
+  border-color: #b3261e;
+}
 
 .pal-wide {
   flex: 1 1 auto;

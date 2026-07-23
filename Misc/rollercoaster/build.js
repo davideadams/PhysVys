@@ -57,8 +57,60 @@
   const sel = { dir: 'straight', slope: S.LEVEL, special: null, lift: false, bank: false };
   RC.build = sel;
 
+  /* The build cursor. null = at the head (normal build mode); otherwise the
+     index of an existing piece being inspected. Scrolling wraps through the
+     head, so the order is: head -> piece 0 -> ... -> piece N-1 -> head. */
+  let cursor = null;
+  RC.buildCursor = () => cursor;
+
   const dirBtns = new Map(), slopeBtns = new Map(), specialBtns = new Map();
   const rollBtns = new Map();
+
+  /* Reverse of resolve(): what menu selection represents an existing piece,
+     so selecting it lights up the same buttons that would have built it. */
+  function pieceToSel(pe) {
+    const def = RC.pieceDef(pe.defId);
+    const out = { dir: 'straight', slope: S.LEVEL, special: null, lift: !!pe.lift, bank: !!pe.bank };
+    if (def.station) out.special = 'station';
+    else if (def.brake) out.special = 'brake';
+    else if (def.launch) out.special = 'launch';
+    else if (def.kind === 'loop') out.special = pe.defId;      // loop-left / loop-right
+    else if (def.kind === 'turn') {
+      const d = DIRECTIONS.find(x => x.piece === pe.defId);
+      out.dir = d ? d.id : 'straight';
+    } else {
+      out.slope = def.gOut;   // straight/transition: the slope you exit at
+    }
+    return out;
+  }
+
+  RC.selectPiece = function (index) {
+    const pieces = RC.track.pieces;
+    if (index == null || index < 0 || index >= pieces.length) { RC.clearSelection(); return; }
+    cursor = index;
+    Object.assign(sel, pieceToSel(pieces[index]));
+    refresh();
+  };
+
+  RC.clearSelection = function () {
+    if (cursor === null) return;
+    cursor = null;
+    refresh();
+  };
+
+  /* Scroll the cursor, wrapping through the head. */
+  RC.cursorStep = function (dir) {
+    const n = RC.track.pieces.length;
+    if (!n) { cursor = null; refresh(); return; }
+    if (cursor === null) {
+      cursor = dir > 0 ? 0 : n - 1;
+    } else {
+      cursor += dir;
+      if (cursor < 0 || cursor >= n) cursor = null;   // fell off an end -> head
+    }
+    if (cursor === null) { refresh(); }
+    else RC.selectPiece(cursor);
+  };
 
   /* Banking applies to turns only — there's nothing to bank on straight
      track, and the piece has to start and finish level either way. */
@@ -82,9 +134,15 @@
   /* Hovering a button previews that choice without committing to it. */
   let hover = null;
   RC.ghostDef = function () {
+    if (cursor !== null) return null;   // inspecting, not building at the head
     if (hover) return resolveWith(hover.dir, hover.slope, hover.special);
     return resolve();
   };
+
+  /* Any menu choice ends inspection and returns to building at the head. */
+  function fromMenu(fn) {
+    return () => { cursor = null; fn(); };
+  }
 
   function setHover(h) {
     hover = h;
@@ -113,23 +171,23 @@
     dirRow.innerHTML = slopeRow.innerHTML = specialRow.innerHTML = '';
 
     for (const d of DIRECTIONS) {
-      const b = makeBtn(dirRow, d.icon, d.label, () => {
+      const b = makeBtn(dirRow, d.icon, d.label, fromMenu(() => {
         sel.dir = d.id;
         sel.special = null;
         // Turns are level-only for now, so keep the slope row honest.
         if (d.piece) sel.slope = S.LEVEL;
         refresh();
-      }, () => ({ dir: d.id, slope: d.piece ? S.LEVEL : sel.slope, special: null }));
+      }), () => ({ dir: d.id, slope: d.piece ? S.LEVEL : sel.slope, special: null }));
       dirBtns.set(d.id, b);
     }
 
     for (const s of SLOPES) {
-      const b = makeBtn(slopeRow, s.icon, s.label, () => {
+      const b = makeBtn(slopeRow, s.icon, s.label, fromMenu(() => {
         sel.slope = s.g;
         sel.special = null;
         sel.dir = 'straight';
         refresh();
-      }, () => ({ dir: 'straight', slope: s.g, special: null }));
+      }), () => ({ dir: 'straight', slope: s.g, special: null }));
       slopeBtns.set(s.g, b);
     }
 
@@ -143,36 +201,37 @@
     // shape buttons beside it.
     lift.textContent = 'Chain';
     lift.title = 'Put a chain lift on uphill pieces as you build them';
-    lift.addEventListener('click', () => {
+    lift.addEventListener('click', fromMenu(() => {
       sel.lift = !sel.lift;
       setStatus(sel.lift ? 'Chain lift on — applies to uphill pieces' : 'Chain lift off');
       refresh();
-    });
+    }));
     slopeRow.appendChild(lift);
 
     const rollRow = document.getElementById('row-roll');
     if (rollRow) {
       rollRow.innerHTML = '';
       for (const r of ROLLS) {
-        const b = makeBtn(rollRow, r.icon, r.label, () => {
+        const b = makeBtn(rollRow, r.icon, r.label, fromMenu(() => {
           sel.bank = r.bank;
           refresh();
-        }, null);
+        }), null);
         rollBtns.set(r.bank, b);
       }
     }
 
     for (const sp of SPECIALS) {
-      const b = makeBtn(specialRow, sp.icon, sp.label, () => {
+      const b = makeBtn(specialRow, sp.icon, sp.label, fromMenu(() => {
         sel.special = sp.id;
         refresh();
-      }, () => ({ dir: sel.dir, slope: sel.slope, special: sp.id }));
+      }), () => ({ dir: sel.dir, slope: sel.slope, special: sp.id }));
       specialBtns.set(sp.id, b);
     }
   }
 
   /* ---- build ------------------------------------------------------------ */
   function buildSelected() {
+    cursor = null;
     const def = resolve();
     if (!def) { setStatus('Nothing to build from here'); return; }
     const check = RC.canPlace(def, RC.track.head);
@@ -181,6 +240,30 @@
     // A special is a one-shot choice; drop back to plain track afterwards.
     if (sel.special) sel.special = null;
     refresh();
+  }
+
+  /* Remove the selected piece and everything built after it, RCT-style:
+     scroll back to where you want to change, remove, and rebuild from there.
+     The station pieces at the very start are protected. */
+  function removeFromCursor() {
+    if (cursor === null) return;
+    const pe = RC.track.pieces[cursor];
+    if (RC.pieceDef(pe.defId).station) {
+      setStatus('The station cannot be removed');
+      return;
+    }
+    const count = RC.track.pieces.length - cursor;
+    for (let n = 0; n < count && RC.track.pieces.length > 0; n++) RC.undo();
+    cursor = null;
+    setStatus(`Removed ${count} piece${count === 1 ? '' : 's'}`);
+    refresh();
+  }
+
+  /* The primary button does double duty: build at the head, or remove from the
+     inspected piece. */
+  function primaryAction() {
+    if (cursor !== null) removeFromCursor();
+    else buildSelected();
   }
 
   let statusTimer = null;
@@ -195,13 +278,20 @@
   /* ---- refresh ---------------------------------------------------------- */
   function refresh() {
     const head = RC.track.head;
+    // Guard against a cursor left dangling past a shrunken track.
+    if (cursor !== null && cursor >= RC.track.pieces.length) cursor = null;
+    const inspecting = cursor !== null;
+    // While inspecting an existing piece, don't grey buttons against the head —
+    // the piece is already placed elsewhere, so head-reachability is irrelevant.
+    // Just light up the ones that describe the selected piece.
+    const gate = check => inspecting ? false : !check.ok;
 
     for (const d of DIRECTIONS) {
       const b = dirBtns.get(d.id);
       if (!b) continue;
       const def = resolveWith(d.id, d.piece ? S.LEVEL : sel.slope, null);
       const check = def ? RC.canPlace(def, head) : { ok: false, why: 'Not possible here' };
-      b.disabled = !check.ok;
+      b.disabled = gate(check);
       b.title = check.ok ? d.label : `${d.label} — ${check.why}`;
       b.classList.toggle('selected', !sel.special && sel.dir === d.id);
     }
@@ -211,7 +301,7 @@
       if (!b) continue;
       const def = resolveWith('straight', s.g, null);
       const check = def ? RC.canPlace(def, head) : { ok: false, why: 'Not possible from this slope' };
-      b.disabled = !check.ok;
+      b.disabled = gate(check);
       // The label says where you'll end up, not which piece it takes to get there.
       b.title = check.ok
         ? (def.gIn === def.gOut ? s.label : `${s.label} (via ${def.label.toLowerCase()})`)
@@ -223,7 +313,7 @@
       const b = specialBtns.get(sp.id);
       if (!b) continue;
       const check = RC.canPlace(RC.pieceDef(sp.id), head);
-      b.disabled = !check.ok;
+      b.disabled = gate(check);
       b.title = check.ok ? sp.label : `${sp.label} — ${check.why}`;
       b.classList.toggle('selected', sel.special === sp.id);
     }
@@ -232,7 +322,7 @@
     for (const r of ROLLS) {
       const b = rollBtns.get(r.bank);
       if (!b) continue;
-      b.disabled = !canBank;
+      b.disabled = inspecting ? false : !canBank;
       b.title = canBank ? r.label : `${r.label} — only turns can be banked`;
       b.classList.toggle('selected', canBank && sel.bank === r.bank);
     }
@@ -240,23 +330,47 @@
     const liftBtn = document.getElementById('btn-lift');
     if (liftBtn) liftBtn.classList.toggle('active', sel.lift);
 
-    // Preview: name what will be built, or say why it can't be.
-    const def = resolve();
-    const check = def ? RC.canPlace(def, head) : { ok: false, why: 'Nothing to build from here' };
     const nameEl = document.getElementById('preview-name');
     const whyEl = document.getElementById('preview-why');
-    if (nameEl) {
-      nameEl.textContent = def
-        ? def.label + (sel.bank && canBank ? ', banked' : '')
-        : '—';
-    }
-    if (whyEl) whyEl.textContent = check.ok ? '' : check.why;
-
     const buildBtn = document.getElementById('btn-build');
-    if (buildBtn) buildBtn.disabled = !check.ok;
+
+    if (inspecting) {
+      const pe = RC.track.pieces[cursor];
+      const def = RC.pieceDef(pe.defId);
+      if (nameEl) {
+        nameEl.textContent = def.label +
+          (pe.bank ? ', banked' : '') + (pe.lift ? ', chain' : '');
+      }
+      if (whyEl) whyEl.textContent = `Piece ${cursor + 1} of ${RC.track.pieces.length}`;
+      if (buildBtn) {
+        buildBtn.disabled = false;
+        buildBtn.textContent = 'Remove from here';
+        buildBtn.classList.add('danger');
+      }
+    } else {
+      // Preview: name what will be built, or say why it can't be.
+      const def = resolve();
+      const check = def ? RC.canPlace(def, head) : { ok: false, why: 'Nothing to build from here' };
+      if (nameEl) {
+        nameEl.textContent = def
+          ? def.label + (sel.bank && canBank ? ', banked' : '')
+          : '—';
+      }
+      if (whyEl) whyEl.textContent = check.ok ? '' : check.why;
+      if (buildBtn) {
+        buildBtn.disabled = !check.ok;
+        buildBtn.textContent = 'Build this';
+        buildBtn.classList.remove('danger');
+      }
+    }
 
     const undoBtn = document.getElementById('btn-undo');
     if (undoBtn) undoBtn.disabled = RC.track.pieces.length === 0;
+
+    for (const id of ['btn-cursor-prev', 'btn-cursor-next']) {
+      const b = document.getElementById(id);
+      if (b) b.disabled = RC.track.pieces.length === 0;
+    }
 
     const finishBtn = document.getElementById('btn-finish');
     if (finishBtn) {
@@ -267,9 +381,16 @@
         : 'Join the track back to the station with plain filler track';
     }
 
+    const roHeadLabel = document.getElementById('ro-head-label');
+    if (roHeadLabel) roHeadLabel.textContent = inspecting ? 'Selected' : 'Build head';
     const roHead = document.getElementById('ro-head');
-    if (roHead && head) {
-      roHead.textContent = `(${head.i}, ${head.j}) · ${head.k} m · ${RC.slopeName(head.g)}`;
+    if (roHead) {
+      if (inspecting) {
+        const n = RC.track.pieces[cursor].node;
+        roHead.textContent = `piece ${cursor + 1} · (${n.i}, ${n.j}) · ${n.k} m`;
+      } else if (head) {
+        roHead.textContent = `(${head.i}, ${head.j}) · ${head.k} m · ${RC.slopeName(head.g)}`;
+      }
     }
     const st = RC.circuitStatus();
     const roCircuit = document.getElementById('ro-circuit');
@@ -296,13 +417,19 @@
     buildRows();
 
     const build = document.getElementById('btn-build');
-    if (build) build.addEventListener('click', buildSelected);
+    if (build) build.addEventListener('click', primaryAction);
 
     const undo = document.getElementById('btn-undo');
-    if (undo) undo.addEventListener('click', () => { RC.undo(); refresh(); });
+    if (undo) undo.addEventListener('click', () => { cursor = null; RC.undo(); refresh(); });
+
+    const prev = document.getElementById('btn-cursor-prev');
+    if (prev) prev.addEventListener('click', () => RC.cursorStep(-1));
+    const next = document.getElementById('btn-cursor-next');
+    if (next) next.addEventListener('click', () => RC.cursorStep(1));
 
     const clear = document.getElementById('btn-clear');
     if (clear) clear.addEventListener('click', () => {
+      cursor = null;
       RC.resetTrack();
       setStatus('Track cleared back to the station');
       refresh();
@@ -329,11 +456,18 @@
       if (e.target.matches('input, textarea')) return;
       if (e.key === 'Backspace' || e.key === 'Delete') {
         e.preventDefault();
+        cursor = null;
         RC.undo();
         refresh();
       } else if (e.key === 'Enter') {
         e.preventDefault();
-        buildSelected();
+        primaryAction();
+      } else if (e.key === 'ArrowLeft' && cursor !== null) {
+        e.preventDefault();
+        RC.cursorStep(-1);
+      } else if (e.key === 'ArrowRight' && cursor !== null) {
+        e.preventDefault();
+        RC.cursorStep(1);
       }
     });
 
