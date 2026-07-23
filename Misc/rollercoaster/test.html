@@ -1464,7 +1464,7 @@
     if (!near(RC.sim.s, stationEnd, 1e-9)) {
       return `front car at s = ${RC.sim.s.toFixed(2)} m, station exit is ${stationEnd.toFixed(2)} m`;
     }
-    // ...and the whole train is at rest inside the station, at ground level.
+    // ...and with four cars the whole train fits at rest inside the station.
     const cars = RC.carStates();
     if (cars.length !== 4) return `expected 4 cars, got ${cars.length}`;
     for (const c of cars) {
@@ -1472,6 +1472,23 @@
       if (Math.abs(c.z) > 1e-6) return `a car is not at ground level (z = ${c.z})`;
       if (!(c.def && c.def.station)) return 'a car is not on the station';
     }
+  });
+
+  check('any train length parks its front car at the station exit', () => {
+    // A longer train's tail may extend back past the station, which is fine —
+    // what must not happen is the front car overshooting up the first hill.
+    RC.loadPrefab('first-drop');
+    RC.sim.releaseS = null;
+    const stationEnd = RC.stationEndS();
+    for (const cars of [1, 4, 8]) {
+      RC.sim.cars = cars;
+      RC.resetSim();
+      if (!near(RC.sim.s, stationEnd, 1e-9)) {
+        return `${cars}-car train started at ${RC.sim.s.toFixed(2)} m, ` +
+               `station exit is ${stationEnd.toFixed(2)} m`;
+      }
+    }
+    RC.sim.cars = 4;
   });
 
   check('a release point beyond the track is clamped, not run off the end', () => {
