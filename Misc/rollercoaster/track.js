@@ -171,9 +171,10 @@
     if (def.kind === 'loop') {
       const d = D[node.dir];
       const lat = D[(node.dir + def.side + 4) & 3];
+      const L = node.loopL != null ? node.loopL : def.L;   // grown end loops
       return {
-        i: node.i + d[0] * def.L + lat[0] * def.lat,
-        j: node.j + d[1] * def.L + lat[1] * def.lat,
+        i: node.i + d[0] * L + lat[0] * def.lat,
+        j: node.j + d[1] * L + lat[1] * def.lat,
         dir: node.dir,
         k, g: def.gOut
       };
@@ -226,7 +227,8 @@
       const wc = A * (1 - Math.cos(phi)) + B * Math.sin(phi) * Math.sin(phi) / 2;
       // Linear forward drift added so the piece advances exactly L tiles and
       // still grid-snaps; uc(1) = B*pi is the shape's own forward reach.
-      const fwdM = uc + (def.L * RC.TILE_M - B * Math.PI) * t;
+      const L = node.loopL != null ? node.loopL : def.L;
+      const fwdM = uc + (L * RC.TILE_M - B * Math.PI) * t;
       // Smoothstep sideways drift, flat at both ends.
       const lat = def.lat * t * t * (3 - 2 * t);
       return {
@@ -664,16 +666,27 @@
   };
 
   /* ---- loop sizing -----------------------------------------------------
-     A loop's radius can be changed after it's built. The footprint (L tiles
-     forward, one to the side, level ends) is kept FIXED, so only the shape and
-     height change and the exit node never moves — nothing downstream shifts or
-     disconnects. Discrete metre steps suit the tile model. */
-  const LOOP_R_MIN = 5, LOOP_R_MAX = 10, LOOP_R_STEP = 1;
+     A loop's radius can be changed after it's built, in discrete metre steps.
+
+     There are two cases, per the teacher's design:
+       - A loop at the END of the track (the last piece) may grow its FOOTPRINT
+         as it grows — a bigger radius gets a longer intro/outro. Its exit is
+         the build head, so moving it disturbs nothing.
+       - A loop IN SITU (with track after it) keeps its footprint fixed, so the
+         exit node never moves and nothing downstream shifts. Only the shape and
+         height change within the existing span.
+
+     Footprint L (tiles advanced) is coupled to radius by loopFootprintFor, set
+     so R = 7 m gives the default L = 4. */
+  const LOOP_R_MIN = 5, LOOP_R_MAX = 12, LOOP_R_STEP = 1;
   RC.LOOP_R_MIN = LOOP_R_MIN;
   RC.LOOP_R_MAX = LOOP_R_MAX;
   RC.LOOP_R_STEP = LOOP_R_STEP;
 
-  /* The size a loop piece is currently drawn at. */
+  function loopFootprintFor(R, def) {
+    return Math.max(def.L, Math.round(R * 4 / 7));
+  }
+
   RC.loopR = function (pieceIndex) {
     const p = RC.track.pieces[pieceIndex];
     if (!p) return null;
@@ -682,26 +695,46 @@
     return p.node.loopR != null ? p.node.loopR : def.R;
   };
 
-  /* Set a loop's radius, validating that the resized shape stays in the park,
-     above ground, under the ceiling, and clear of other track. On success the
-     change sticks; on failure nothing changes. */
-  RC.setLoopR = function (pieceIndex, newR) {
+  RC.loopFootprint = function (pieceIndex) {
     const p = RC.track.pieces[pieceIndex];
+    if (!p) return null;
+    const def = BY_ID.get(p.defId);
+    if (def.kind !== 'loop') return null;
+    return p.node.loopL != null ? p.node.loopL : def.L;
+  };
+
+  /* Whether resizing this loop would grow its footprint (it's the last piece). */
+  RC.loopGrowsFootprint = function (pieceIndex) {
+    return pieceIndex === RC.track.pieces.length - 1;
+  };
+
+  /* Set a loop's radius, validating that the resized shape stays in the park,
+     above ground, under the ceiling, and clear of other track. An end loop
+     also grows its footprint and moves the build head. On failure nothing
+     changes. */
+  RC.setLoopR = function (pieceIndex, newR) {
+    const pieces = RC.track.pieces;
+    const p = pieces[pieceIndex];
     if (!p) return { ok: false, why: 'No such piece' };
     const def = BY_ID.get(p.defId);
     if (def.kind !== 'loop') return { ok: false, why: 'That piece is not a loop' };
 
     newR = Math.min(LOOP_R_MAX, Math.max(LOOP_R_MIN, newR));
-    const testNode = Object.assign({}, p.node, { loopR: newR });
+    const isEnd = pieceIndex === pieces.length - 1;
+    const curL = p.node.loopL != null ? p.node.loopL : def.L;
+    const newL = isEnd ? loopFootprintFor(newR, def) : curL;
+    const testNode = Object.assign({}, p.node, { loopR: newR, loopL: newL });
 
-    for (let n = 0; n <= 32; n++) {
-      const c = RC.centreline(def, testNode, n / 32);
+    for (let n = 0; n <= 40; n++) {
+      const c = RC.centreline(def, testNode, n / 40);
       if (!RC.inBounds(Math.floor(c.x), Math.floor(c.y))) {
         return { ok: false, why: 'A bigger loop would leave the park' };
       }
       if (c.z < 0) return { ok: false, why: 'The loop would dip below ground' };
       if (c.z > MAX_H) return { ok: false, why: 'The loop would be too tall' };
     }
+    const exit = RC.exitNode(def, testNode);
+    if (!RC.inBounds(exit.i, exit.j)) return { ok: false, why: 'A bigger loop would run off the edge' };
     // Check the resized loop against every OTHER piece; occupancy still holds
     // this loop's old cells at its own index, which collidesWith skips.
     if (collidesWith(def, testNode, occupancy(), pieceIndex)) {
@@ -709,8 +742,10 @@
     }
 
     p.node.loopR = newR;
+    p.node.loopL = newL;
+    if (isEnd) RC.track.head = exit;      // the grown footprint moved the head
     RC.version++;
-    return { ok: true, R: newR };
+    return { ok: true, R: newR, L: newL };
   };
 
   /* ---- circuit validation ---------------------------------------------

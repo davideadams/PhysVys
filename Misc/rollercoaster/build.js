@@ -388,8 +388,12 @@
     if (inspectingLoop) {
       const R = RC.loopR(cursor);
       const def = RC.pieceDef(RC.track.pieces[cursor].defId);
+      const grows = RC.loopGrowsFootprint(cursor);
       const valEl = document.getElementById('loop-size-val');
-      if (valEl) valEl.textContent = `${RC.loopHeight(R, def.a).toFixed(1)} m tall`;
+      if (valEl) {
+        valEl.textContent = `${RC.loopHeight(R, def.a).toFixed(1)} m tall · ` +
+          `${RC.loopFootprint(cursor)} tiles` + (grows ? '' : ' (fixed footprint)');
+      }
       const sm = document.getElementById('btn-loop-smaller');
       const lg = document.getElementById('btn-loop-larger');
       if (sm) sm.disabled = R <= RC.LOOP_R_MIN + 1e-9;

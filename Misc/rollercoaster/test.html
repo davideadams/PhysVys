@@ -996,22 +996,24 @@
     if (!(slow.vert < 0)) return `at 4 m/s the top of the loop gives ${slow.vert.toFixed(2)} g`;
   });
 
-  check('a loop can be resized, and the exit node does not move', () => {
+  check('an in-situ loop resizes with a FIXED footprint (nothing downstream moves)', () => {
     RC.resetTrack();
     RC.place('loop-right');
     RC.place('flat');                         // a piece after the loop
     const loopIdx = RC.track.pieces.findIndex(p => RC.pieceDef(p.defId).kind === 'loop');
     if (loopIdx < 0) return 'no loop was placed';
+    if (RC.loopGrowsFootprint(loopIdx)) return 'a loop with track after it should not grow its footprint';
 
     const nextBefore = Object.assign({}, RC.track.pieces[loopIdx + 1].node);
+    const footBefore = RC.loopFootprint(loopIdx);
     const r0 = RC.loopR(loopIdx);
 
     const res = RC.setLoopR(loopIdx, r0 + 1);
     if (!res.ok) return 'resize refused: ' + res.why;
     if (!near(RC.loopR(loopIdx), r0 + 1, 1e-9)) return `size did not change (still ${RC.loopR(loopIdx)})`;
-
-    // The piece after the loop must be exactly where it was — the footprint is
-    // fixed, so nothing downstream shifts.
+    if (RC.loopFootprint(loopIdx) !== footBefore) {
+      return `in-situ footprint changed from ${footBefore} to ${RC.loopFootprint(loopIdx)}`;
+    }
     const nextAfter = RC.track.pieces[loopIdx + 1].node;
     if (nextAfter.i !== nextBefore.i || nextAfter.j !== nextBefore.j ||
         nextAfter.k !== nextBefore.k || nextAfter.dir !== nextBefore.dir) {
@@ -1019,11 +1021,44 @@
     }
   });
 
-  check('resizing a loop changes its height but not its footprint', () => {
+  check('a loop at the end grows its footprint and moves the head', () => {
+    RC.resetTrack();
+    RC.place('loop-right');                    // the loop is the last piece
+    const loopIdx = RC.track.pieces.length - 1;
+    if (RC.pieceDef(RC.track.pieces[loopIdx].defId).kind !== 'loop') return 'last piece is not the loop';
+    if (!RC.loopGrowsFootprint(loopIdx)) return 'the end loop should grow its footprint';
+
+    const footBefore = RC.loopFootprint(loopIdx);
+    const headBefore = Object.assign({}, RC.track.head);
+
+    // Grow it right up: the footprint must increase and the head advance with it.
+    let grew = false;
+    for (let R = RC.loopR(loopIdx) + 1; R <= RC.LOOP_R_MAX; R++) {
+      const res = RC.setLoopR(loopIdx, R);
+      if (!res.ok) return `growing to ${R} m refused: ${res.why}`;
+      if (RC.loopFootprint(loopIdx) > footBefore) grew = true;
+    }
+    if (!grew) return `footprint never grew past ${footBefore} tiles`;
+
+    // The head is the loop's exit; it must have advanced by the footprint gain.
+    const d = RC.DIRS[headBefore.dir];
+    const along = (RC.track.head.i - headBefore.i) * d[0] + (RC.track.head.j - headBefore.j) * d[1];
+    if (along !== RC.loopFootprint(loopIdx) - footBefore) {
+      return `head advanced ${along} tiles, expected ${RC.loopFootprint(loopIdx) - footBefore}`;
+    }
+    // And the head still connects: the loop's centreline ends exactly at it.
+    const end = RC.centreline(RC.pieceDef(RC.track.pieces[loopIdx].defId), RC.track.pieces[loopIdx].node, 1);
+    const ep = RC.entryPoint(RC.track.head);
+    if (!near(ep.x, end.x, 1e-9) || !near(ep.y, end.y, 1e-9)) {
+      return 'the grown loop no longer meets the build head';
+    }
+  });
+
+  check('a bigger in-situ radius makes a taller loop within the same footprint', () => {
     RC.resetTrack();
     RC.place('loop-right');
+    RC.place('flat');                        // makes the loop in-situ
     const loopIdx = RC.track.pieces.findIndex(p => RC.pieceDef(p.defId).kind === 'loop');
-    const def = RC.pieceDef(RC.track.pieces[loopIdx].defId);
 
     const peakAt = () => {
       let peak = 0;
@@ -1032,16 +1067,13 @@
     };
     RC.setLoopR(loopIdx, RC.LOOP_R_MIN);
     const small = peakAt();
-    RC.setLoopR(loopIdx, RC.LOOP_R_MAX);
+    const footSmall = RC.loopFootprint(loopIdx);
+    RC.setLoopR(loopIdx, RC.LOOP_R_MIN + 3);
     const large = peakAt();
-    if (!(large > small + 1)) return `taller loop is not taller: ${small.toFixed(1)} vs ${large.toFixed(1)} m`;
-
-    // Footprint unchanged: the exit is still four tiles on and one to the side.
-    const node = { i: 20, j: 20, dir: 0, k: 5, g: 0 };
-    const exit = RC.exitNode(def, node);
-    const d = RC.DIRS[0];
-    const along = (exit.i - node.i) * d[0] + (exit.j - node.j) * d[1];
-    if (along !== 4) return `footprint changed: advances ${along} tiles`;
+    if (!(large > small + 1)) return `taller radius is not taller: ${small.toFixed(1)} vs ${large.toFixed(1)} m`;
+    if (RC.loopFootprint(loopIdx) !== footSmall) {
+      return `in-situ footprint changed from ${footSmall} to ${RC.loopFootprint(loopIdx)}`;
+    }
   });
 
   check('loop resize is clamped and refuses to leave the park', () => {
