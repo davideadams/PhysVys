@@ -300,6 +300,8 @@
     btn.addEventListener('click', () => updateEnergyPanels());
   });
   window.addEventListener('resize', () => updateEnergyPanels());
+  // Re-fit a canvas window's drawing when it's resized by its corner grip.
+  RC.onWindowResized = () => updateEnergyPanels();
 
   window.addEventListener('keydown', (e) => {
     if (e.code !== 'Space' || e.target.matches('input, textarea, button')) return;

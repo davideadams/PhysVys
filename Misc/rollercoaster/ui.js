@@ -93,11 +93,31 @@
       if (win) btn.classList.toggle('active', !win.hidden);
     });
 
+    // Convert any window that starts visible (the build window) from right- to
+    // left-anchoring now, so the resize grip at its bottom-right pulls cleanly
+    // rather than fighting a pinned right edge.
+    document.querySelectorAll('.window').forEach((win) => {
+      if (!win.hidden) clampIntoView(win);
+    });
+
     window.addEventListener('resize', () => {
       document.querySelectorAll('.window').forEach((win) => {
         if (!win.hidden) clampIntoView(win);
       });
     });
+
+    // Keep a window that's been resized larger from spilling off-screen, and
+    // let the canvas-based windows re-fit their drawings to the new size.
+    if (window.ResizeObserver) {
+      const ro = new ResizeObserver((entries) => {
+        for (const e of entries) {
+          if (e.target.hidden) continue;
+          clampIntoView(e.target);
+          if (RC.onWindowResized) RC.onWindowResized(e.target);
+        }
+      });
+      document.querySelectorAll('.window').forEach((win) => ro.observe(win));
+    }
 
     // Escape closes the topmost open window.
     window.addEventListener('keydown', (e) => {
