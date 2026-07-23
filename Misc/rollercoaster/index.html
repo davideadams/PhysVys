@@ -67,6 +67,10 @@
     <div class="pal-group">
       <div class="pal-label">Direction</div>
       <div class="rct-row" id="row-dir"></div>
+      <div class="special-wrap">
+        <button class="rct-special-btn" id="btn-special" type="button" aria-haspopup="true" aria-expanded="false">Special…</button>
+        <div class="rct-dropdown" id="special-menu" hidden></div>
+      </div>
     </div>
 
     <div class="pal-group">
@@ -79,30 +83,23 @@
       <div class="rct-row" id="row-roll"></div>
     </div>
 
-    <div class="pal-group">
-      <div class="pal-label">Special</div>
-      <div class="rct-row" id="row-special"></div>
-    </div>
-
-    <div class="pal-group">
-      <div class="pal-label">Select a piece <span class="muted">double-click the track</span></div>
-      <div class="auto-row">
-        <button class="pal-wide" id="btn-cursor-prev" type="button" title="Previous piece (Left arrow)">◀</button>
-        <button class="pal-wide" id="btn-cursor-next" type="button" title="Next piece (Right arrow)">▶</button>
-      </div>
-    </div>
-
     <div class="rct-preview">
       <div class="rct-preview-name" id="preview-name">—</div>
       <div class="rct-preview-why" id="preview-why"></div>
       <button class="rct-build" id="btn-build" type="button">Build this</button>
     </div>
 
-    <div class="auto-row">
-      <button class="pal-wide" id="btn-undo" type="button" title="Remove the last piece (Backspace)">◀◀ Remove</button>
-      <button class="pal-wide" id="btn-finish" type="button">Finish track</button>
+    <!-- Track navigation, RCT-style: back always available, forward only when
+         a piece behind the head is selected. -->
+    <div class="auto-row nav-row">
+      <button class="pal-wide nav-arrow" id="btn-cursor-prev" type="button"
+              title="Back one piece (Left arrow)">◀◀</button>
+      <button class="pal-wide nav-arrow" id="btn-cursor-next" type="button"
+              title="Forward one piece (Right arrow)">▶</button>
     </div>
+
     <div class="auto-row" style="margin-top:0.35rem">
+      <button class="pal-wide" id="btn-finish" type="button">Finish track</button>
       <button class="pal-wide" id="btn-clear" type="button" title="Clear back to the station">Clear</button>
     </div>
 

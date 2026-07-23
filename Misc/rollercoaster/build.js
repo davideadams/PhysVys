@@ -98,19 +98,26 @@
     refresh();
   };
 
-  /* Scroll the cursor, wrapping through the head. */
+  /* Move the cursor along the track, RCT-style and linear (no wrap). The head
+     is the front of the line; pieces run back from it, piece 0 the oldest.
+       back (dir < 0):  head -> N-1 -> ... -> 0, stopping at the first piece.
+       forward (dir>0): 0 -> ... -> N-1 -> head, stopping at the head.
+     Forward does nothing from the head — you are already at the end. */
   RC.cursorStep = function (dir) {
     const n = RC.track.pieces.length;
-    if (!n) { cursor = null; refresh(); return; }
-    if (cursor === null) {
-      cursor = dir > 0 ? 0 : n - 1;
+    if (!n) { RC.clearSelection(); return; }
+    if (dir < 0) {
+      if (cursor === null) RC.selectPiece(n - 1);
+      else if (cursor > 0) RC.selectPiece(cursor - 1);
     } else {
-      cursor += dir;
-      if (cursor < 0 || cursor >= n) cursor = null;   // fell off an end -> head
+      if (cursor === null) return;                 // already at the head
+      else if (cursor < n - 1) RC.selectPiece(cursor + 1);
+      else RC.clearSelection();                    // last piece -> head
     }
-    if (cursor === null) { refresh(); }
-    else RC.selectPiece(cursor);
   };
+
+  RC.canCursorBack = () => RC.track.pieces.length > 0 && cursor !== 0;
+  RC.canCursorForward = () => RC.track.pieces.length > 0 && cursor !== null;
 
   /* Banking applies to turns only — there's nothing to bank on straight
      track, and the piece has to start and finish level either way. */
@@ -163,12 +170,52 @@
     return b;
   }
 
+  /* The special-pieces dropdown behind the "Special…" button. */
+  function buildSpecialMenu() {
+    const menu = document.getElementById('special-menu');
+    if (!menu) return;
+    menu.innerHTML = '';
+    for (const sp of SPECIALS) {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'rct-dropitem';
+      item.innerHTML = `<span class="rct-drop-icon">${RC.icon(sp.icon)}</span>` +
+                       `<span>${sp.label}</span>`;
+      item.addEventListener('click', fromMenu(() => {
+        sel.special = sp.id;
+        closeSpecialMenu();
+        refresh();
+      }));
+      specialBtns.set(sp.id, item);
+      menu.appendChild(item);
+    }
+  }
+
+  let specialOpen = false;
+  function openSpecialMenu() {
+    const menu = document.getElementById('special-menu');
+    const btn = document.getElementById('btn-special');
+    if (!menu || !btn) return;
+    menu.hidden = false;
+    btn.setAttribute('aria-expanded', 'true');
+    specialOpen = true;
+  }
+  function closeSpecialMenu() {
+    const menu = document.getElementById('special-menu');
+    const btn = document.getElementById('btn-special');
+    if (!menu || !btn) return;
+    menu.hidden = true;
+    btn.setAttribute('aria-expanded', 'false');
+    specialOpen = false;
+  }
+  function toggleSpecialMenu() { specialOpen ? closeSpecialMenu() : openSpecialMenu(); }
+
   function buildRows() {
     const dirRow = document.getElementById('row-dir');
     const slopeRow = document.getElementById('row-slope');
-    const specialRow = document.getElementById('row-special');
-    if (!dirRow || !slopeRow || !specialRow) return;
-    dirRow.innerHTML = slopeRow.innerHTML = specialRow.innerHTML = '';
+    if (!dirRow || !slopeRow) return;
+    dirRow.innerHTML = slopeRow.innerHTML = '';
+    buildSpecialMenu();
 
     for (const d of DIRECTIONS) {
       const b = makeBtn(dirRow, d.icon, d.label, fromMenu(() => {
@@ -218,14 +265,6 @@
         }), null);
         rollBtns.set(r.bank, b);
       }
-    }
-
-    for (const sp of SPECIALS) {
-      const b = makeBtn(specialRow, sp.icon, sp.label, fromMenu(() => {
-        sel.special = sp.id;
-        refresh();
-      }), () => ({ dir: sel.dir, slope: sel.slope, special: sp.id }));
-      specialBtns.set(sp.id, b);
     }
   }
 
@@ -318,6 +357,14 @@
       b.classList.toggle('selected', sel.special === sp.id);
     }
 
+    // The "Special…" button names the chosen special, or reads plainly.
+    const specialBtn = document.getElementById('btn-special');
+    if (specialBtn) {
+      const chosen = sel.special ? SPECIALS.find(s => s.id === sel.special) : null;
+      specialBtn.textContent = chosen ? chosen.label : 'Special…';
+      specialBtn.classList.toggle('active', !!chosen);
+    }
+
     const canBank = bankable();
     for (const r of ROLLS) {
       const b = rollBtns.get(r.bank);
@@ -337,13 +384,18 @@
     if (inspecting) {
       const pe = RC.track.pieces[cursor];
       const def = RC.pieceDef(pe.defId);
+      const isStation = !!def.station;
       if (nameEl) {
         nameEl.textContent = def.label +
           (pe.bank ? ', banked' : '') + (pe.lift ? ', chain' : '');
       }
-      if (whyEl) whyEl.textContent = `Piece ${cursor + 1} of ${RC.track.pieces.length}`;
+      if (whyEl) {
+        whyEl.textContent = isStation
+          ? `Piece ${cursor + 1} of ${RC.track.pieces.length} · the station cannot be removed`
+          : `Piece ${cursor + 1} of ${RC.track.pieces.length}`;
+      }
       if (buildBtn) {
-        buildBtn.disabled = false;
+        buildBtn.disabled = isStation;         // station is protected
         buildBtn.textContent = 'Remove from here';
         buildBtn.classList.add('danger');
       }
@@ -364,13 +416,10 @@
       }
     }
 
-    const undoBtn = document.getElementById('btn-undo');
-    if (undoBtn) undoBtn.disabled = RC.track.pieces.length === 0;
-
-    for (const id of ['btn-cursor-prev', 'btn-cursor-next']) {
-      const b = document.getElementById(id);
-      if (b) b.disabled = RC.track.pieces.length === 0;
-    }
+    const prevBtn = document.getElementById('btn-cursor-prev');
+    if (prevBtn) prevBtn.disabled = !RC.canCursorBack();
+    const nextBtn = document.getElementById('btn-cursor-next');
+    if (nextBtn) nextBtn.disabled = !RC.canCursorForward();
 
     const finishBtn = document.getElementById('btn-finish');
     if (finishBtn) {
@@ -419,13 +468,21 @@
     const build = document.getElementById('btn-build');
     if (build) build.addEventListener('click', primaryAction);
 
-    const undo = document.getElementById('btn-undo');
-    if (undo) undo.addEventListener('click', () => { cursor = null; RC.undo(); refresh(); });
-
     const prev = document.getElementById('btn-cursor-prev');
     if (prev) prev.addEventListener('click', () => RC.cursorStep(-1));
     const next = document.getElementById('btn-cursor-next');
     if (next) next.addEventListener('click', () => RC.cursorStep(1));
+
+    const specialBtn = document.getElementById('btn-special');
+    if (specialBtn) specialBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleSpecialMenu();
+    });
+    // Clicks inside the menu (other than an item, which closes it itself) keep
+    // it open; any click elsewhere closes it.
+    const menu = document.getElementById('special-menu');
+    if (menu) menu.addEventListener('click', (e) => e.stopPropagation());
+    document.addEventListener('click', () => { if (specialOpen) closeSpecialMenu(); });
 
     const clear = document.getElementById('btn-clear');
     if (clear) clear.addEventListener('click', () => {

@@ -1610,6 +1610,8 @@
   check('selecting a piece lights up its type in the build menu', () => {
     RC.resetTrack();
     if (!RC.place('flat-to-gentle-up', { lift: true })) return 'lift piece refused';
+    // A turn needs a flat entry, so level off before placing one.
+    if (!RC.place('gentle-up-to-flat', { lift: true })) return 'level-off refused';
     if (!RC.place('turn-right-tight', { bank: true })) return 'banked turn refused';
     const pieces = RC.track.pieces;
     const liftIdx = pieces.findIndex(p => p.defId === 'flat-to-gentle-up');
@@ -1633,21 +1635,33 @@
     if (RC.buildCursor() !== null) return 'clearSelection left the cursor set';
   });
 
-  check('the build cursor scrolls around the track and through the head', () => {
+  check('the build cursor moves back and forth along the track, no wrap', () => {
     RC.resetTrack();
     RC.place('flat');
     RC.place('flat');
     const n = RC.track.pieces.length;
     RC.clearSelection();                 // start at the head (null)
 
+    // At the head: can go back, cannot go forward.
+    if (!RC.canCursorBack()) return 'should be able to go back from the head';
+    if (RC.canCursorForward()) return 'forward should be disabled at the head';
     RC.cursorStep(1);
-    if (RC.buildCursor() !== 0) return `forward from the head went to ${RC.buildCursor()}, expected 0`;
-    for (let i = 0; i < n - 1; i++) RC.cursorStep(1);
-    if (RC.buildCursor() !== n - 1) return `expected to reach the last piece (${n - 1}), at ${RC.buildCursor()}`;
-    RC.cursorStep(1);
-    if (RC.buildCursor() !== null) return `past the end should wrap to the head, got ${RC.buildCursor()}`;
+    if (RC.buildCursor() !== null) return `forward from the head moved to ${RC.buildCursor()}`;
+
+    // Back walks to the last piece, then down to piece 0 and stops there.
     RC.cursorStep(-1);
-    if (RC.buildCursor() !== n - 1) return `back from the head should select the last piece, got ${RC.buildCursor()}`;
+    if (RC.buildCursor() !== n - 1) return `back from head went to ${RC.buildCursor()}, expected ${n - 1}`;
+    for (let i = 0; i < n; i++) RC.cursorStep(-1);
+    if (RC.buildCursor() !== 0) return `back should stop at piece 0, got ${RC.buildCursor()}`;
+    if (RC.canCursorBack()) return 'back should be disabled at piece 0';
+
+    // Forward walks back up to the last piece, then to the head, and stops.
+    for (let i = 0; i < n - 1; i++) RC.cursorStep(1);
+    if (RC.buildCursor() !== n - 1) return `forward stalled at ${RC.buildCursor()}, expected ${n - 1}`;
+    RC.cursorStep(1);
+    if (RC.buildCursor() !== null) return `forward from the last piece should reach the head, got ${RC.buildCursor()}`;
+    RC.cursorStep(1);
+    if (RC.buildCursor() !== null) return 'forward past the head should stay at the head';
     RC.clearSelection();
   });
 

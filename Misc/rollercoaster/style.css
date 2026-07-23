@@ -254,6 +254,62 @@ html, body {
   stroke-linejoin: round;
 }
 
+/* "Special…" button and its dropdown. */
+.special-wrap { position: relative; margin-top: 0.3rem; }
+.rct-special-btn {
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  border: 1.5px solid var(--chrome-border);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.75);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.rct-special-btn:hover { background: white; }
+.rct-special-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
+
+.rct-dropdown {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 40;
+  padding: 0.25rem;
+  border: 1px solid var(--chrome-border);
+  border-radius: 10px;
+  background: var(--chrome);
+  box-shadow: var(--chrome-shadow);
+  backdrop-filter: blur(12px);
+}
+.rct-dropdown[hidden] { display: none; }
+
+.rct-dropitem {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.34rem 0.45rem;
+  border: 1.5px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: left;
+}
+.rct-dropitem:hover:not(:disabled) { background: rgba(13,148,136,0.12); }
+.rct-dropitem.selected { border-color: var(--accent); background: rgba(13,148,136,0.14); }
+.rct-dropitem:disabled { opacity: 0.3; cursor: default; }
+.rct-drop-icon { display: inline-flex; width: 24px; height: 24px; flex: 0 0 auto; }
+
+/* Track-navigation arrows. Forward greys out when at the head. */
+.nav-row .nav-arrow { font-size: 1rem; letter-spacing: 0.1em; }
+
 .rct-preview {
   margin: 0.7rem 0;
   padding: 0.6rem;
