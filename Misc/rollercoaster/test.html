@@ -1448,8 +1448,30 @@
     if (!near(RC.sim.s, 40, 1e-9)) return `started at ${RC.sim.s}, expected 40`;
     RC.sim.releaseS = null;
     RC.resetSim();
-    const berth = Math.min(RC.CAR_SPACING * RC.sim.cars, RC.trackPath().total);
+    const berth = RC.defaultBerth();
     if (!near(RC.sim.s, berth, 1e-9)) return `clearing the release point should return to ${berth}`;
+  });
+
+  check('the train parks with its front car at the station exit', () => {
+    RC.loadPrefab('first-drop');
+    RC.sim.releaseS = null;
+    RC.sim.cars = 4;
+    RC.resetSim();
+
+    const stationEnd = RC.stationEndS();
+    if (!(stationEnd > 0)) return 'the prefab has no station';
+    // The front car sits at the station exit...
+    if (!near(RC.sim.s, stationEnd, 1e-9)) {
+      return `front car at s = ${RC.sim.s.toFixed(2)} m, station exit is ${stationEnd.toFixed(2)} m`;
+    }
+    // ...and the whole train is at rest inside the station, at ground level.
+    const cars = RC.carStates();
+    if (cars.length !== 4) return `expected 4 cars, got ${cars.length}`;
+    for (const c of cars) {
+      if (c.s < -1e-9) return `a car sits before the start at s = ${c.s.toFixed(2)}`;
+      if (Math.abs(c.z) > 1e-6) return `a car is not at ground level (z = ${c.z})`;
+      if (!(c.def && c.def.station)) return 'a car is not on the station';
+    }
   });
 
   check('a release point beyond the track is clamped, not run off the end', () => {

@@ -672,6 +672,20 @@
     return RC.track.pieces.reduce((s, p) => s + RC.pieceLength(BY_ID.get(p.defId)), 0);
   };
 
+  /* Arc position, in metres, at the exit of the station the train starts in —
+     the first contiguous run of station pieces from the start of the track.
+     Returns 0 if there is no station. The train parks with its front car
+     here, so the whole train sits back inside the station. */
+  RC.stationEndS = function () {
+    const pts = RC.trackPath().pts;
+    let end = 0;
+    for (const p of pts) {
+      if (p.def && p.def.station) end = p.s;
+      else if (end > 0) break;      // left the opening station run
+    }
+    return end;
+  };
+
   /* ---- finish the track -------------------------------------------------
      RCT2's "complete the circuit": search for any sequence of pieces from the
      build head back to the start node. The result is deliberately dull — the

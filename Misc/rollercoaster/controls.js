@@ -21,7 +21,7 @@
 
   function releaseValue() {
     if (RC.sim.releaseS != null) return RC.sim.releaseS;
-    return Math.min(RC.CAR_SPACING * RC.sim.cars, RC.trackPath().total);
+    return RC.defaultBerth();
   }
 
   const els = new Map();

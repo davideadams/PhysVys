@@ -46,6 +46,15 @@
   RC.trainMass = () => RC.sim.cars * CAR_MASS;
   RC.CAR_SPACING = CAR_SPACING;
 
+  /* Where the front car parks by default: the station exit, so the train sits
+     back inside the station. Falls back to clearing the train's own length off
+     the start when there's no station (custom tracks, tests). */
+  RC.defaultBerth = function () {
+    const total = RC.trackPath().total;
+    const st = RC.stationEndS();
+    return Math.min(st > 0 ? st : CAR_SPACING * RC.sim.cars, total);
+  };
+
   function closed() {
     const st = RC.circuitStatus();
     return st.kind === 'closed' || st.kind === 'closed-nostation';
@@ -182,10 +191,9 @@
     const sim = RC.sim;
     const path = RC.trackPath();
     // Where the train starts: an explicit argument, else the release point the
-    // student has chosen, else just clear of the station.
-    const berth = Math.min(CAR_SPACING * sim.cars, path.total);
+    // student has chosen, else the station berth (front car at the exit).
     sim.s = startS != null ? startS
-          : (sim.releaseS != null ? Math.min(sim.releaseS, path.total) : berth);
+          : (sim.releaseS != null ? Math.min(sim.releaseS, path.total) : RC.defaultBerth());
     sim.startS = sim.s;      // the berth the train must return to
     sim.lapDone = false;
     sim.v = 0;
