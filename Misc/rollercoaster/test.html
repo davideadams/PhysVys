@@ -1063,6 +1063,62 @@
     }
   });
 
+  check('same-direction banked turns hold full bank across the joint', () => {
+    // Two right turns make a 180. The bank must stay full through the joint
+    // between them, not dip to level in the middle and roll back up.
+    RC.resetTrack();
+    RC.place('turn-right-tight', { bank: true });
+    RC.place('turn-right-tight', { bank: true });
+    RC.place('flat');
+    const pts = RC.trackPath().pts;
+    const turnPts = pts.filter(p => p.def.kind === 'turn');
+    if (!turnPts.length) return 'no banked turn in the path';
+
+    // Find the joint between the two turns (where piece index changes), and
+    // check the bank there is still (near) full, not near zero.
+    const pis = [...new Set(turnPts.map(p => p.pi))].sort((a, b) => a - b);
+    if (pis.length !== 2) return `expected two turn pieces, saw ${pis.length}`;
+    const jointS = Math.max(...turnPts.filter(p => p.pi === pis[0]).map(p => p.s));
+    let nearest = turnPts[0];
+    for (const p of turnPts) {
+      if (Math.abs(p.s - jointS) < Math.abs(nearest.s - jointS)) nearest = p;
+    }
+    if (Math.abs(nearest.bank) < RC.BANK_ANGLE * 0.9) {
+      return `bank at the joint is ${nearest.bank.toFixed(3)} rad — it unbanks in the middle`;
+    }
+    // Every point across both turns should be well-banked (the run holds it).
+    const midBanks = turnPts.filter(p => p.t > 0.2 && p.t < 0.8).map(p => Math.abs(p.bank));
+    if (Math.min(...midBanks) < RC.BANK_ANGLE * 0.9) {
+      return `a mid-turn point dropped to ${Math.min(...midBanks).toFixed(3)} rad`;
+    }
+  });
+
+  check('an S-bend of opposite banked turns still rolls through level', () => {
+    // Right then left: the bank must pass through zero at the joint, because
+    // it cannot flip from full-right to full-left instantly.
+    RC.resetTrack();
+    RC.place('turn-right-tight', { bank: true });
+    RC.place('turn-left-tight', { bank: true });
+    RC.place('flat');
+    const pts = RC.trackPath().pts;
+    const turnPts = pts.filter(p => p.def.kind === 'turn');
+    const pis = [...new Set(turnPts.map(p => p.pi))].sort((a, b) => a - b);
+    const jointS = Math.max(...turnPts.filter(p => p.pi === pis[0]).map(p => p.s));
+    let nearest = turnPts[0];
+    for (const p of turnPts) {
+      if (Math.abs(p.s - jointS) < Math.abs(nearest.s - jointS)) nearest = p;
+    }
+    if (Math.abs(nearest.bank) > RC.BANK_ANGLE * 0.25) {
+      return `bank at the S-bend joint is ${nearest.bank.toFixed(3)} rad — should pass through level`;
+    }
+    // And the two turns bank opposite ways.
+    const first = turnPts.find(p => p.pi === pis[0] && p.t > 0.4 && p.t < 0.6);
+    const second = turnPts.find(p => p.pi === pis[1] && p.t > 0.4 && p.t < 0.6);
+    if (!(first.bank * second.bank < 0)) {
+      return `the two turns do not bank opposite ways (${first.bank.toFixed(2)}, ${second.bank.toFixed(2)})`;
+    }
+  });
+
   check('a crest lightens the riders and a dip presses them down', () => {
     RC.track.pieces = [];
     RC.track.start = { i: 6, j: 20, dir: 0, k: 8, g: 0 };

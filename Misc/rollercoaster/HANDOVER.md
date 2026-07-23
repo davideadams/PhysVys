@@ -274,12 +274,22 @@ One angle, 45°, on turns only. The teacher's framing: *"a banked curve at a giv
 speed is usually more tolerable than a flat curve"* — the thing RCT teaches by
 feel. The report and the About text both point at the comparison.
 
-What kept it cheap: **the bank rolls in and out within the turn piece itself**, so
-both ends stay level. Bank therefore never becomes part of the node state, no
-transition pieces are needed, and the catalogue doesn't multiply — it's a
-per-piece flag exactly like the chain lift. The RCT-faithful alternative (bank as
-a fourth node dimension with explicit transitions) roughly triples the piece
-count for a difference students would not see.
+What kept it cheap: **bank returns to level wherever a banked run ends**, so it
+never becomes part of the node state, no transition pieces are needed, and the
+catalogue doesn't multiply — it's a per-piece flag exactly like the chain lift.
+The RCT-faithful alternative (bank as a fourth node dimension with explicit
+transitions) roughly triples the piece count for a difference students would not
+see.
+
+The bank ramp is **neighbour-aware** (`bankProfile(t, rampIn, rampOut)` in
+`track.js`, fed from `trackPath`). A lone banked turn ramps in and out within
+itself. But a run of banked turns in the *same direction* — two quarter turns
+making a 180°, say — holds full bank across the joints between them; the ramp at
+an end is suppressed when the neighbour on that side is a same-direction banked
+turn. An S-bend (opposite directions) still rolls through level at the joint,
+because it must. Getting this wrong (the original per-piece version) made a 180°
+flatten out in the middle and roll back up, which is jarring — there are tests
+for both cases now.
 
 The g-force maths needed **no changes at all**, because banking is a roll of the
 car frame and the forces were already a projection onto that frame.

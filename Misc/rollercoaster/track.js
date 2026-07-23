@@ -14,26 +14,39 @@
   const MAX_H = 60;
   RC.MAX_H = MAX_H;
 
-  /* Banking is a single angle, applied to turns only. Rolling in and out
-     within the piece itself means the joint between pieces stays level, so
-     bank never becomes part of the node state and the piece catalogue does
-     not multiply. Real track spirals the roll in over a longer transition;
-     the difference is cosmetic here. */
+  /* Banking is a single angle, applied to turns only. A lone banked turn rolls
+     in and out within itself so it joins level track at both ends. But a run
+     of banked turns in the SAME direction — two quarter turns making a 180°,
+     say — must hold full bank across the joints between them; ramping down to
+     level in the middle and back up is wrong and jarring. So the ramp at each
+     end is suppressed when the neighbour on that side is a same-direction
+     banked turn (see rampFlags in trackPath). Bank still returns to level
+     wherever a banked run ends, so it never enters the node state. */
   const BANK_ANGLE = 45 * Math.PI / 180;
   RC.BANK_ANGLE = BANK_ANGLE;
 
-  /* Full bank through the middle half of the turn, smoothly ramped at each
-     end so the piece starts and finishes level. */
-  function bankProfile(t) {
+  /* Bank fraction at parameter t. rampIn/rampOut default true (a lone turn);
+     pass false for an end that abuts a same-direction banked turn, so the
+     bank stays full through that joint. */
+  function bankProfile(t, rampIn, rampOut) {
+    if (rampIn === undefined) rampIn = true;
+    if (rampOut === undefined) rampOut = true;
     const ramp = 0.25;
-    let f;
-    if (t < ramp) f = t / ramp;
-    else if (t > 1 - ramp) f = (1 - t) / ramp;
-    else f = 1;
+    let f = 1;
+    if (rampIn && t < ramp) f = Math.min(f, t / ramp);
+    if (rampOut && t > 1 - ramp) f = Math.min(f, (1 - t) / ramp);
     f = Math.min(1, Math.max(0, f));
     return f * f * (3 - 2 * f);
   }
   RC.bankProfile = bankProfile;
+
+  /* Is this placed piece a banked turn, and which way does it turn? */
+  function bankedTurnDir(pieceEntry) {
+    if (!pieceEntry || !pieceEntry.bank) return 0;
+    const def = BY_ID.get(pieceEntry.defId);
+    return (def && def.kind === 'turn') ? def.turn : 0;
+  }
+  RC.bankedTurnDir = bankedTurnDir;
 
   /* A piece's height gain is the integral of its slope profile. Ramping the
      slope linearly from gIn to gOut over L tiles gives L*(gIn+gOut)/2, which
@@ -279,10 +292,18 @@
     const pts = [];
     let s = 0, prev = null;
 
-    for (let pi = 0; pi < RC.track.pieces.length; pi++) {
-      const p = RC.track.pieces[pi];
+    const pieces = RC.track.pieces;
+    for (let pi = 0; pi < pieces.length; pi++) {
+      const p = pieces[pi];
       const def = BY_ID.get(p.defId);
       const n = def.kind === 'straight' ? 8 : (def.kind === 'loop' ? 64 : 24);
+
+      // Hold full bank across joints where a banked turn meets another banked
+      // turn going the same way, so a multi-piece turn banks as one.
+      const dir = bankedTurnDir(p);
+      const rampIn = dir === 0 || bankedTurnDir(pieces[pi - 1]) !== dir;
+      const rampOut = dir === 0 || bankedTurnDir(pieces[pi + 1]) !== dir;
+
       for (let q = 0; q <= n; q++) {
         if (q === 0 && pi > 0) continue;            // joint shared with previous piece
         const t = q / n;
@@ -296,7 +317,7 @@
         }
         // Signed by turn direction: a right turn banks to the right.
         const bank = p.bank && def.kind === 'turn'
-          ? def.turn * BANK_ANGLE * bankProfile(t)
+          ? def.turn * BANK_ANGLE * bankProfile(t, rampIn, rampOut)
           : 0;
         pts.push({ x: c.x, y: c.y, z: c.z, s, pi, t, bank, piece: p, def });
         prev = c;
