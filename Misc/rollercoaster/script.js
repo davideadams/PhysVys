@@ -326,6 +326,33 @@
 
   RC.requestRender = function () { state.dirty = true; };
 
+  /* ---- presets ---------------------------------------------------------- */
+  const presetSelect = document.getElementById('preset-select');
+
+  function loadPreset(key) {
+    const res = RC.loadPrefab(key);
+    if (!res.ok) {
+      console.warn('Preset failed to build:', res.why);
+      RC.resetTrack();
+    }
+    RC.refreshBuild();       // rebuilds palette state, resets the sim, resyncs controls
+    RC.resetEnergyScale();
+    updateRideUI();
+    state.dirty = true;
+    return res.ok;
+  }
+
+  function initPresets(defaultKey) {
+    for (const key of Object.keys(RC.PREFABS)) {
+      const opt = document.createElement('option');
+      opt.value = key;
+      opt.textContent = RC.PREFABS[key].name;
+      presetSelect.appendChild(opt);
+    }
+    presetSelect.value = defaultKey;
+    presetSelect.addEventListener('change', () => loadPreset(presetSelect.value));
+  }
+
   RC.initWindows();
   // Start with a working ride standing, so the page is useful before anything
   // is clicked. Falls back to a bare station if the prefab ever fails to build.
@@ -338,6 +365,7 @@
   RC.resetSim();
   RC.resetEnergyScale();
   RC.initControls();
+  initPresets('first-drop');
   updateRideUI();
   resize();
   requestAnimationFrame(frame);

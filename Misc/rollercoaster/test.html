@@ -1491,29 +1491,61 @@
   /* ---- prefabs -----------------------------------------------------------
      A prefab that doesn't close is the worst kind of bug here: the page loads
      looking fine and Test silently refuses. */
-  check('every prefab builds and closes its circuit', () => {
+  check('every prefab builds; closed ones close, shuttles are testable shuttles', () => {
     for (const key of Object.keys(RC.PREFABS)) {
       const res = RC.loadPrefab(key);
       if (!res.ok) return res.why;
       const st = RC.circuitStatus();
-      if (st.kind !== 'closed') {
+      const wantShuttle = !!RC.PREFABS[key].shuttle;
+      if (wantShuttle) {
+        if (st.kind !== 'shuttle') return `"${key}" should be a shuttle but is "${st.kind}"`;
+      } else if (st.kind !== 'closed') {
         const h = RC.track.head, s = RC.track.start;
         return `"${key}" ended as "${st.kind}" — head (${h.i},${h.j},dir ${h.dir},k ${h.k}) ` +
                `vs start (${s.i},${s.j},dir ${s.dir},k ${s.k})`;
       }
+      if (!st.ok) return `"${key}" (${st.kind}) is not testable`;
     }
   });
 
-  check('every prefab has a station, a lift hill and returns to ground', () => {
+  check('every prefab has a station and reaches a sensible height', () => {
     for (const key of Object.keys(RC.PREFABS)) {
       RC.loadPrefab(key);
       const pieces = RC.track.pieces;
       if (!pieces.some(p => RC.pieceDef(p.defId).station)) return `"${key}" has no station`;
-      if (!pieces.some(p => p.lift)) return `"${key}" has no chain lift`;
       const pts = RC.trackPath().pts;
       const high = Math.max(...pts.map(p => p.z));
       if (high < 5) return `"${key}" only reaches ${high} m — not much of a coaster`;
-      if (!near(RC.track.head.k, 0, 1e-9)) return `"${key}" does not finish at ground level`;
+      // Closed circuits must end back at ground level; a shuttle ends up a spike.
+      if (!RC.PREFABS[key].shuttle && !near(RC.track.head.k, 0, 1e-9)) {
+        return `"${key}" does not finish at ground level`;
+      }
+    }
+  });
+
+  check('the shuttle loop launches out and rolls back to the station', () => {
+    const res = RC.loadPrefab('shuttle-loop');
+    if (!res.ok) return res.why;
+    if (RC.circuitStatus().kind !== 'shuttle') return 'not detected as a shuttle';
+    RC.sim.cars = 2;
+    RC.sim.friction = false;
+    RC.resetSim();
+    const berth = RC.sim.startS;
+    runFor(120);
+
+    if (!RC.sim.launchedOut) return 'the train never launched out of the station';
+    if (RC.sim.state !== 'finished') {
+      return `state "${RC.sim.state}" after 120 s — s = ${RC.sim.s.toFixed(1)} of ` +
+             `${RC.trackPath().total.toFixed(1)} m, v = ${RC.sim.v.toFixed(2)}, note "${RC.sim.note}"`;
+    }
+    if (!near(RC.sim.s, berth, 1e-6)) {
+      return `stopped at s = ${RC.sim.s.toFixed(1)} m, berth is ${berth.toFixed(1)} m`;
+    }
+    // A shuttle adds energy only via the launch, so with friction off the books
+    // still balance once it has braked to a stand.
+    const e = RC.energy();
+    if (Math.abs(e.total - e.supplied) / Math.max(1, e.supplied) > 0.02) {
+      return `energy does not balance: total ${e.total.toFixed(0)} vs supplied ${e.supplied.toFixed(0)} J`;
     }
   });
 

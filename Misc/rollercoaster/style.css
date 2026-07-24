@@ -103,6 +103,34 @@ html, body {
 .tb-btn:disabled { opacity: 0.35; cursor: default; }
 .tb-btn:disabled:hover { background: rgba(255,255,255,0.7); }
 
+.tb-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 32px;
+  padding: 0 0.5rem 0 0.7rem;
+  border: 1.5px solid var(--chrome-border);
+  border-radius: 9px;
+  background: rgba(255,255,255,0.7);
+}
+.tb-select-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.tb-select select {
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--ink);
+  cursor: pointer;
+  outline: none;
+}
+
 /* ---- status bar ------------------------------------------------------ */
 .statusbar {
   position: fixed;

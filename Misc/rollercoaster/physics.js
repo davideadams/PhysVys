@@ -62,6 +62,12 @@
   }
   RC.isClosed = closed;
 
+  function shuttle() {
+    const st = RC.circuitStatus();
+    return st.kind === 'shuttle' || st.kind === 'shuttle-nostation';
+  }
+  RC.isShuttle = shuttle;
+
   /* Where each car sits, front car first. */
   RC.carStates = function () {
     const sim = RC.sim;
@@ -197,6 +203,7 @@
           : (sim.releaseS != null ? Math.min(sim.releaseS, path.total) : RC.defaultBerth());
     sim.startS = sim.s;      // the berth the train must return to
     sim.lapDone = false;
+    sim.launchedOut = false; // shuttle: has it left the station yet
     sim.v = 0;
     sim.time = 0;
     sim.eMotor = 0;
@@ -252,13 +259,14 @@
 
     sim.v += a * dt;
 
-    // Station dispatch: while the train is still in the station on its way out
-    // (before it has completed a lap), the station's drive tyres push it
-    // forward onto the lift. Without this a train parked at the station exit
-    // just creeps backward down the faint uphill of the lift ahead and never
-    // reaches the chain. Booked as motor work, like the lift and launch.
+    // Station dispatch: while the train is still leaving the station on its way
+    // out, the station's drive tyres push it forward onto the lift (or launch).
+    // Without this a train parked at the station exit just creeps backward down
+    // the faint uphill ahead and never gets going. Gated on !launchedOut, not
+    // !lapDone, so it fires once on the way out and never re-grabs a train
+    // coming home (which matters for a shuttle, whose lap is never "done").
     const onStation = cars.some(p => p.def && p.def.station);
-    if (onStation && !sim.lapDone && sim.v < STATION_DISPATCH && sim.state === 'running') {
+    if (onStation && !sim.launchedOut && sim.v >= 0 && sim.v < STATION_DISPATCH && sim.state === 'running') {
       const before = 0.5 * m * sim.v * sim.v;
       const after = 0.5 * m * STATION_DISPATCH * STATION_DISPATCH;
       sim.eMotor += after - before;
@@ -275,9 +283,10 @@
       sim.v = sim.liftSpeed;
     }
 
-    // Launch track, for shuttle rides.
+    // Launch track, for shuttle rides. Only fires while the train is heading
+    // OUT (v >= 0); on the way back it must coast through, not be re-launched.
     const onLaunch = cars.some(p => p.def && p.def.launch);
-    if (onLaunch && sim.v < sim.launchSpeed && sim.state === 'running') {
+    if (onLaunch && sim.v >= 0 && sim.v < sim.launchSpeed && sim.state === 'running') {
       const before = 0.5 * m * sim.v * sim.v;
       const after = 0.5 * m * sim.launchSpeed * sim.launchSpeed;
       sim.eMotor += after - before;
@@ -296,6 +305,10 @@
 
     sim.s += sim.v * dt;
     sim.time += dt;
+
+    // Once the train has cleared the berth it has "launched out"; this stops
+    // the station dispatch re-grabbing it, and marks a shuttle's outbound leg.
+    if (sim.s > sim.startS + 1) sim.launchedOut = true;
 
     // Track the extremes for the ride report.
     const lead = cars[0];
@@ -361,9 +374,32 @@
           sim.note = 'Completed the circuit and returned to the station.';
         }
       }
+    } else if (shuttle()) {
+      // Shuttle: launched out, up the spike, then rolls back through to the
+      // station. The train stalls on the spike under gravity and reverses on
+      // its own; it should reach the far end only if the spike is too short.
+      if (sim.s >= path.total) { sim.s = path.total; if (sim.v > 0) sim.v = 0; }
+
+      if (sim.launchedOut && sim.v < 0) {
+        // Coming home: the station's brakes catch the returning train.
+        const onStation = cars.some(p => p.def && p.def.station);
+        if (onStation) {
+          const dv = Math.min(-sim.v, STATION_BRAKE * dt);
+          const after = sim.v + dv;   // v is negative; ease it toward zero
+          sim.eThermal += 0.5 * m * (sim.v * sim.v - after * after);
+          sim.v = after;
+        }
+        if (sim.s <= sim.startS || Math.abs(sim.v) < 0.5) {
+          sim.eThermal += 0.5 * m * sim.v * sim.v;
+          sim.s = sim.startS;
+          sim.v = 0;
+          sim.state = 'finished';
+          sim.note = 'The shuttle rolled back to the station.';
+        }
+      }
     } else {
-      // Hitting either end stops the train dead. That kinetic energy has to
-      // go somewhere or the conservation readout would spring a leak.
+      // A dead-end track: hitting either end stops the train dead. That kinetic
+      // energy has to go somewhere or the conservation readout would leak.
       const stop = (where, why) => {
         sim.eThermal += 0.5 * m * sim.v * sim.v;
         sim.s = where;
