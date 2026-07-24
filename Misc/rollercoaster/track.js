@@ -200,14 +200,17 @@
     return { i: Math.round(cx - 0.5), j: Math.round(cy - 0.5), dir: dir2, k, g: def.gOut };
   };
 
-  /* Sideways drift for a loop, 0 -> 1, done in two smoothstepped halves so the
-     lateral speed is zero at t = 0, 0.5 and 1. The zero at 0.5 is the point:
-     it keeps ALL the sideways motion out of the top of the loop, where a
-     tilted path would stop the orientation frame fully inverting. (A single
-     smoothstep peaks its sideways speed exactly at the top.) */
+  /* Sideways drift for a loop, 0 -> 1, in two SMOOTHERSTEP halves. Smootherstep
+     (5th order) has zero first AND second derivative at its ends, so at
+     t = 0.5 the sideways motion has zero velocity (the tangent at the top stays
+     purely backward, letting the frame fully invert) AND zero acceleration (no
+     lateral curvature spike at the top, which would otherwise throw a phantom
+     sideways g at the very point the loop is tightest). A single smoothstep
+     peaks its sideways speed at the top; a plain two-half smoothstep removes
+     that but leaves a curvature kink there. */
   function loopLatFrac(t) {
-    const ss = x => x * x * (3 - 2 * x);
-    return t < 0.5 ? 0.5 * ss(2 * t) : 0.5 + 0.5 * ss(2 * t - 1);
+    const sr = x => x * x * x * (x * (6 * x - 15) + 10);
+    return t < 0.5 ? 0.5 * sr(2 * t) : 0.5 + 0.5 * sr(2 * t - 1);
   }
 
   /* Normalised height profile: 0 at t=0, 1 at t=1, with end slopes in the
