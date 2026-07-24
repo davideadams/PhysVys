@@ -84,10 +84,10 @@
      from 0 to 2pi with a radius of curvature that varies as r(phi) = A + B cos
      phi, so r = A + B = R at the bottom (phi = 0) and r = A - B = a*R at the
      top (phi = pi). Integrating the tangent gives closed forms for the forward
-     (u) and vertical (w) excursion; an EASED forward drift is added on top so
-     the piece advances exactly L tiles and grid-snaps without distorting the
-     top (see loopEase). LOOP_A is the bottom/top radius ratio's complement —
-     smaller means a pointier teardrop.
+     (u) and vertical (w) excursion; a forward drift confined to the bottom of
+     the loop is added so the piece advances exactly L tiles and grid-snaps
+     without distorting the upper body (see loopDrift). LOOP_A is the bottom/top
+     radius ratio's complement — smaller means a pointier teardrop.
 
      r(phi) = A + B cos phi          A = R(1+a)/2,  B = R(1-a)/2
      u(phi) = A sin phi + B(phi/2 + sin 2phi / 4)
@@ -201,23 +201,28 @@
     return { i: Math.round(cx - 0.5), j: Math.round(cy - 0.5), dir: dir2, k, g: def.gOut };
   };
 
-  /* Easing 0 -> 1 used for BOTH the loop's forward drift and its sideways
-     drift, in two SMOOTHERSTEP halves. Smootherstep (5th order) has zero first
-     AND second derivative at its ends, so at t = 0.5 the drift has zero
-     velocity and zero acceleration.
+  /* Drift 0 -> 1 for BOTH the loop's forward advance and its sideways offset,
+     done ENTIRELY on the bottom of the loop (t in [0, tau] and [1-tau, 1]) and
+     held flat through the whole upper body (t in [tau, 1-tau]).
 
      This is what keeps the loop a proper teardrop. The forward drift exists to
-     advance the piece L tiles, but the top of the clothoid is where its own
-     forward speed is smallest, so adding drift LINEARLY there collapses the
-     curvature (radius = speed^2 / accel; halving the speed quadruples the
-     curvature) into a vicious tight bend that throws a huge g. Easing the drift
-     to zero velocity at the top puts the advance on the sides of the loop
-     instead, leaving the top at the gentle curvature the clothoid intends. The
-     zero acceleration also keeps the sideways drift from kinking the curvature
-     there. A single smoothstep would peak both at the top — exactly wrong. */
-  function loopEase(t) {
+     advance the piece L tiles, but the clothoid's own forward speed goes
+     backward over the upper body and is smallest at the top; adding drift
+     there fights it and collapses the curvature (radius = speed^2 / accel)
+     into vicious tight bends — a huge g at the top, and a second tight spot on
+     the ascending side where the two forward speeds cancel. Confining the
+     drift to the bottom, where the clothoid is already sweeping forward fast,
+     leaves the entire upper body — sides and top — the gentle, undistorted
+     clothoid it should be. Holding it flat through the middle also keeps the
+     sideways offset constant across the top, so the top is planar and the
+     frame inverts cleanly. Smootherstep ramps keep it C^2 at the joins. */
+  const LOOP_DRIFT_TAU = 0.25;
+  function loopDrift(t) {
+    const tau = LOOP_DRIFT_TAU;
     const sr = x => x * x * x * (x * (6 * x - 15) + 10);
-    return t < 0.5 ? 0.5 * sr(2 * t) : 0.5 + 0.5 * sr(2 * t - 1);
+    if (t < tau) return 0.5 * sr(t / tau);
+    if (t > 1 - tau) return 0.5 + 0.5 * sr((t - (1 - tau)) / tau);
+    return 0.5;
   }
 
   /* Normalised height profile: 0 at t=0, 1 at t=1, with end slopes in the
@@ -245,13 +250,12 @@
       // Clothoid teardrop in the vertical plane, in metres.
       const uc = A * Math.sin(phi) + B * (phi / 2 + Math.sin(2 * phi) / 4);
       const wc = A * (1 - Math.cos(phi)) + B * Math.sin(phi) * Math.sin(phi) / 2;
-      // Linear forward drift added so the piece advances exactly L tiles and
-      // still grid-snaps; uc(1) = B*pi is the shape's own forward reach.
-      // Ease the forward drift (not linear) so the advance happens on the
-      // loop's sides and the top keeps the clothoid's gentle curvature.
+      // Forward + sideways drift, confined to the bottom of the loop (loopDrift)
+      // so the piece advances L tiles and grid-snaps without distorting the
+      // upper body; uc(1) = B*pi is the shape's own forward reach.
       const L = node.loopL != null ? node.loopL : def.L;
-      const fwdM = uc + (L * RC.TILE_M - B * Math.PI) * loopEase(t);
-      const lat = def.lat * loopEase(t);
+      const fwdM = uc + (L * RC.TILE_M - B * Math.PI) * loopDrift(t);
+      const lat = def.lat * loopDrift(t);
       return {
         x: E.x + d[0] * (fwdM / RC.TILE_M) + latDir[0] * lat,
         y: E.y + d[1] * (fwdM / RC.TILE_M) + latDir[1] * lat,
