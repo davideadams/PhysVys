@@ -399,24 +399,29 @@
   };
 
   /* ---- orientation frames -----------------------------------------------
-     Each path point carries an orthonormal (forward, right, up) frame, and it
-     is CARRIED ALONG the track rather than rebuilt at each point.
+     Each path point carries an orthonormal (forward, right, up) frame, built
+     POINT BY POINT from the track's design — NOT carried along.
 
-     The obvious construction — take the tangent, make "right" horizontal,
-     derive "up" from those — cannot work, because it always produces an "up"
-     with a positive vertical component. It can never invert, so a train would
-     stay upright through a loop.
+     An earlier version parallel-transported the frame (project the previous
+     "up" onto each new tangent). That inverts through a loop, but a loop's path
+     is not planar (its sideways drift takes it out of plane), so the transport
+     accumulates a holonomy — a net roll that does not cancel at the loop exit
+     and then contaminates every piece after it (a banked post-loop turn came
+     out upside down). Defining the frame pointwise has no such memory.
 
-     Instead the frame is parallel-transported: at each point the previous
-     "up" is projected perpendicular to the new tangent and renormalised. That
-     carries orientation continuously, inverts naturally through a loop, and
-     reduces to the obvious answer on ordinary track. Piece bank is then
-     applied on top as a roll about the forward axis. */
+     "Up" is:
+       - on a loop, the direction toward the centre of curvature (the curvature
+         vector). That points up at the bottom, backward on the sides, DOWN at
+         the top (so the train inverts), and returns to up at the level exit —
+         all with no accumulated twist, because it is read off each point.
+       - everywhere else, world up, perpendicular to the tangent. (Non-loop
+         track never pitches past ~56 deg, so this never degenerates. Using the
+         curvature there would be wrong: at a hill crest the curvature points
+         down, but the rider stays upright.)
+     Piece bank is then applied on top as a roll about the forward axis. The
+     loop's own ends are level with curvature pointing up, matching the world-up
+     of the neighbouring track, so the frame stays continuous across the join. */
   function buildFrames(pts) {
-    if (!pts.length) return;
-
-    let ux = 0, uy = 0, uz = 1;   // seeded upright; track starts level
-
     for (let n = 0; n < pts.length; n++) {
       const a = pts[Math.max(0, n - 1)];
       const b = pts[Math.min(pts.length - 1, n + 1)];
@@ -427,18 +432,25 @@
       if (fl < 1e-9) { fx = 1; fy = 0; fz = 0; fl = 1; }
       fx /= fl; fy /= fl; fz /= fl;
 
-      // Project the carried "up" perpendicular to the new tangent.
-      let d = ux * fx + uy * fy + uz * fz;
-      let px = ux - d * fx, py = uy - d * fy, pz = uz - d * fz;
-      let pl = Math.hypot(px, py, pz);
-      if (pl < 1e-6) {
-        // The tangent turned through the carried up — fall back to world up,
-        // or to a sideways axis if the track is pointing straight at it.
-        px = -fz * fx; py = -fz * fy; pz = 1 - fz * fz;
-        pl = Math.hypot(px, py, pz);
-        if (pl < 1e-6) { px = 0; py = 1; pz = 0; pl = 1; }
+      // Seed "up": the curvature direction inside a loop, else world up.
+      let ux, uy, uz;
+      if (pts[n].def && pts[n].def.kind === 'loop') {
+        ux = pts[n].kx; uy = pts[n].ky; uz = pts[n].kz;
+        if (Math.hypot(ux, uy, uz) < 1e-9) { ux = 0; uy = 0; uz = 1; }
+      } else {
+        ux = 0; uy = 0; uz = 1;
       }
-      ux = px / pl; uy = py / pl; uz = pz / pl;
+
+      // Make it perpendicular to the tangent and unit length.
+      let d = ux * fx + uy * fy + uz * fz;
+      ux -= d * fx; uy -= d * fy; uz -= d * fz;
+      let ul = Math.hypot(ux, uy, uz);
+      if (ul < 1e-6) {
+        ux = -fz * fx; uy = -fz * fy; uz = 1 - fz * fz;
+        ul = Math.hypot(ux, uy, uz);
+        if (ul < 1e-6) { ux = 0; uy = 1; uz = 0; ul = 1; }
+      }
+      ux /= ul; uy /= ul; uz /= ul;
 
       // Right-handed triad: r = u x f.
       let rx = uy * fz - uz * fy;
@@ -447,22 +459,19 @@
       const rl = Math.hypot(rx, ry, rz) || 1;
       rx /= rl; ry /= rl; rz /= rl;
 
-      let Ux = ux, Uy = uy, Uz = uz;
-      let Rx = rx, Ry = ry, Rz = rz;
-
       // Banking rolls the frame about the forward axis.
       const bank = pts[n].bank || 0;
       if (bank) {
         const c = Math.cos(bank), s = Math.sin(bank);
-        const nUx = Ux * c + Rx * s, nUy = Uy * c + Ry * s, nUz = Uz * c + Rz * s;
-        const nRx = Rx * c - Ux * s, nRy = Ry * c - Uy * s, nRz = Rz * c - Uz * s;
-        Ux = nUx; Uy = nUy; Uz = nUz;
-        Rx = nRx; Ry = nRy; Rz = nRz;
+        const nUx = ux * c + rx * s, nUy = uy * c + ry * s, nUz = uz * c + rz * s;
+        const nRx = rx * c - ux * s, nRy = ry * c - uy * s, nRz = rz * c - uz * s;
+        ux = nUx; uy = nUy; uz = nUz;
+        rx = nRx; ry = nRy; rz = nRz;
       }
 
       pts[n].fx = fx; pts[n].fy = fy; pts[n].fz = fz;
-      pts[n].rx = Rx; pts[n].ry = Ry; pts[n].rz = Rz;
-      pts[n].ux = Ux; pts[n].uy = Uy; pts[n].uz = Uz;
+      pts[n].rx = rx; pts[n].ry = ry; pts[n].rz = rz;
+      pts[n].ux = ux; pts[n].uy = uy; pts[n].uz = uz;
     }
   }
 

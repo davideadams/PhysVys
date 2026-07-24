@@ -972,6 +972,40 @@
     }
   });
 
+  check('a loop leaves no twist behind it — track after it stays upright', () => {
+    // The bug this guards: a non-planar loop transported a frame with leftover
+    // roll (holonomy), which then contaminated every piece after the loop.
+    RC.resetTrack();
+    RC.place('loop-right');
+    const loopIdx = RC.track.pieces.findIndex(p => RC.pieceDef(p.defId).kind === 'loop');
+    for (let n = 0; n < 4; n++) RC.place('flat');
+    for (const p of RC.trackPath().pts) {
+      if (p.pi <= loopIdx) continue;              // only pieces after the loop
+      const fr = RC.carFrame(p);
+      if (fr.u.z < 0.99) {
+        return `track after the loop is twisted: up.z = ${fr.u.z.toFixed(3)} at s = ${p.s.toFixed(1)} m`;
+      }
+    }
+  });
+
+  check('a banked turn after a loop is right-side up', () => {
+    // The symptom the teacher saw: banking a curve after a loop put the train
+    // upside down, because the loop's leftover twist plus the 45 deg bank
+    // pushed "up" past inverted.
+    RC.resetTrack();
+    RC.place('loop-right');                        // exits level
+    RC.place('turn-right-tight', { bank: true });
+    RC.place('flat');
+    const turnPts = RC.trackPath().pts.filter(p => p.def.kind === 'turn');
+    if (!turnPts.length) return 'no banked turn after the loop';
+    for (const p of turnPts) {
+      const fr = RC.carFrame(p);
+      // A 45 deg bank tilts up to about cos 45 = 0.71; it must stay well above
+      // zero, not flip negative.
+      if (fr.u.z < 0.3) return `banked turn after the loop is inverted: up.z = ${fr.u.z.toFixed(3)}`;
+    }
+  });
+
   check('a train needs enough speed at the top of a loop or it is warned', () => {
     RC.track.pieces = [];
     RC.track.start = { i: 6, j: 20, dir: 0, k: 20, g: 0 };
