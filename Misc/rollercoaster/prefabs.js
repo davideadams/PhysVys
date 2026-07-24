@@ -58,19 +58,21 @@
 
     'gentle-hills': {
       name: 'Gentle Hills',
-      blurb: 'A tame family ride — a modest lift and a few small hills, no big forces.',
+      blurb: 'A tame family ride — a modest lift and a couple of small hills, no big forces.',
       finish: true,
       build: [].concat(
-        // Lift to 10 m.
+        // Lift to 6 m.
         [{ id: 'flat-to-gentle-up', lift: true }],
-        rep(4, 'gentle-up', { lift: true }),
+        rep(2, 'gentle-up', { lift: true }),
         [{ id: 'gentle-up-to-flat', lift: true }],
         [{ id: 'flat' }],
-        // A gentle drop, a low hill, a gentle drop.
-        [{ id: 'flat-to-gentle-down' }, { id: 'gentle-down' }, { id: 'gentle-down-to-flat' }],
+        // Drop back to the ground, a low hill, and back to the ground so the
+        // auto-close solver only has to navigate home on the flat.
+        [{ id: 'flat-to-gentle-down' }],
+        rep(2, 'gentle-down'),
+        [{ id: 'gentle-down-to-flat' }],
         [{ id: 'flat-to-gentle-up' }, { id: 'gentle-up-to-flat' }],
-        rep(2, 'flat'),
-        [{ id: 'flat-to-gentle-down' }, { id: 'gentle-down' }, { id: 'gentle-down-to-flat' }]
+        [{ id: 'flat-to-gentle-down' }, { id: 'gentle-down-to-flat' }]
       )
     },
 
@@ -131,7 +133,9 @@
       }
     }
     if (prefab.finish) {
-      const res = RC.completeTrack();
+      // A generous budget: a preset's return leg can be long, and this only
+      // runs once when a preset is chosen, not interactively.
+      const res = RC.completeTrack({ maxExpand: 300000 });
       if (!res.ok) return { ok: false, why: `${prefab.name}: could not close the circuit — ${res.why}` };
     }
     return { ok: true, closed: RC.sameNode(RC.track.head, RC.track.start), shuttle: !!prefab.shuttle };

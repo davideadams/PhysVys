@@ -266,7 +266,7 @@
     // !lapDone, so it fires once on the way out and never re-grabs a train
     // coming home (which matters for a shuttle, whose lap is never "done").
     const onStation = cars.some(p => p.def && p.def.station);
-    if (onStation && !sim.launchedOut && sim.v >= 0 && sim.v < STATION_DISPATCH && sim.state === 'running') {
+    if (onStation && !sim.launchedOut && sim.v < STATION_DISPATCH && sim.state === 'running') {
       const before = 0.5 * m * sim.v * sim.v;
       const after = 0.5 * m * STATION_DISPATCH * STATION_DISPATCH;
       sim.eMotor += after - before;
@@ -376,25 +376,32 @@
       }
     } else if (shuttle()) {
       // Shuttle: launched out, up the spike, then rolls back through to the
-      // station. The train stalls on the spike under gravity and reverses on
-      // its own; it should reach the far end only if the spike is too short.
-      if (sim.s >= path.total) { sim.s = path.total; if (sim.v > 0) sim.v = 0; }
+      // station. It normally stalls on the spike under gravity and reverses on
+      // its own; if the spike is too short it hits the far end, where its
+      // remaining kinetic energy is dumped (a bumper) rather than leaked.
+      if (sim.s >= path.total) {
+        sim.s = path.total;
+        if (sim.v > 0) { sim.eThermal += 0.5 * m * sim.v * sim.v; sim.v = 0; }
+      }
 
+      // Coming home: only the station catches the train. The finish must be
+      // gated on actually being ON the station — otherwise the crawl at the
+      // top of the spike (|v| ~ 0 as it reverses) would wrongly "finish" the
+      // run out on the spike and leak all its energy.
       if (sim.launchedOut && sim.v < 0) {
-        // Coming home: the station's brakes catch the returning train.
         const onStation = cars.some(p => p.def && p.def.station);
         if (onStation) {
           const dv = Math.min(-sim.v, STATION_BRAKE * dt);
           const after = sim.v + dv;   // v is negative; ease it toward zero
           sim.eThermal += 0.5 * m * (sim.v * sim.v - after * after);
           sim.v = after;
-        }
-        if (sim.s <= sim.startS || Math.abs(sim.v) < 0.5) {
-          sim.eThermal += 0.5 * m * sim.v * sim.v;
-          sim.s = sim.startS;
-          sim.v = 0;
-          sim.state = 'finished';
-          sim.note = 'The shuttle rolled back to the station.';
+          if (sim.s <= sim.startS || Math.abs(sim.v) < 0.5) {
+            sim.eThermal += 0.5 * m * sim.v * sim.v;
+            sim.s = sim.startS;
+            sim.v = 0;
+            sim.state = 'finished';
+            sim.note = 'The shuttle rolled back to the station.';
+          }
         }
       }
     } else {
