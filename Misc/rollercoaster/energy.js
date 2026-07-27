@@ -164,8 +164,15 @@
   const VERT_G = '#0d9488';   // vertical g
   const LAT_G = '#c2185b';    // lateral g
 
-  let graphMode = 'energy';
-  RC.setGraphMode = function (m) { graphMode = (m === 'accel') ? 'accel' : 'energy'; };
+  /* Three plots share one window: 'bars' is the train's energy right now,
+     'energy' and 'accel' are the whole ride against distance along the track.
+     Anything unrecognised falls back to the bars, which is what the window
+     opens on. */
+  const GRAPH_MODES = ['bars', 'energy', 'accel'];
+  let graphMode = 'bars';
+  RC.setGraphMode = function (m) {
+    graphMode = GRAPH_MODES.indexOf(m) >= 0 ? m : 'bars';
+  };
   RC.graphMode = () => graphMode;
 
   /* Draw one trace series as a polyline, breaking where a lap wraps past the
@@ -187,32 +194,72 @@
     ctx.setLineDash([]);
   }
 
-  /* Vertical ticks and labels marking each turn and loop. */
-  function drawTurnOverlay(ctx, X, total, padT, plotH) {
-    let spans;
-    try { spans = RC.pieceSpans(); } catch (e) { return; }
+  /* Each named feature of the ride gets its own colour, so the plot reads as
+     a strip map: it is obvious where Turn 1 ends and Hill 1 begins. Bands are
+     drawn behind the traces, deliberately pale, with the solid version used for
+     the label tab on top. */
+  const FEATURE_COLOURS = {
+    lift:    { band: 'rgba(184,134,11,0.16)',  tab: 'rgba(150,108,8,0.92)' },
+    hill:    { band: 'rgba(47,133,90,0.16)',   tab: 'rgba(38,110,74,0.92)' },
+    drop:    { band: 'rgba(31,111,178,0.16)',  tab: 'rgba(26,92,148,0.92)' },
+    turn:    { band: 'rgba(194,24,91,0.14)',   tab: 'rgba(163,20,76,0.92)' },
+    loop:    { band: 'rgba(111,63,150,0.18)',  tab: 'rgba(95,52,130,0.94)' },
+    brake:   { band: 'rgba(140,59,59,0.14)',   tab: 'rgba(118,49,49,0.92)' },
+    launch:  { band: 'rgba(111,63,150,0.14)',  tab: 'rgba(95,52,130,0.92)' },
+    station: { band: 'rgba(89,99,109,0.12)',   tab: 'rgba(74,83,92,0.9)' }
+  };
+  RC.FEATURE_COLOURS = FEATURE_COLOURS;
+
+  /* Shaded bands behind the plot, one per named feature. */
+  function drawFeatureBands(ctx, X, padT, plotH) {
+    let feats;
+    try { feats = RC.features(); } catch (e) { return; }
+    ctx.save();
+    for (const f of feats) {
+      if (!f.label) continue;
+      const c = FEATURE_COLOURS[f.type];
+      if (!c) continue;
+      const x0 = X(f.s0), x1 = X(f.s1);
+      if (x1 - x0 < 0.5) continue;
+      ctx.fillStyle = c.band;
+      ctx.fillRect(x0, padT, x1 - x0, plotH);
+      // A firmer edge at the boundary, so entering a feature is a visible line.
+      ctx.strokeStyle = c.tab;
+      ctx.globalAlpha = 0.35;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x0 + 0.5, padT);
+      ctx.lineTo(x0 + 0.5, padT + plotH);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+  }
+
+  /* Name tabs along the top, drawn over the traces. Labels are dropped where
+     the band is too narrow to hold one rather than overprinting a neighbour. */
+  function drawFeatureLabels(ctx, X, padT) {
+    let feats;
+    try { feats = RC.features(); } catch (e) { return; }
     ctx.save();
     ctx.font = 'bold 9px "Trebuchet MS", "Segoe UI", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    for (const sp of spans) {
-      if (!sp.label) continue;
-      const x = X(sp.sMid);
-      ctx.strokeStyle = 'rgba(21,48,77,0.22)';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([2, 3]);
-      ctx.beginPath();
-      ctx.moveTo(x, padT + 12);
-      ctx.lineTo(x, padT + plotH);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      const w = ctx.measureText(sp.label).width + 6;
-      const isLoop = sp.label[0] === 'L';
-      ctx.fillStyle = isLoop ? 'rgba(111,63,150,0.9)' : 'rgba(21,48,77,0.82)';
+    let lastRight = -Infinity;
+    for (const f of feats) {
+      if (!f.label) continue;
+      const c = FEATURE_COLOURS[f.type];
+      if (!c) continue;
+      const x0 = X(f.s0), x1 = X(f.s1);
+      const w = ctx.measureText(f.label).width + 7;
+      if (x1 - x0 < w * 0.55) continue;        // too narrow to name
+      const x = Math.max(x0 + w / 2, Math.min(x1 - w / 2, X(f.sMid)));
+      if (x - w / 2 < lastRight + 1) continue; // would collide with the last tab
+      lastRight = x + w / 2;
+      ctx.fillStyle = c.tab;
       ctx.fillRect(x - w / 2, padT, w, 12);
       ctx.fillStyle = '#fff';
-      ctx.fillText(sp.label, x, padT + 2);
+      ctx.fillText(f.label, x, padT + 2);
     }
     ctx.restore();
   }
@@ -245,10 +292,13 @@
       return;
     }
 
+    // Feature bands go down first so the traces read on top of them.
+    drawFeatureBands(ctx, X, padT, plotH);
+
     if (graphMode === 'accel') drawAccel(ctx, trace, total, X, padL, padT, plotW, plotH);
     else drawEnergy(ctx, trace, total, X, padL, padT, plotW, plotH);
 
-    drawTurnOverlay(ctx, X, total, padT, plotH);
+    drawFeatureLabels(ctx, X, padT);
 
     // Where the train is now.
     const xNow = X(trace[trace.length - 1].s);
@@ -364,16 +414,28 @@
 
   /* A plain-English read on how the ride feels, from the g extremes. */
   RC.rideVerdict = function (sim) {
-    if (sim.minVertG < -1.5) {
+    // A wreck outranks any comment on comfort.
+    if (sim.state === 'crashed') {
+      return sim.overhang && sim.overhang.cause === 'inverted'
+        ? 'The train fell out of the loop and crashed. It needed more speed going in — ' +
+          'a bigger drop before it, or a smaller loop.'
+        : 'The train left the track and crashed. It needed a slower launch, or more ' +
+          'height at the end to climb against.';
+    }
+    const L = RC.G_LIMITS;
+    if (sim.minVertG < L.airtimeHard) {
       return 'This ride would throw riders out of the train. It needs less speed over ' +
              'the crests, or gentler ones.';
     }
-    if (sim.maxLatG > 1.8) {
-      return 'The sideways forces are violent. Wider turns, or less speed entering them, ' +
+    if (sim.maxLatG > L.latExtreme) {
+      return 'The sideways forces are violent. Banking those turns, or widening them, ' +
              'would fix it.';
     }
-    if (sim.maxVertG > 5) return 'Brutally heavy through the dips — riders would grey out.';
-    if (sim.minVertG < 0) return 'Has genuine airtime over the crests without being dangerous.';
+    if (sim.maxVertG > L.vertExtreme) return 'Brutally heavy through the dips — riders would grey out.';
+    if (sim.minVertG < L.airtimeGood) return 'Strong ejector airtime — right at the edge of what restraints hold.';
+    if (sim.maxVertG > L.vertHigh) return 'Heavy through the dips, but within what a real ride may pull briefly.';
+    if (sim.maxLatG > L.latHigh) return 'Those turns pull harder sideways than most rides allow — bank them.';
+    if (sim.minVertG < -0.05) return 'Has genuine airtime over the crests without being dangerous.';
     if (sim.maxVertG < 1.4 && sim.maxLatG < 0.4) return 'A very gentle ride.';
     return 'Forces stay within comfortable limits.';
   };
@@ -400,9 +462,7 @@
     const st = RC.circuitStatus();
 
     if (!sim.time) {
-      el.innerHTML = `<p class="hint">Press <strong>Test</strong> to run the train, ` +
-                     `then its statistics appear here.</p>` +
-                     row('Track length', RC.trackLength().toFixed(0) + ' m') +
+      el.innerHTML = row('Track length', RC.trackLength().toFixed(0) + ' m') +
                      row('Circuit', st.label);
       return;
     }
@@ -419,14 +479,57 @@
     html += row('Ride time', sim.time.toFixed(1) + ' s');
     html += row('Track length', RC.trackLength().toFixed(0) + ' m');
 
+    // Ran off the end: the numbers a student needs to work out how much more
+    // spike (or less launch) it would have taken to hold the train.
+    if (sim.overhang) {
+      const fl = sim.overhang;
+      const inverted = fl.cause === 'inverted';
+      html += `<div class="report-hd">${inverted ? 'Left the track' : 'Over the end'}</div>`;
+      html += row(inverted ? 'Speed when it let go' : 'Speed at the end',
+                  fl.v0.toFixed(1) + ' m/s');
+      html += row('Height it left at', fl.z0.toFixed(1) + ' m');
+      if (sim.wrecked) html += row('Hit the ground at', sim.crashSpeed.toFixed(1) + ' m/s');
+      else if (!inverted) html += row('Tipped over the edge', fl.committed ? 'yes' : 'not yet');
+
+      // The physics that decides it, given as figures rather than prose.
+      if (inverted) {
+        // Upside down, gravity alone supplies the centripetal force, so the
+        // train holds on only while v^2 / r >= g — that is, v >= sqrt(gr).
+        const r = fl.curv > 1e-6 ? 1 / fl.curv : 0;
+        if (r > 0) {
+          html += row('Radius there', r.toFixed(1) + ' m');
+          html += row('Speed needed <span class="muted">(v = &radic;gr)</span>',
+                      Math.sqrt(9.81 * r).toFixed(1) + ' m/s');
+        }
+      } else {
+        // v^2 = 2gh: how much more climb the leftover speed needed.
+        const needed = fl.v0 * fl.v0 / (2 * 9.81);
+        html += row('Climb needed <span class="muted">(v&sup2; = 2gh)</span>',
+                    needed.toFixed(1) + ' m');
+        html += row('Height the track needed', (fl.z0 + needed).toFixed(1) + ' m');
+      }
+    }
+
+    // Name the feature each extreme happened on, rather than a distance.
+    const onFeature = s => {
+      let f = null;
+      try { f = (s == null) ? null : RC.featureAt(s); } catch (e) { f = null; }
+      return f ? ` <span class="muted">on ${f.label}</span>` : '';
+    };
+    const L = RC.G_LIMITS;
+
     html += `<div class="report-hd">G-force</div>`;
-    html += row('Vertical, greatest', sim.maxVertG.toFixed(2) + ' g');
-    html += row('Vertical, least', sim.minVertG.toFixed(2) + ' g');
-    html += row('Lateral, greatest', sim.maxLatG.toFixed(2) + ' g');
-    html += `<p class="hint">Vertical is 1.00&nbsp;g sitting still; below zero the riders ` +
-            `leave their seats. Lateral is sideways: banking a turn tilts the track so ` +
-            `some of that force pushes riders into their seats instead of across them.</p>`;
-    html += `<p class="hint">${RC.rideVerdict(sim)}</p>`;
+    html += row('Vertical, greatest',
+                sim.maxVertG.toFixed(2) + ' g' + onFeature(sim.maxVertGs));
+    html += row('Vertical, least',
+                sim.minVertG.toFixed(2) + ' g' + onFeature(sim.minVertGs));
+    html += row('Lateral, greatest',
+                sim.maxLatG.toFixed(2) + ' g' + onFeature(sim.maxLatGs));
+    // The published short-burst limits, as a figure to read the rows against
+    // rather than a paragraph explaining them.
+    html += row('Allowed briefly <span class="muted">(ASTM/EN)</span>',
+                `${L.vertHigh} · ${L.airtimeGood} · ${L.latHigh} g`);
+    html += `<p class="report-note">${RC.rideVerdict(sim)}</p>`;
 
     html += `<div class="report-hd">Energy</div>`;
     html += row('Started with', fmt(sim.E0));

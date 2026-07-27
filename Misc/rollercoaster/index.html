@@ -30,6 +30,8 @@
   <div class="tb-group" role="group" aria-label="Ride">
     <button class="tb-btn" id="btn-test" type="button" title="Run the train (Space)">▶ Test</button>
     <button class="tb-btn" id="btn-ride-reset" type="button" title="Put the train back at the station">⟲</button>
+    <button class="tb-btn" id="btn-shuttle" type="button" aria-pressed="true"
+            title="Run a track that isn't a full circuit as an out-and-back shuttle, instead of requiring a closed loop">Shuttle</button>
   </div>
 
   <div class="tb-sep"></div>
@@ -45,9 +47,8 @@
 
   <div class="tb-group" role="group" aria-label="Windows">
     <button class="tb-btn" data-window="win-build" type="button">Build</button>
-    <button class="tb-btn" data-window="win-train" type="button">Train</button>
-    <button class="tb-btn" data-window="win-energy" type="button">Energy</button>
-    <button class="tb-btn" data-window="win-graph" type="button">Graph</button>
+    <button class="tb-btn" data-window="win-setup" type="button">Setup</button>
+    <button class="tb-btn" data-window="win-graphs" type="button">Graphs</button>
     <button class="tb-btn" data-window="win-report" type="button">Report</button>
     <button class="tb-btn" data-window="win-about" type="button">About</button>
   </div>
@@ -129,9 +130,9 @@
   </div>
 </section>
 
-<section class="window" id="win-train" hidden style="right: 24px; top: 76px; width: 300px;">
+<section class="window" id="win-setup" hidden style="right: 24px; top: 76px; width: 300px;">
   <div class="window-hd">
-    <span>Train &amp; losses</span>
+    <span>Setup — train &amp; losses</span>
     <button class="window-x" type="button" aria-label="Close">×</button>
   </div>
   <div class="window-body">
@@ -211,26 +212,44 @@
       </div>
     </div>
 
-    <p class="hint">
-      Changing anything here puts the train back to its release point, since a
-      run measured under two different sets of numbers would mean nothing.
-    </p>
-
   </div>
 </section>
 
-<section class="window" id="win-energy" hidden style="left: 24px; top: 76px; width: 300px;">
+<!-- One window, three plots: the bar chart of the train's energy right now, and
+     the two line plots of the whole ride against distance along the track. -->
+<section class="window" id="win-graphs" hidden style="left: 24px; top: 76px; width: 420px;">
   <div class="window-hd">
-    <span>Energy</span>
+    <span>Graphs</span>
     <button class="window-x" type="button" aria-label="Close">×</button>
   </div>
   <div class="window-body">
-    <canvas id="energy-bars" class="mini-canvas" style="height: 190px;"></canvas>
-    <div class="legend">
+    <div class="auto-row" id="graph-modes" style="margin-bottom:0.5rem">
+      <button class="pal-wide active" data-graph="bars" type="button">Energy bars</button>
+      <button class="pal-wide" data-graph="energy" type="button">Energy line</button>
+      <button class="pal-wide" data-graph="accel" type="button">Acceleration</button>
+    </div>
+
+    <canvas id="graph-bars" class="mini-canvas" style="height: 200px;"></canvas>
+    <canvas id="graph-line" class="mini-canvas" style="height: 200px;" hidden></canvas>
+
+    <div class="legend" id="legend-bars">
       <span><i style="background:#e8963c"></i>Kinetic</span>
       <span><i style="background:#4a90d9"></i>Potential</span>
       <span><i style="background:#a0574a"></i>Heat</span>
     </div>
+    <div class="legend" id="legend-energy" hidden>
+      <span><i style="background:#e8963c"></i>Kinetic</span>
+      <span><i style="background:#4a90d9"></i>Potential</span>
+      <span><i style="background:#0d9488"></i>Total</span>
+      <span><i class="dashed"></i>Supplied</span>
+    </div>
+    <div class="legend" id="legend-accel" hidden>
+      <span><i style="background:#0d9488"></i>Vertical g</span>
+      <span><i style="background:#c2185b"></i>Lateral g</span>
+      <span><i class="dashed"></i>1 g (sitting still)</span>
+    </div>
+
+    <!-- The train's live state, useful whichever plot is on screen. -->
     <div class="readout-row"><span>Speed</span><span id="ro-e-v">—</span></div>
     <div class="readout-row"><span>Height</span><span id="ro-e-h">—</span></div>
     <div class="readout-row"><span>E<sub>k</sub> = ½mv²</span><span id="ro-e-ke">—</span></div>
@@ -246,35 +265,7 @@
         <span class="g-value" id="ro-g-lat">—</span>
       </div>
     </div>
-    <p class="hint" id="e-mass">—</p>
-  </div>
-</section>
-
-<section class="window" id="win-graph" hidden style="left: 24px; top: 300px; width: 420px;">
-  <div class="window-hd">
-    <span>Along the track</span>
-    <button class="window-x" type="button" aria-label="Close">×</button>
-  </div>
-  <div class="window-body">
-    <div class="auto-row" id="graph-modes" style="margin-bottom:0.5rem">
-      <button class="pal-wide active" data-graph="energy" type="button">Energy</button>
-      <button class="pal-wide" data-graph="accel" type="button">Acceleration</button>
-    </div>
-    <canvas id="energy-graph" class="mini-canvas" style="height: 200px;"></canvas>
-    <div class="legend" id="legend-energy">
-      <span><i style="background:#e8963c"></i>Kinetic</span>
-      <span><i style="background:#4a90d9"></i>Potential</span>
-      <span><i style="background:#0d9488"></i>Total</span>
-      <span><i class="dashed"></i>Supplied</span>
-    </div>
-    <div class="legend" id="legend-accel" hidden>
-      <span><i style="background:#0d9488"></i>Vertical g</span>
-      <span><i style="background:#c2185b"></i>Lateral g</span>
-      <span><i class="dashed"></i>1 g (sitting still)</span>
-    </div>
-    <p class="hint" style="margin:0.4rem 0 0">
-      <b>T</b> marks each turn, <b>L</b> each loop, numbered in build order.
-    </p>
+    <div class="readout-row"><span>Train</span><span id="e-mass">—</span></div>
   </div>
 </section>
 
@@ -298,27 +289,29 @@
       energy — <em>E<sub>p</sub> = mgh</em> and <em>E<sub>k</sub> = ½mv²</em> trading back
       and forth along the track. The chain lift is the only thing adding energy to the ride.
     </p>
-    <p class="hint">
+    <p>
       <strong>Scale.</strong> One tile is 4&nbsp;m square and one height step is 1&nbsp;m, so a
       lift hill of 10 steps is a 10&nbsp;m climb. Heights are measured from ground level.
     </p>
-    <p class="hint">
-      <strong>Energy.</strong> The <em>Energy</em> window shows the train's kinetic and
-      gravitational potential energy as the ride runs; <em>Graph</em> plots them against
-      position along the track, and <em>Report</em> gives the ride's statistics once the
-      train is back at the station.
+    <p>
+      <strong>Graphs.</strong> <em>Energy bars</em> show the train's kinetic and
+      gravitational potential energy as the ride runs; <em>Energy line</em> and
+      <em>Acceleration</em> plot the whole ride against position along the track,
+      shaded by feature. <em>Report</em> gives the ride's statistics once the train is
+      back at the station, and <em>Setup</em> holds the train, its release point and
+      the friction model.
     </p>
-    <p class="hint">
+    <p>
       <strong>View.</strong> Drag to pan, scroll to zoom, ⟲ ⟳ to rotate the park.
     </p>
-    <p class="hint">
+    <p>
       <strong>Building.</strong> Track grows from the yellow arrow. Pick a direction and
       the slope you want to be travelling at, then press <em>Build this</em> — the
       transition onto that slope is added for you, so holding a climb just means pressing
       build again. Anything the track can't do from where it currently is goes grey.
       Backspace removes the last piece.
     </p>
-    <p class="hint">
+    <p>
       <strong>Banking.</strong> Turns can be built flat or banked at 45°. Run the same
       corner both ways at the same speed, and watch the lateral g in the ride report.
     </p>

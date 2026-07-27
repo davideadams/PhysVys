@@ -18,15 +18,52 @@
   const STATION_BRAKE = 5;      // m/s^2 once the lap is done
   const STATION_DISPATCH = 2.5; // m/s — drive tyres pushing the train out
 
+  /* ---- what a real coaster is allowed to pull ---------------------------
+     Roughly the envelopes in the ride-design standards (ASTM F2291 and
+     EN 13814). Both are DURATION-dependent — a coaster may pull far more for
+     a fraction of a second than it may sustain — and this sim tests
+     instantaneous peaks, so these are the short-burst figures, not the
+     sustained ones. A real ride sits well inside them.
+
+     The important consequence: AIRTIME IS THE POINT OF A COASTER, not a
+     fault. Floater airtime around -0.2 to -0.5 g is what an airtime hill is
+     built for, and ejector airtime near -1 g is a selling point. So negative
+     vertical g is reported as a feature and only flagged once it passes what
+     a restraint is designed to hold. The old code warned at ANY negative g,
+     which flagged every good hill on the ride. */
+  RC.G_LIMITS = {
+    vertHigh: 5.0,       // heavy; the standards' short-burst ceiling is ~6 g
+    vertExtreme: 6.0,    // beyond what any real coaster pulls
+    airtimeGood: -1.1,   // strong ejector airtime, still within EN 13814
+    airtimeHard: -1.5,   // past the short-burst limit for restraints
+    latHigh: 1.5,        // real coasters bank turns to stay under this
+    latExtreme: 1.8,     // violent; the turn needs banking or widening
+    speedMax: 45         // m/s — faster than any coaster ever built
+  };
+
   RC.sim = {
-    state: 'ready',      // ready | running | finished | valleyed | stopped
+    state: 'ready',      // ready | running | finished | valleyed | stopped | crashed
     s: 0, v: 0, time: 0,
+
+    // Set once the front of the train has run past the end of the track (or
+    // lost its grip in a loop). The cars beyond that point hang on a ballistic
+    // continuation of the track, still coupled to the ones behind. Null the
+    // rest of the time. See buildOverhang.
+    overhang: null,
+    blast: null,         // wreckage, once it has hit the ground
+    crashSpeed: 0,       // m/s it struck the ground at
+    wrecked: false,      // destroyed: all its energy has gone to heat
 
     cars: 4,
     releaseS: null,      // metres along the track, or null for the station
     liftSpeed: 4.0,      // m/s — chain lift
     brakeSpeed: 3.0,     // m/s — brake run target
     launchSpeed: 22.0,   // m/s — shuttle launch
+
+    // When the track isn't a closed loop, run it as an out-and-back shuttle
+    // rather than refusing to test. On by default, so Test always does
+    // something; a student can switch it off to insist on a full circuit.
+    shuttleMode: true,
 
     friction: false,
     mu: 0.02,            // rolling resistance
@@ -39,7 +76,11 @@
     maxV: 0, maxG: 0, maxZ: 0,
     g: { vert: 1, lat: 0, long: 0 },
     maxVertG: 1, minVertG: 1, maxLatG: 0,
+    // Arc position of each of those extremes, for naming the feature to blame.
+    maxVertGs: 0, minVertGs: 0, maxLatGs: 0,
     warnings: [],
+    warnKeys: {},
+    warnSeverity: {},
     trace: [],
     note: ''
   };
@@ -68,13 +109,19 @@
   }
   RC.isShuttle = shuttle;
 
-  /* Where each car sits, front car first. */
+  /* Where each car sits, front car first. Cars that have gone past the end of
+     the track sit on the overhang — the hanging continuation — instead. */
   RC.carStates = function () {
     const sim = RC.sim;
     const c = closed();
+    const oh = sim.overhang;
     const out = [];
     for (let n = 0; n < sim.cars; n++) {
-      const p = RC.pathAt(sim.s - n * CAR_SPACING, c);
+      const s = sim.s - n * CAR_SPACING;
+      // Once the train has tipped, every car is off the rails — including the
+      // ones still short of the edge, which trail back along the arc.
+      const off = oh && (oh.committed || s > oh.s0);
+      const p = off ? RC.overhangAt(s - oh.s0) : RC.pathAt(s, c);
       if (p) out.push(p);
     }
     return out;
@@ -175,6 +222,19 @@
   RC.energy = function () {
     const sim = RC.sim;
     const m = RC.trainMass();
+    if (sim.wrecked) {
+      // Destroyed: everything it had — motion and height — has become heat and
+      // scattered wreckage, so there is no train left to hold energy.
+      return {
+        ke: 0, pe: 0, h: 0,
+        thermal: sim.eThermal,
+        motor: sim.eMotor,
+        total: sim.eThermal,
+        supplied: sim.E0 + sim.eMotor
+      };
+    }
+    // The overhang is part of the wire, so hanging cars need no special case:
+    // their height and slope come back from carStates like any others.
     const cars = RC.carStates();
     const h = meanOf(cars, 'z') * RC.LEVEL_M;
     const ke = 0.5 * m * sim.v * sim.v;
@@ -188,9 +248,23 @@
     };
   };
 
-  function addWarning(msg) {
+  /* One line per problem per feature, showing the WORST it got. A g-force
+     complaint fires on every substep it holds for, so without this the report
+     filled up with "4.3 g on Turn 1", "4.2 g on Turn 1", "4.1 g on Turn 1"…
+     `key` groups them and `severity` decides which reading survives. */
+  function addWarning(msg, key, severity) {
     const sim = RC.sim;
-    if (!sim.warnings.includes(msg)) sim.warnings.push(msg);
+    const k = key || msg;
+    const at = sim.warnKeys[k];
+    const sev = severity || 0;
+    if (at === undefined) {
+      sim.warnKeys[k] = sim.warnings.length;
+      sim.warnSeverity[k] = sev;
+      sim.warnings.push(msg);
+    } else if (sev > sim.warnSeverity[k]) {
+      sim.warnSeverity[k] = sev;
+      sim.warnings[at] = msg;
+    }
   }
 
   /* ---- reset ----------------------------------------------------------- */
@@ -204,6 +278,10 @@
     sim.startS = sim.s;      // the berth the train must return to
     sim.lapDone = false;
     sim.launchedOut = false; // shuttle: has it left the station yet
+    sim.overhang = null;     // nothing hanging off the end
+    sim.blast = null;        // no wreckage
+    sim.crashSpeed = 0;
+    sim.wrecked = false;
     sim.v = 0;
     sim.time = 0;
     sim.eMotor = 0;
@@ -212,6 +290,8 @@
     sim.maxG = 0;
     sim.maxZ = 0;
     sim.warnings = [];
+    sim.warnKeys = {};       // key -> index in warnings, so repeats collapse
+    sim.warnSeverity = {};   // key -> worst reading seen for that key
     sim.trace = [];
 
     // Seed the g extremes from the train standing still, so an untouched
@@ -221,6 +301,9 @@
     sim.maxVertG = rest.vert;
     sim.minVertG = rest.vert;
     sim.maxLatG = Math.abs(rest.lat);
+    sim.maxVertGs = sim.s;
+    sim.minVertGs = sim.s;
+    sim.maxLatGs = sim.s;
     sim.note = '';
     sim.state = 'ready';
     sim.reversals = 0;
@@ -318,18 +401,70 @@
     // G-forces at the front car, where the ride is most extreme.
     const g = RC.gForces(lead, sim.v, a);
     sim.g = g;
-    sim.maxVertG = Math.max(sim.maxVertG, g.vert);
-    sim.minVertG = Math.min(sim.minVertG, g.vert);
-    sim.maxLatG = Math.max(sim.maxLatG, Math.abs(g.lat));
+    // Keep WHERE each extreme happened, so the report can name the feature
+    // responsible rather than quoting a distance along the track.
+    if (g.vert > sim.maxVertG) { sim.maxVertG = g.vert; sim.maxVertGs = lead.s; }
+    if (g.vert < sim.minVertG) { sim.minVertG = g.vert; sim.minVertGs = lead.s; }
+    if (Math.abs(g.lat) > sim.maxLatG) { sim.maxLatG = Math.abs(g.lat); sim.maxLatGs = lead.s; }
     sim.maxG = Math.max(sim.maxG, Math.abs(g.vert));
 
-    // Thresholds roughly follow real ride-comfort limits.
-    if (g.vert < 0) addWarning('Airtime — riders are lifted out of their seats here');
-    if (g.vert < -1.5) addWarning(`Dangerous negative g (${g.vert.toFixed(1)}) — riders would be thrown from the train`);
-    if (g.vert > 5) addWarning(`Punishing vertical g (${g.vert.toFixed(1)}) on a curve`);
-    if (Math.abs(g.lat) > 1.8) addWarning(`Violent sideways force (${Math.abs(g.lat).toFixed(1)} g) — this turn needs banking`);
-    else if (Math.abs(g.lat) > 1.0) addWarning(`Uncomfortable sideways force (${Math.abs(g.lat).toFixed(1)} g) on a turn`);
-    if (sim.maxV > 45) addWarning(`Train reaches ${sim.maxV.toFixed(0)} m/s — too fast to be safe`);
+    // Only flag what a real ride would not be allowed to do (see RC.G_LIMITS);
+    // ordinary airtime and a well-banked turn are left alone. Each complaint
+    // names the feature it happened on, so it can be found and fixed.
+    const L = RC.G_LIMITS;
+    const feat = RC.featureAt ? RC.featureAt(lead.s) : null;
+    const at = feat ? ` on ${feat.label}` : '';
+    const lat = Math.abs(g.lat);
+
+    const spot = feat ? feat.label : 'track';
+
+    if (g.vert > L.vertExtreme) {
+      addWarning(`Vertical ${g.vert.toFixed(1)} g${at} — beyond anything a real coaster pulls`,
+                 'vert:' + spot, g.vert);
+    } else if (g.vert > L.vertHigh) {
+      addWarning(`Heavy vertical ${g.vert.toFixed(1)} g${at} — at the limit even for a moment`,
+                 'vert:' + spot, g.vert);
+    }
+
+    if (g.vert < L.airtimeHard) {
+      addWarning(`Airtime ${g.vert.toFixed(1)} g${at} — riders would be thrown from the train`,
+                 'airtime:' + spot, -g.vert);
+    } else if (g.vert < L.airtimeGood) {
+      addWarning(`Airtime ${g.vert.toFixed(1)} g${at} — more than a restraint is meant to hold`,
+                 'airtime:' + spot, -g.vert);
+    }
+
+    if (lat > L.latExtreme) {
+      addWarning(`Violent sideways ${lat.toFixed(1)} g${at} — it needs banking or a wider radius`,
+                 'lat:' + spot, lat);
+    } else if (lat > L.latHigh) {
+      addWarning(`Uncomfortable sideways ${lat.toFixed(1)} g${at} — worth banking`,
+                 'lat:' + spot, lat);
+    }
+
+    if (sim.maxV > L.speedMax) {
+      addWarning(`Train reaches ${sim.maxV.toFixed(0)} m/s — faster than any coaster ever built`,
+                 'speed', sim.maxV);
+    }
+
+    // Falling out of a loop. Upside down, the ONLY thing holding the train on
+    // is its own speed: the track can push riders into their seats but cannot
+    // pull the train inwards. The classic result — a loop of radius r needs
+    // v >= sqrt(g r) at the top — falls out of this, and it is the question the
+    // loop is there to raise.
+    //
+    // Judged over the WHOLE train, not just the front car: the cars are coupled,
+    // so one car losing its grip at the top is held on by the ones still pressed
+    // into the track below it. Requiring a clear inversion (not merely tilted)
+    // keeps airtime hills and banked turns, which are legitimately negative-g,
+    // on the rails.
+    if (!sim.overhang && RC.carFrame(lead).u.z < -0.2) {
+      let vertSum = 0;
+      for (const cc of cars) vertSum += RC.gForces(cc, sim.v, a).vert;
+      if (vertSum / cars.length < 0) {
+        sim.overhang = buildOverhang(lead, sim.v, 'inverted');
+      }
+    }
 
     // Valleying: sign changes with no forward progress.
     const vs = Math.sign(sim.v);
@@ -338,11 +473,47 @@
     if (sim.s > sim.sMax) { sim.sMax = sim.s; sim.stallTime = 0; }
     else sim.stallTime += dt;
 
-    if (sim.reversals >= 4 && sim.stallTime > 3) {
+    // A train see-sawing on the edge of a drop is not valleying; it is about to
+    // come off, and the overhang below decides that.
+    if (!sim.overhang && sim.reversals >= 4 && sim.stallTime > 3) {
       sim.state = 'valleyed';
       sim.note = 'The train valleyed — it never had enough energy for the next hill.';
       addWarning('Train valleys and rolls back');
       return;
+    }
+
+    // Hanging off the end. While any of the train is out there the ordinary
+    // end-of-ride tests do not apply — it has not finished, it is part way over
+    // a cliff — so the only question is whether it goes over or is hauled back.
+    if (sim.overhang) {
+      const oh = sim.overhang;
+
+      /* The point of no return is the CENTRE OF MASS crossing the edge. Past
+         that, more than half the train's weight is beyond its last support, so
+         it tips off however the tangential force balance happens to read.
+
+         That balance alone is not enough to decide it. A train leaving fast is
+         out on a shallow part of the ballistic arc, where gravity has little
+         component along the track, so the hanging cars barely pull — and the
+         climb behind could otherwise drag the whole thing back on when half of
+         it is already in the air. Once the centre of mass is over, the train
+         has tipped: every car comes off the rails and follows the arc. */
+      const sCom = sim.s - (sim.cars - 1) * CAR_SPACING / 2;
+      if (!oh.committed && sCom > oh.s0) {
+        oh.committed = true;
+        addWarning(oh.cause === 'inverted'
+          ? 'The whole train came off the track — its centre of mass left the rails'
+          : 'The train tipped over the end — its centre of mass passed the last rail');
+      }
+
+      if (sim.s - oh.s0 >= oh.length) { wreck(); return; }
+      if (oh.committed) {
+        // Tipped and stalled is still falling, not a ride that can recover.
+        if (sim.v <= 0) { wreck(); return; }
+        return;
+      }
+      if (sim.s > oh.s0) return;                // hanging, but still recoverable
+      sim.overhang = null;                      // hauled back on: carry on
     }
 
     // End of the ride. Crossing the finish is not the end of the run: the
@@ -376,12 +547,14 @@
       }
     } else if (shuttle()) {
       // Shuttle: launched out, up the spike, then rolls back through to the
-      // station. It normally stalls on the spike under gravity and reverses on
-      // its own; if the spike is too short it hits the far end, where its
-      // remaining kinetic energy is dumped (a bumper) rather than leaked.
-      if (sim.s >= path.total) {
-        sim.s = path.total;
-        if (sim.v > 0) { sim.eThermal += 0.5 * m * sim.v * sim.v; sim.v = 0; }
+      // station. A well-judged spike stalls the train under gravity and it
+      // reverses on its own. If the spike is too short the front car noses over
+      // the top and hangs there, and from that point the overhang decides it —
+      // the whole point of the exercise: work out how tall the spike must be to
+      // catch a given launch.
+      if (sim.s > path.total) {
+        sim.overhang = buildOverhang(RC.pathAt(path.total, false), sim.v, 'end');
+        return;
       }
 
       // Coming home: only the station catches the train. The finish must be
@@ -416,6 +589,178 @@
       };
       if (sim.s >= path.total) stop(path.total, 'Reached the end of the track.');
       else if (sim.s <= 0) stop(0, 'Rolled back to the start.');
+    }
+  }
+
+  /* ---- running off the rails --------------------------------------------
+     A train that reaches the end of the track does NOT simply take off. The
+     front car noses over the edge and hangs there, still coupled to the cars
+     behind it — exactly like pushing the end of a chain over the edge of a
+     table. Its weight pulls the rest of the train forward, and whether that is
+     enough to drag the whole train over, or whether the train is heavy enough
+     on the climb behind to stop and pull it back, is the interesting question.
+
+     The overhang is modelled as a continuation of the WIRE the train runs on:
+     the ballistic arc the front car would fly, tabulated by arc length. That
+     shape is not a fudge — a bead sliding frictionlessly along a projectile's
+     own trajectory follows exactly the projectile's motion, because the wire
+     has to supply no normal force. So a train that leaves fast sails out in a
+     proper arc, one that just creeps over the lip droops almost straight down,
+     and in between the cars behind decide what happens.
+
+     Because it is just more wire, the ordinary bead-on-wire integrator handles
+     it: the mean slope over the cars now includes the hanging ones (slope -1
+     when vertical, pulling hard), and energy is conserved without any special
+     bookkeeping. */
+  const OVERHANG_DT = 0.01;    // s — integration step for the tabulated arc
+  const OVERHANG_MAX = 3000;   // samples, ~30 s of fall
+
+  function buildOverhang(p, v, cause) {
+    const fr = RC.carFrame(p);
+    // A stationary train still droops over the edge, so give the arc a nudge
+    // rather than letting a zero speed leave the tangent undefined.
+    const speed = Math.max(0.05, Math.abs(v)) * (v < 0 ? -1 : 1);
+    let x = p.x * RC.TILE_M, y = p.y * RC.TILE_M, z = p.z * RC.LEVEL_M;
+    let vx = speed * fr.f.x, vy = speed * fr.f.y, vz = speed * fr.f.z;
+    // A ballistic arc stays in one vertical plane, so the departure frame's
+    // horizontal "right" is normal to that plane the whole way down.
+    const r = fr.r;
+    const pts = [];
+    let u = 0;
+
+    for (let n = 0; n < OVERHANG_MAX; n++) {
+      const sp = Math.hypot(vx, vy, vz) || 1;
+      const fx = vx / sp, fy = vy / sp, fz = vz / sp;
+
+      // up = f x r, matching the frame convention elsewhere (r = u x f).
+      let ux = fy * r.z - fz * r.y;
+      let uy = fz * r.x - fx * r.z;
+      let uz = fx * r.y - fy * r.x;
+      const ul = Math.hypot(ux, uy, uz) || 1;
+      ux /= ul; uy /= ul; uz /= ul;
+
+      // Curvature of a projectile: gravity resolved across the path, over v^2.
+      const dot = -G * fz;
+      const kx = (-dot * fx) / (sp * sp);
+      const ky = (-dot * fy) / (sp * sp);
+      const kz = (-G - dot * fz) / (sp * sp);
+
+      pts.push({
+        u, x, y, z, fx, fy, fz, ux, uy, uz,
+        kx, ky, kz, curv: Math.hypot(kx, ky, kz), dzds: fz
+      });
+
+      if (z <= 0) break;
+      vz -= G * OVERHANG_DT;
+      const nx = x + vx * OVERHANG_DT, ny = y + vy * OVERHANG_DT, nz = z + vz * OVERHANG_DT;
+      u += Math.hypot(nx - x, ny - y, nz - z);
+      x = nx; y = ny; z = nz;
+    }
+
+    return {
+      s0: p.s, cause,
+      v0: Math.abs(v),                 // speed the front car left the rails at
+      z0: p.z * RC.LEVEL_M,            // height it left from
+      // Radius of curvature there, so the report can quote the speed the train
+      // needed to hold that part of a loop: v^2 / r >= g.
+      curv: p.curv || 0,
+      pts, length: u
+    };
+  }
+
+  /* State at arc distance u past the departure point, in the same units and
+     shape as a path point so the rest of the physics cannot tell the
+     difference. Positions come back in tiles/levels, like RC.pathAt. */
+  RC.overhangAt = function (u) {
+    const oh = RC.sim.overhang;
+    if (!oh || !oh.pts.length) return null;
+    const pts = oh.pts;
+
+    // Behind the edge: a car that has not reached it yet, on a train that has
+    // already tipped. It trails back along the departure tangent, which is
+    // where the track it just left was pointing.
+    if (u < 0) {
+      const p0 = pts[0];
+      return {
+        s: oh.s0 + u,
+        x: (p0.x + p0.fx * u) / RC.TILE_M,
+        y: (p0.y + p0.fy * u) / RC.TILE_M,
+        z: (p0.z + p0.fz * u) / RC.LEVEL_M,
+        dzds: p0.fz, curv: 0, kx: 0, ky: 0, kz: 0, bank: 0,
+        fx: p0.fx, fy: p0.fy, fz: p0.fz,
+        ux: p0.ux, uy: p0.uy, uz: p0.uz,
+        piece: null, def: null, overhang: true
+      };
+    }
+
+    let a, b, f;
+    if (u <= 0) { a = b = pts[0]; f = 0; }
+    else if (u >= oh.length) { a = b = pts[pts.length - 1]; f = 0; }
+    else {
+      let lo = 0, hi = pts.length - 1;
+      while (lo + 1 < hi) {
+        const mid = (lo + hi) >> 1;
+        if (pts[mid].u <= u) lo = mid; else hi = mid;
+      }
+      a = pts[lo]; b = pts[hi];
+      const span = b.u - a.u;
+      f = span > 1e-9 ? (u - a.u) / span : 0;
+    }
+    const mix = (p, q) => p + (q - p) * f;
+
+    return {
+      s: oh.s0 + u,
+      x: mix(a.x, b.x) / RC.TILE_M,
+      y: mix(a.y, b.y) / RC.TILE_M,
+      z: mix(a.z, b.z) / RC.LEVEL_M,
+      dzds: mix(a.dzds, b.dzds),
+      curv: mix(a.curv, b.curv),
+      kx: mix(a.kx, b.kx), ky: mix(a.ky, b.ky), kz: mix(a.kz, b.kz),
+      bank: 0,
+      fx: mix(a.fx, b.fx), fy: mix(a.fy, b.fy), fz: mix(a.fz, b.fz),
+      ux: mix(a.ux, b.ux), uy: mix(a.uy, b.uy), uz: mix(a.uz, b.uz),
+      // Not on a piece any more: no station, lift, brake or launch out here.
+      piece: null, def: null,
+      overhang: true
+    };
+  };
+
+  /* The front of the train has reached the ground. Everything it still had —
+     its motion and the height of the cars strung out behind it — ends up as
+     heat and wreckage. */
+  function wreck() {
+    const sim = RC.sim;
+    const cars = RC.carStates();
+    const e = RC.energy();
+    const oh = sim.overhang;
+
+    sim.crashSpeed = Math.abs(sim.v);
+    sim.eThermal += e.ke + e.pe;
+    sim.v = 0;
+    sim.wrecked = true;
+    sim.state = 'crashed';
+    sim.note = oh && oh.cause === 'inverted'
+      ? `Too slow at ${oh.v0.toFixed(1)} m/s to hold the track upside down — the train ` +
+        `fell out of the loop from ${oh.z0.toFixed(1)} m and hit the ground at ` +
+        `${sim.crashSpeed.toFixed(1)} m/s. It is wrecked.`
+      : `Dragged over the end of the track and hit the ground at ` +
+        `${sim.crashSpeed.toFixed(1)} m/s — the train is wrecked.`;
+    addWarning(oh && oh.cause === 'inverted'
+      ? 'The train fell out of the loop and crashed'
+      : 'The train ran off the end of the track and crashed');
+
+    // Each car breaks up where IT is, so the wreckage is strung out along the
+    // fall rather than heaped in one place.
+    if (RC.makeDebris) {
+      sim.blast = { parts: [] };
+      for (const c of cars) {
+        const cf = RC.carFrame(c);
+        const parts = RC.makeDebris({
+          x: c.x * RC.TILE_M, y: c.y * RC.TILE_M, z: Math.max(0, c.z * RC.LEVEL_M),
+          fx: cf.f.x, fy: cf.f.y, impact: sim.crashSpeed
+        });
+        for (const part of parts) sim.blast.parts.push(part);
+      }
     }
   }
 
@@ -454,7 +799,9 @@
     const sim = RC.sim;
     const st = RC.circuitStatus();
     if (!st.ok) {
-      sim.note = st.label + ' — finish the track before testing.';
+      sim.note = st.kind === 'open'
+        ? st.label + ' — close the circuit, or switch on Shuttle to run it out-and-back.'
+        : st.label + ' — finish the track before testing.';
       return false;
     }
     if (sim.state !== 'running') {

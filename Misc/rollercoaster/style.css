@@ -11,6 +11,12 @@
 
 * { box-sizing: border-box; }
 
+/* The `hidden` attribute has to beat the display rules set further down. The
+   browser's own [hidden] { display: none } is only an author-level default and
+   loses to any class that sets display — so `.legend { display: flex }` left
+   hidden legends on screen. Fixed once here rather than per component. */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   height: 100%;
@@ -165,16 +171,38 @@ html, body {
   box-shadow: var(--chrome-shadow);
   backdrop-filter: blur(12px);
   overflow: hidden;
-  /* Drag the bottom-right corner to resize. Windows are converted to
-     left/top anchoring on show (see ui.js) so the grip pulls cleanly. */
-  resize: both;
+  /* Resized by grabbing any edge or corner — the handles are injected by
+     ui.js. Windows are converted to left/top anchoring on show so that
+     dragging the left or top edge can move the box as well as resize it. */
   min-width: 240px;
   min-height: 150px;
   max-width: 96vw;
   max-height: 92vh;
 }
-.window[hidden] { display: none; }
 .window.dragging { box-shadow: 0 16px 40px rgba(15, 38, 62, 0.3); }
+.window.resizing { box-shadow: 0 16px 40px rgba(15, 38, 62, 0.3); }
+
+/* ---- resize handles ---------------------------------------------------
+   Thin strips along each edge and small squares at the corners, sitting over
+   the window's own content. Corners are listed after the edges and given a
+   higher z-index so the diagonal wins where the two overlap. */
+.window-rz {
+  position: absolute;
+  z-index: 5;
+  touch-action: none;
+}
+.window-rz-n { top: 0; left: 0; right: 0; height: 6px; cursor: ns-resize; }
+.window-rz-s { bottom: 0; left: 0; right: 0; height: 6px; cursor: ns-resize; }
+.window-rz-w { top: 0; bottom: 0; left: 0; width: 6px; cursor: ew-resize; }
+.window-rz-e { top: 0; bottom: 0; right: 0; width: 6px; cursor: ew-resize; }
+.window-rz-nw,
+.window-rz-ne,
+.window-rz-sw,
+.window-rz-se { width: 16px; height: 16px; z-index: 6; }
+.window-rz-nw { top: 0; left: 0; cursor: nwse-resize; }
+.window-rz-ne { top: 0; right: 0; cursor: nesw-resize; }
+.window-rz-sw { bottom: 0; left: 0; cursor: nesw-resize; }
+.window-rz-se { bottom: 0; right: 0; cursor: nwse-resize; }
 
 .window-hd {
   flex: 0 0 auto;
@@ -196,6 +224,9 @@ html, body {
   width: 22px;
   height: 22px;
   flex: 0 0 auto;
+  /* Above the top-right resize corner, which overlaps it. */
+  position: relative;
+  z-index: 7;
   border: none;
   border-radius: 6px;
   background: transparent;
@@ -218,7 +249,6 @@ html, body {
 }
 .window-body p { margin: 0 0 0.7rem; }
 .window-body p:last-child { margin-bottom: 0; }
-.window-body .hint { color: var(--muted); font-size: 0.82rem; }
 
 /* The build window fills the vertical space (set inline), and its status card
    sinks to the bottom so the room is used rather than left as a gap. */
@@ -328,7 +358,6 @@ html, body {
   box-shadow: var(--chrome-shadow);
   backdrop-filter: blur(12px);
 }
-.rct-dropdown[hidden] { display: none; }
 
 .rct-dropitem {
   display: flex;

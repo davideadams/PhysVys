@@ -78,23 +78,39 @@
 
     'looper': {
       name: 'Looper',
-      blurb: 'A lift and a drop feed a vertical loop, then the track winds back to the station.',
+      blurb: 'A lift and a drop feed a vertical loop, then the track curves back to the station.',
       finish: true,
+      /* Laid out as a rough rectangle that turns back toward the station, so
+         the auto-close solver only has a short final corner to fill rather than
+         a whole U-turn-and-return from far out (which it couldn't find). */
       build: [].concat(
-        // Lift to 14 m.
+        // Side 1 (+i): lift to 14 m.
         [{ id: 'flat-to-gentle-up', lift: true }],
         rep(6, 'gentle-up', { lift: true }),
         [{ id: 'gentle-up-to-flat', lift: true }],
-        [{ id: 'flat' }],
-        // Drop back to the ground, fast, and level off for the loop.
+        rep(2, 'flat'),
+        [{ id: 'turn-right-wide' }],
+        // Side 2 (+j): drop to the ground, level off, and take the loop fast.
         [{ id: 'flat-to-gentle-down' }],
         rep(6, 'gentle-down'),
         [{ id: 'gentle-down-to-flat' }],
         [{ id: 'flat' }],
-        // The loop.
         [{ id: 'loop-right' }],
-        rep(2, 'flat')
+        rep(2, 'flat'),
+        [{ id: 'turn-right-wide' }],
+        // Side 3 (-i): back across.
+        rep(12, 'flat'),
+        [{ id: 'turn-right-wide' }],
+        // Side 4 (-j): part way home; the solver closes the last corner.
+        rep(6, 'flat')
       )
+    },
+
+    'custom': {
+      name: 'Custom (blank)',
+      blurb: 'Just a station — a blank slate to build your own coaster from.',
+      blank: true,
+      build: []
     },
 
     'shuttle-loop': {
@@ -109,10 +125,16 @@
         // Through the loop while going fast.
         [{ id: 'loop-right' }],
         rep(2, 'flat'),
-        // A spike tall enough that the train stalls short of the top and rolls
-        // back (a launch reaching ~25 m climbs; the spike tops out higher).
+        /* The spike, topping out at 35 m. It has to clear the LEAD car, not the
+           train's average: the physics stalls the train when its MEAN height
+           has used up the launch, and on this steep a grade a four-car train
+           averages ~4.4 m below its front car. A 22 m/s launch is worth 24.7 m
+           of mean climb, so the front car crests about 29 m — which is why a
+           29 m spike (the obvious arithmetic) let it run off the top. 35 m
+           leaves real margin, and a student who winds the launch past about
+           24.5 m/s will still fly off the end, which is the lesson. */
         [{ id: 'flat-to-gentle-up' }, { id: 'gentle-to-steep-up' }],
-        rep(4, 'steep-up')
+        rep(5, 'steep-up')
       )
     }
   };

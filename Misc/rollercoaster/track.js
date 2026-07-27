@@ -523,6 +523,77 @@
     return spans;
   };
 
+  /* ---- named features ---------------------------------------------------
+     The things a student would point at: "Drop 1", "Turn 2", "Loop 1". A
+     feature is a contiguous run of pieces doing the same job, so a hill built
+     from six pieces is ONE hill rather than six, and each kind is numbered in
+     build order. This is what the report quotes and what the graph shades, so
+     a spike can be named instead of being given as a distance along the track. */
+  const FEATURE_NAMES = {
+    loop: 'Loop', turn: 'Turn', lift: 'Lift', hill: 'Hill', drop: 'Drop',
+    brake: 'Brakes', launch: 'Launch', station: 'Station'
+  };
+  // Everything except the station, of which there is only ever the one.
+  const NUMBERED = { loop: 1, turn: 1, lift: 1, hill: 1, drop: 1, brake: 1, launch: 1 };
+
+  function featureKind(pieceEntry, def) {
+    if (def.kind === 'loop') return { type: 'loop' };
+    // Turns only merge with turns going the SAME way, so an S-bend reads as
+    // two turns rather than one long one.
+    if (def.kind === 'turn') return { type: 'turn', dir: def.turn };
+    if (def.station) return { type: 'station' };
+    if (def.brake) return { type: 'brake' };
+    if (def.launch) return { type: 'launch' };
+    if (def.dH > 0) return { type: pieceEntry && pieceEntry.lift ? 'lift' : 'hill' };
+    if (def.dH < 0) return { type: 'drop' };
+    return { type: 'flat' };          // plain track, deliberately unnamed
+  }
+
+  let featCache = null, featCacheVersion = -1;
+
+  RC.features = function () {
+    if (featCache && featCacheVersion === RC.version) return featCache;
+
+    const feats = [];
+    let cur = null;
+    for (const sp of RC.pieceSpans()) {
+      const k = featureKind(RC.track.pieces[sp.pi], BY_ID.get(sp.defId));
+      if (cur && cur.type === k.type && cur.dir === k.dir) {
+        cur.s1 = sp.s1;
+      } else {
+        cur = { type: k.type, dir: k.dir, s0: sp.s0, s1: sp.s1, label: null };
+        feats.push(cur);
+      }
+    }
+
+    const seen = {};
+    for (const f of feats) {
+      f.sMid = (f.s0 + f.s1) / 2;
+      const name = FEATURE_NAMES[f.type];
+      if (!name) continue;
+      if (NUMBERED[f.type]) {
+        seen[f.type] = (seen[f.type] || 0) + 1;
+        f.n = seen[f.type];
+        f.label = name + ' ' + f.n;
+      } else {
+        f.label = name;
+      }
+    }
+
+    featCache = feats;
+    featCacheVersion = RC.version;
+    return feats;
+  };
+
+  /* The named feature covering this point, or null on plain track (and past
+     the end of it, where a train that has left the rails has no feature). */
+  RC.featureAt = function (s) {
+    for (const f of RC.features()) {
+      if (s >= f.s0 && s <= f.s1) return f.label ? f : null;
+    }
+    return null;
+  };
+
   /* Distance along the track between two arc positions. On a closed circuit
      the short way round counts, so a point just after the start line is near
      one just before it rather than a full lap away. */
@@ -814,7 +885,11 @@
         ? { kind: 'closed', label: 'Complete circuit', ok: true }
         : { kind: 'closed-nostation', label: 'Circuit closed, but no station' };
     }
-    if (hasLaunch) {
+    // Not a closed loop, but it can still be driven out-and-back: it has a
+    // launch piece, or the student has left Shuttle switched on. Either way it
+    // needs a station to launch from and return to.
+    const asShuttle = hasLaunch || (hasStation && RC.sim && RC.sim.shuttleMode);
+    if (asShuttle) {
       return hasStation
         ? { kind: 'shuttle', label: 'Shuttle track', ok: true }
         : { kind: 'shuttle-nostation', label: 'Shuttle, but no station' };

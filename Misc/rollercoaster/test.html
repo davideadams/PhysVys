@@ -598,6 +598,18 @@
     }
   }
 
+  /* Run until `cond` first holds, so a test can inspect the sim mid-ride
+     rather than only at the end. Returns whether it ever held. */
+  function runUntil(seconds, cond) {
+    RC.sim.state = 'running';
+    const dt = 1 / 60;
+    for (let n = 0; n < seconds * 60 && RC.sim.state === 'running'; n++) {
+      RC.stepSim(dt);
+      if (cond()) return true;
+    }
+    return false;
+  }
+
   check('energy is conserved on a frictionless run', () => {
     const err = buildTestCircuit();
     if (err) return err;
@@ -1493,6 +1505,8 @@
      looking fine and Test silently refuses. */
   check('every prefab builds; closed ones close, shuttles are testable shuttles', () => {
     for (const key of Object.keys(RC.PREFABS)) {
+      // A blank preset is deliberately just a station: nothing to close or test.
+      if (RC.PREFABS[key].blank) continue;
       const res = RC.loadPrefab(key);
       if (!res.ok) return res.why;
       const st = RC.circuitStatus();
@@ -1510,6 +1524,7 @@
 
   check('every prefab has a station and reaches a sensible height', () => {
     for (const key of Object.keys(RC.PREFABS)) {
+      if (RC.PREFABS[key].blank) continue;
       RC.loadPrefab(key);
       const pieces = RC.track.pieces;
       if (!pieces.some(p => RC.pieceDef(p.defId).station)) return `"${key}" has no station`;
@@ -1547,6 +1562,259 @@
     if (Math.abs(e.total - e.supplied) / Math.max(1, e.supplied) > 0.02) {
       return `energy does not balance: total ${e.total.toFixed(0)} vs supplied ${e.supplied.toFixed(0)} J`;
     }
+  });
+
+  check('a launch that overshoots a short spike flies off the end and crashes', () => {
+    // Station, launch, a run of flat, then a spike far too short to catch a
+    // 22 m/s launch (which can climb ~25 m). The train reaches the end still
+    // moving and leaves the rails.
+    RC.resetTrack();
+    for (const id of ['launch', 'launch', 'flat', 'flat',
+                      'flat-to-gentle-up', 'gentle-up', 'gentle-up-to-flat']) {
+      if (!RC.place(id)) return `${id} refused`;
+    }
+    RC.sim.shuttleMode = true;
+    if (RC.circuitStatus().kind !== 'shuttle') return 'the launch track was not a shuttle';
+    RC.sim.cars = 2;
+    RC.sim.friction = false;
+    RC.sim.launchSpeed = 22;
+    RC.resetSim();
+    runFor(30);
+
+    if (RC.sim.state !== 'crashed') {
+      return `state "${RC.sim.state}" — expected crashed (note "${RC.sim.note}")`;
+    }
+    if (!RC.sim.overhang || RC.sim.overhang.cause !== 'end') return 'no overhang was recorded';
+    if (!RC.sim.wrecked) return 'crashed but not marked wrecked';
+    if (!(RC.sim.crashSpeed > 0)) return 'crash speed was not recorded';
+    // Energy is still conserved: the launch energy ends up as heat in the wreck.
+    const e = RC.energy();
+    if (Math.abs(e.total - e.supplied) / Math.max(1, e.supplied) > 0.02) {
+      return `energy does not balance after the crash: total ${e.total.toFixed(0)} vs ` +
+             `supplied ${e.supplied.toFixed(0)} J`;
+    }
+  });
+
+  check('the front car hangs off the end while the rest of the train is still on the track', () => {
+    // The train must not teleport into the air the moment its nose passes the
+    // last sleeper: the couplings hold, and the cars behind are still running
+    // on rails. This is the whole difference between a train and a cannonball.
+    RC.resetTrack();
+    for (const id of ['launch', 'launch', 'flat', 'flat',
+                      'flat-to-gentle-up', 'gentle-up', 'gentle-up-to-flat']) {
+      if (!RC.place(id)) return `${id} refused`;
+    }
+    RC.sim.shuttleMode = true;
+    RC.sim.cars = 4;
+    RC.sim.friction = false;
+    RC.sim.launchSpeed = 22;
+    RC.resetSim();
+
+    if (!runUntil(30, () => RC.sim.overhang)) return 'the train never reached the end';
+    if (RC.sim.wrecked) return 'the train was wrecked the instant its nose passed the end';
+
+    const oh = RC.sim.overhang;
+    const spacing = RC.CAR_SPACING;
+    const backS = RC.sim.s - (RC.sim.cars - 1) * spacing;
+    if (backS >= oh.s0) return 'the whole train left the track at once';
+
+    // The couplings hold: the cars are still one spacing apart along the path,
+    // some on the rails and some out over the drop.
+    const cars = RC.carStates();
+    if (cars.length !== 4) return `${cars.length} cars, expected 4`;
+    for (let n = 1; n < cars.length; n++) {
+      const gap = cars[n - 1].s - cars[n].s;
+      if (Math.abs(gap - spacing) > 1e-6) {
+        return `cars ${n - 1} and ${n} are ${gap.toFixed(3)} m apart, not ${spacing}`;
+      }
+    }
+    // And at least one really is out past the end of the rails.
+    if (!cars.some(p => p.overhang)) return 'no car is actually hanging off the end';
+  });
+
+  check('once the centre of mass passes the edge the train is committed', () => {
+    // Half the train past the last rail means its centre of mass is over the
+    // drop: it has tipped, and no amount of climb behind can haul it back.
+    RC.resetTrack();
+    for (const id of ['launch', 'launch', 'flat', 'flat',
+                      'flat-to-gentle-up', 'gentle-up', 'gentle-up-to-flat']) {
+      if (!RC.place(id)) return `${id} refused`;
+    }
+    RC.sim.shuttleMode = true;
+    RC.sim.cars = 4;
+    RC.sim.friction = false;
+    RC.sim.launchSpeed = 22;
+    RC.resetSim();
+
+    if (!runUntil(30, () => RC.sim.overhang && RC.sim.overhang.committed)) {
+      return 'the train never committed to going over the edge';
+    }
+    const oh = RC.sim.overhang;
+    // It must not have committed before the centre of mass actually got there.
+    const sCom = RC.sim.s - (RC.sim.cars - 1) * RC.CAR_SPACING / 2;
+    if (!(sCom >= oh.s0)) {
+      return `committed with the centre of mass still ${(oh.s0 - sCom).toFixed(2)} m short`;
+    }
+    // Committed means every car is off the rails, including those short of the edge.
+    if (!RC.carStates().every(p => p.overhang)) {
+      return 'a car was still riding the rails after the train tipped';
+    }
+    // And it must see it through to the ground rather than recovering.
+    runFor(60);
+    if (RC.sim.state !== 'crashed') {
+      return `state "${RC.sim.state}" — a committed train has to come off (note "${RC.sim.note}")`;
+    }
+  });
+
+  check('a car hanging off the end drags the rest of the train forward', () => {
+    // Chain-off-a-table. The track climbs to 10 m and then runs LEVEL to the
+    // edge, with 12 m of flat top so the whole 10.5 m train is on the level
+    // when its nose goes over: the cars on the rails feel no slope at all, so
+    // any acceleration can only be the hanging car pulling them. It has to be
+    // elevated — a track ending at ground level has nowhere to hang.
+    RC.resetTrack();
+    const seq = ['launch', 'launch',
+                 'flat-to-gentle-up', 'gentle-up', 'gentle-up', 'gentle-up',
+                 'gentle-up', 'gentle-up-to-flat',
+                 'flat', 'flat', 'flat'];
+    for (const id of seq) {
+      if (!RC.place(id)) return `${id} refused`;
+    }
+    if (RC.track.head.k !== 10) return `top of the climb is ${RC.track.head.k} m, expected 10`;
+    RC.sim.shuttleMode = true;
+    RC.sim.cars = 4;
+    RC.sim.friction = false;
+    RC.sim.launchSpeed = 20;            // enough to crest the 10 m climb
+    RC.resetSim();
+
+    if (!runUntil(30, () => RC.sim.overhang)) return 'the train never reached the end';
+    const vAtEdge = RC.sim.v;
+    // A short further run: still hanging, being pulled.
+    runUntil(0.5, () => false);
+    if (!(RC.sim.v > vAtEdge + 0.05)) {
+      return `speed went ${vAtEdge.toFixed(2)} -> ${RC.sim.v.toFixed(2)} m/s — ` +
+             `the overhanging car did not pull the train along`;
+    }
+  });
+
+  check('a train too slow at the top of a loop falls out of it and crashes', () => {
+    // The window here is narrow, so the numbers matter. The loop rises
+    // R(1+a) = 9.45 m and its top radius is aR = 2.45 m, so the train must
+    // fall MORE than 9.45 m to crest it at all, but less than
+    // 9.45 + gr/2g = 10.67 m or it is still fast enough to hold on. A drop of
+    // about 10.2 m sits between the two: it gets over the top and lets go.
+    RC.track.pieces = [];
+    RC.track.start = { i: 6, j: 20, dir: 0, k: 13, g: 0 };
+    RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
+    const seq = ['flat-to-gentle-down'].concat(new Array(5).fill('gentle-down'))
+      .concat(['gentle-down-to-flat', 'flat', 'loop-right', 'flat']);
+    for (const id of seq) {
+      if (!RC.place(id)) return `${id} refused: ` + RC.canPlace(RC.pieceDef(id), RC.track.head).why;
+    }
+    RC.sim.cars = 1;
+    RC.sim.friction = false;
+    // Released on the constant grade (s = 0 is level, so a train there never
+    // gets going) at about 11.2 m, with the loop's base at 1 m.
+    RC.resetSim(6);
+    runFor(30);
+
+    if (RC.sim.state !== 'crashed') {
+      return `state "${RC.sim.state}" — expected the train to fall out of the loop ` +
+             `(note "${RC.sim.note}")`;
+    }
+    if (!RC.sim.overhang || RC.sim.overhang.cause !== 'inverted') {
+      return `crashed, but the cause was "${RC.sim.overhang && RC.sim.overhang.cause}" ` +
+             `rather than falling out of the loop`;
+    }
+    const e = RC.energy();
+    if (Math.abs(e.total - e.supplied) / Math.max(1, e.supplied) > 0.02) {
+      return `energy does not balance: total ${e.total.toFixed(0)} vs ${e.supplied.toFixed(0)} J`;
+    }
+    RC.sim.cars = 4;
+  });
+
+  check('every car breaks up where it is, not all in one heap', () => {
+    // The couplings hold the train together all the way down, so when the front
+    // reaches the ground the cars behind are still strung out above it. Each
+    // sheds its own wreckage from its own position.
+    RC.resetTrack();
+    for (const id of ['launch', 'launch', 'flat', 'flat', 'flat',
+                      'flat-to-gentle-up', 'gentle-up', 'gentle-up-to-flat']) {
+      if (!RC.place(id)) return `${id} refused`;
+    }
+    RC.sim.shuttleMode = true;
+    RC.sim.cars = 3;
+    RC.sim.friction = false;
+    RC.sim.launchSpeed = 22;
+    RC.resetSim();
+    runFor(30);
+
+    if (RC.sim.state !== 'crashed') return `state "${RC.sim.state}", expected crashed`;
+    if (!RC.sim.blast || !RC.sim.blast.parts.length) return 'no wreckage was produced';
+    // Three cars' worth of debris, spread out rather than stacked on one spot.
+    const parts = RC.sim.blast.parts;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const p of parts) {
+      minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+      minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+    }
+    const spread = Math.hypot(maxX - minX, maxY - minY);
+    if (spread < 3) return `all the wreckage landed within ${spread.toFixed(1)} m — one heap`;
+    RC.sim.cars = 4;
+  });
+
+  check('the loop presets are fast enough to stay on the track', () => {
+    // The other side of the same rule: a properly fed loop must NOT derail,
+    // or the presets would wreck themselves on load.
+    for (const key of ['looper', 'shuttle-loop']) {
+      const res = RC.loadPrefab(key);
+      if (!res.ok) return res.why;
+      RC.sim.cars = 4;
+      RC.sim.friction = false;
+      RC.resetSim();
+      runFor(240);
+      if (RC.sim.state === 'crashed') {
+        return `"${key}" crashed: ${RC.sim.note}`;
+      }
+    }
+  });
+
+  check('a spike tall enough catches the launch instead of crashing', () => {
+    // The shuttle loop's own spike is sized to stop a 22 m/s launch, so it must
+    // come home, not crash — the safe end of the same lesson.
+    const res = RC.loadPrefab('shuttle-loop');
+    if (!res.ok) return res.why;
+    RC.sim.cars = 2;
+    RC.sim.friction = false;
+    RC.sim.launchSpeed = 22;
+    RC.resetSim();
+    runFor(120);
+    if (RC.sim.state === 'crashed') return 'the shuttle loop crashed — its spike should be tall enough';
+    if (RC.sim.state !== 'finished') return `state "${RC.sim.state}" after 120 s (note "${RC.sim.note}")`;
+  });
+
+  check('shuttle mode makes an unfinished track testable, and off insists on a circuit', () => {
+    // A station and a short out-and-back ramp that never returns to the start.
+    RC.resetTrack();
+    for (const id of ['flat', 'flat-to-gentle-up', 'gentle-up', 'gentle-up', 'gentle-up-to-flat']) {
+      if (!RC.place(id)) return `${id} refused`;
+    }
+    if (RC.sameNode(RC.track.head, RC.track.start)) return 'the test track closed by accident';
+
+    RC.sim.shuttleMode = true;
+    let st = RC.circuitStatus();
+    if (st.kind !== 'shuttle' || !st.ok) return `with shuttle on, kind was "${st.kind}" (ok ${st.ok})`;
+    RC.resetSim();
+    if (!RC.startSim()) return 'shuttle on: Test refused a track with a station';
+
+    RC.sim.shuttleMode = false;
+    st = RC.circuitStatus();
+    if (st.kind !== 'open' || st.ok) return `with shuttle off, kind was "${st.kind}" (ok ${st.ok})`;
+    RC.resetSim();
+    if (RC.startSim()) return 'shuttle off: Test ran an unfinished, un-launched track';
+
+    RC.sim.shuttleMode = true;   // leave it as the app defaults
   });
 
   check('the default prefab completes a lap under gravity alone', () => {
@@ -1998,6 +2266,149 @@
     }
   });
 
+  check('features merge consecutive pieces and number each kind in build order', () => {
+    RC.resetTrack();
+    // A lift hill, a drop, a turn, an airtime hill, then another drop.
+    const seq = [
+      { id: 'flat-to-gentle-up', lift: true }, { id: 'gentle-up', lift: true },
+      { id: 'gentle-up-to-flat', lift: true },
+      { id: 'flat-to-gentle-down' }, { id: 'gentle-down' }, { id: 'gentle-down-to-flat' },
+      { id: 'turn-right-wide' },
+      { id: 'flat-to-gentle-up' }, { id: 'gentle-up-to-flat' },
+      { id: 'flat-to-gentle-down' }, { id: 'gentle-down-to-flat' }
+    ];
+    for (const st of seq) {
+      if (!RC.place(st.id, st)) return `${st.id} refused`;
+    }
+    const named = RC.features().filter(f => f.label).map(f => f.label);
+    // The station, then each run of like pieces as ONE feature.
+    const want = 'Station,Lift 1,Drop 1,Turn 1,Hill 1,Drop 2';
+    if (named.join(',') !== want) {
+      return `features came out "${named.join(',')}", expected "${want}"`;
+    }
+    // The three-piece lift is one feature, not three.
+    const lift = RC.features().find(f => f.label === 'Lift 1');
+    if (!(lift.s1 - lift.s0 > 10)) {
+      return `Lift 1 spans only ${(lift.s1 - lift.s0).toFixed(1)} m — the pieces did not merge`;
+    }
+  });
+
+  check('an S-bend reads as two turns, not one', () => {
+    RC.resetTrack();
+    for (const id of ['flat', 'turn-right-wide', 'turn-left-wide', 'flat']) {
+      if (!RC.place(id)) return `${id} refused`;
+    }
+    const turns = RC.features().filter(f => f.type === 'turn');
+    if (turns.length !== 2) {
+      return `${turns.length} turn feature(s) — turns going opposite ways must not merge`;
+    }
+    if (turns[0].label !== 'Turn 1' || turns[1].label !== 'Turn 2') {
+      return `turns labelled ${turns[0].label} and ${turns[1].label}`;
+    }
+  });
+
+  check('featureAt names the feature covering a point, and nothing on plain track', () => {
+    RC.resetTrack();
+    for (const id of ['flat', 'flat', 'turn-right-wide', 'flat', 'flat']) {
+      if (!RC.place(id)) return `${id} refused`;
+    }
+    const turn = RC.features().find(f => f.type === 'turn');
+    if (!turn) return 'no turn feature';
+    const hit = RC.featureAt(turn.sMid);
+    if (!hit || hit.label !== 'Turn 1') return `mid-turn resolved to ${hit && hit.label}`;
+    // Plain flat track is deliberately unnamed.
+    const flat = RC.features().find(f => f.type === 'flat' && f.s0 > turn.s1);
+    if (flat && RC.featureAt((flat.s0 + flat.s1) / 2)) {
+      return 'plain flat track was given a feature name';
+    }
+  });
+
+  check('ordinary airtime is not flagged as a fault', () => {
+    // Airtime is what an airtime hill is for. Only forces past the published
+    // limits should raise a warning, so a ride with gentle floater airtime and
+    // no other excess must come back with a clean sheet.
+    const L = RC.G_LIMITS;
+    if (!(L.airtimeGood < 0)) return 'airtimeGood should be a negative g figure';
+    if (!(L.airtimeHard < L.airtimeGood)) return 'the hard airtime limit must be beyond the good one';
+    if (!(L.vertExtreme > L.vertHigh)) return 'vertExtreme must be beyond vertHigh';
+    if (!(L.latExtreme > L.latHigh)) return 'latExtreme must be beyond latHigh';
+
+    RC.loadPrefab('first-drop');
+    RC.sim.cars = 4;
+    RC.sim.friction = false;
+    RC.resetSim();
+    runFor(240);
+    // The demo is spirited and does have airtime; that alone must not warn.
+    if (!(RC.sim.minVertG < 0)) return 'the default ride no longer has any airtime to test with';
+    // The old blanket "any negative g is a warning" rule is gone for good.
+    if (RC.sim.warnings.some(w => /lifted out of their seats/.test(w))) {
+      return 'the blanket airtime warning is still firing on every hill';
+    }
+    const airtimeWarnings = RC.sim.warnings.filter(w => /airtime/i.test(w));
+    if (RC.sim.minVertG >= L.airtimeGood && airtimeWarnings.length) {
+      return `airtime of ${RC.sim.minVertG.toFixed(2)} g is within limits but warned: ` +
+             `"${airtimeWarnings[0]}"`;
+    }
+  });
+
+  check('a repeated g-force complaint collapses to one line per feature', () => {
+    // The check fires on every substep the force holds for. The report must
+    // show one line for that turn, carrying the worst reading, not hundreds.
+    RC.track.pieces = [];
+    RC.track.start = { i: 4, j: 20, dir: 0, k: 20, g: 0 };
+    RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
+    const seq = ['flat-to-gentle-down'].concat(new Array(6).fill('gentle-down'))
+      .concat(['gentle-down-to-flat', 'flat', 'turn-right-tight', 'flat']);
+    for (const id of seq) {
+      if (!RC.place(id)) return `${id} refused`;
+    }
+    RC.sim.cars = 1;
+    RC.sim.friction = false;
+    RC.resetSim(6);
+    runFor(60);
+
+    const sideways = RC.sim.warnings.filter(w => /sideways/i.test(w));
+    // The turn itself, plus at most the smear onto the plain track either side
+    // of it (the curvature is blended across the joints) — not one per substep.
+    if (sideways.length > 2) {
+      return `${sideways.length} sideways warnings for one turn: ${sideways.join(' | ')}`;
+    }
+    // The worst reading has to survive the collapsing.
+    let quoted = 0;
+    for (const w of sideways) quoted = Math.max(quoted, parseFloat(w.match(/([\d.]+) g/)[1]));
+    if (Math.abs(quoted - RC.sim.maxLatG) > 0.1) {
+      return `worst warning quotes ${quoted} g but the peak was ${RC.sim.maxLatG.toFixed(2)} g`;
+    }
+    RC.sim.cars = 4;
+  });
+
+  check('a g-force warning names the feature that caused it', () => {
+    // A fast, unbanked tight turn: the complaint has to say which turn.
+    RC.track.pieces = [];
+    RC.track.start = { i: 4, j: 20, dir: 0, k: 20, g: 0 };
+    RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
+    const seq = ['flat-to-gentle-down'].concat(new Array(6).fill('gentle-down'))
+      .concat(['gentle-down-to-flat', 'flat', 'turn-right-tight', 'flat']);
+    for (const id of seq) {
+      if (!RC.place(id)) return `${id} refused`;
+    }
+    RC.sim.cars = 1;
+    RC.sim.friction = false;
+    RC.resetSim(6);
+    runFor(60);
+
+    const sideways = RC.sim.warnings.filter(w => /sideways/i.test(w));
+    if (!sideways.length) {
+      return `no sideways warning despite ${RC.sim.maxLatG.toFixed(2)} g lateral`;
+    }
+    if (!sideways.some(w => /Turn 1/.test(w))) {
+      return `no warning names the turn: ${sideways.join(' | ')}`;
+    }
+    RC.sim.cars = 4;
+  });
+
   check('piece spans are ordered, non-overlapping and cover the track', () => {
     RC.loadPrefab('first-drop');
     const spans = RC.pieceSpans();
@@ -2055,12 +2466,13 @@
   });
 
   check('the graph mode setter is well behaved', () => {
-    RC.setGraphMode('accel');
-    if (RC.graphMode() !== 'accel') return 'did not switch to accel';
-    RC.setGraphMode('energy');
-    if (RC.graphMode() !== 'energy') return 'did not switch back to energy';
+    // Three plots share the one window: the live bars and the two line plots.
+    for (const m of ['accel', 'energy', 'bars']) {
+      RC.setGraphMode(m);
+      if (RC.graphMode() !== m) return `did not switch to ${m}`;
+    }
     RC.setGraphMode('nonsense');
-    if (RC.graphMode() !== 'energy') return 'an unknown mode should fall back to energy';
+    if (RC.graphMode() !== 'bars') return 'an unknown mode should fall back to bars';
   });
 
   /* ---- report ---------------------------------------------------------- */

@@ -180,6 +180,7 @@
 
   /* ---- ride controls ---------------------------------------------------- */
   const btnTest = document.getElementById('btn-test');
+  const btnShuttle = document.getElementById('btn-shuttle');
   const roRide = document.getElementById('ro-ride');
 
   /* Only redraw a display when its window is actually open. */
@@ -197,8 +198,14 @@
     const sim = RC.sim;
     const e = RC.energy();
 
-    if (visible('win-energy')) {
-      RC.drawEnergyBars(document.getElementById('energy-bars'));
+    if (visible('win-graphs')) {
+      // Only the plot on show is drawn; the live readouts below it are useful
+      // whichever that is, so they are always kept up to date.
+      if (RC.graphMode() === 'bars') {
+        RC.drawEnergyBars(document.getElementById('graph-bars'));
+      } else {
+        RC.drawEnergyGraph(document.getElementById('graph-line'));
+      }
       setText('ro-e-v', Math.abs(sim.v).toFixed(1) + ' m/s');
       setText('ro-e-h', e.h.toFixed(2) + ' m');
       setText('ro-e-ke', RC.fmtEnergy(e.ke));
@@ -218,11 +225,7 @@
         lEl.textContent = Math.abs(g.lat).toFixed(2) + ' g' + side;
         lEl.style.color = RC.gColour(g.lat, 'lat');
       }
-      setText('e-mass', `Train: ${sim.cars} cars, ${(RC.trainMass() / 1000).toFixed(1)} t. ` +
-                        `Heights are measured from ground level.`);
-    }
-    if (visible('win-graph')) {
-      RC.drawEnergyGraph(document.getElementById('energy-graph'));
+      setText('e-mass', `${sim.cars} cars, ${(RC.trainMass() / 1000).toFixed(1)} t`);
     }
     if (visible('win-report')) {
       RC.updateReport();
@@ -230,11 +233,18 @@
   }
   RC.updateEnergyPanels = updateEnergyPanels;
 
+  function updateShuttleBtn() {
+    const on = RC.sim.shuttleMode;
+    btnShuttle.classList.toggle('active', on);
+    btnShuttle.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+
   function updateRideUI() {
     const sim = RC.sim;
     const running = sim.state === 'running';
     btnTest.textContent = running ? '■ Pause' : '▶ Test';
     btnTest.classList.toggle('active', running);
+    updateShuttleBtn();
 
     if (sim.note && sim.state !== 'running') {
       roRide.textContent = sim.note;
@@ -263,6 +273,17 @@
     state.dirty = true;
   });
 
+  // Switching shuttle mode changes whether an unfinished track is testable, so
+  // it invalidates any run in progress — put the train back at the station.
+  btnShuttle.addEventListener('click', () => {
+    RC.sim.shuttleMode = !RC.sim.shuttleMode;
+    RC.pauseSim();
+    RC.resetSim();
+    RC.resetEnergyScale();
+    updateRideUI();
+    state.dirty = true;
+  });
+
   /* Opening a window mid-run should draw it immediately, not on the next
      frame — which may never come if the sim is paused. */
   document.querySelectorAll('[data-window]').forEach(btn => {
@@ -280,17 +301,28 @@
     state.dirty = true;
   });
 
-  /* Graph mode toggle. */
+  /* Graph mode: the bar chart of the train's energy now, or one of the two
+     line plots along the track. Each mode owns one canvas and one legend. */
   const graphModeBtns = document.querySelectorAll('#graph-modes [data-graph]');
+
+  function syncGraphMode() {
+    const mode = RC.graphMode();
+    graphModeBtns.forEach(b => b.classList.toggle('active', b.dataset.graph === mode));
+    const show = (id, on) => {
+      const el = document.getElementById(id);
+      if (el) el.hidden = !on;
+    };
+    show('graph-bars', mode === 'bars');
+    show('graph-line', mode !== 'bars');
+    show('legend-bars', mode === 'bars');
+    show('legend-energy', mode === 'energy');
+    show('legend-accel', mode === 'accel');
+  }
+
   graphModeBtns.forEach(btn => {
     btn.addEventListener('click', () => {
-      const mode = btn.dataset.graph;
-      RC.setGraphMode(mode);
-      graphModeBtns.forEach(b => b.classList.toggle('active', b === btn));
-      const eLeg = document.getElementById('legend-energy');
-      const aLeg = document.getElementById('legend-accel');
-      if (eLeg) eLeg.hidden = mode !== 'energy';
-      if (aLeg) aLeg.hidden = mode !== 'accel';
+      RC.setGraphMode(btn.dataset.graph);
+      syncGraphMode();
       updateEnergyPanels();
     });
   });
@@ -316,6 +348,9 @@
       updateRideUI();
       state.dirty = true;
     }
+
+    // Keep the wreckage tumbling and settling after the run has ended.
+    if (RC.sim.blast && RC.stepBlast(dt)) state.dirty = true;
 
     if (state.dirty) {
       state.dirty = false;
@@ -354,6 +389,7 @@
   }
 
   RC.initWindows();
+  syncGraphMode();
   // Start with a working ride standing, so the page is useful before anything
   // is clicked. Falls back to a bare station if the prefab ever fails to build.
   const prefab = RC.loadPrefab('first-drop');

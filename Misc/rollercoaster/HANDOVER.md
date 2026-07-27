@@ -144,17 +144,21 @@ Generic and already finished. To add a window in a later phase you need **markup
 only**:
 
 ```html
-<section class="window" id="win-energy" hidden style="left:24px; top:76px; width:320px;">
-  <div class="window-hd"><span>Energy</span><button class="window-x" aria-label="Close">×</button></div>
+<section class="window" id="win-example" hidden style="left:24px; top:76px; width:320px;">
+  <div class="window-hd"><span>Example</span><button class="window-x" aria-label="Close">×</button></div>
   <div class="window-body">…</div>
 </section>
 ```
 
-plus a top-bar button with `data-window="win-energy"`. `RC.initWindows()` wires
+plus a top-bar button with `data-window="win-example"`. `RC.initWindows()` wires
 dragging, clamping into view, click-to-raise, the close button, the active state
 on the toggle, and Escape-closes-topmost. No per-window JavaScript.
 
-`.readout-row` is already defined in `style.css` for the energy/report windows.
+`.readout-row` is already defined in `style.css` for the graphs/report windows.
+
+Note: `[hidden] { display: none !important }` sits near the top of `style.css`. It
+has to, because the browser's own `[hidden]` rule loses to any class that sets
+`display` — which is how a hidden legend stayed on screen for a while.
 
 ### The car frame — where a lot of correctness lives
 

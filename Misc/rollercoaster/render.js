@@ -178,6 +178,8 @@
   const CAR_COVER_M = 3.0;
 
   function coverSorter(cam) {
+    // Wrecked: there is no train on the rails to pull the track's depth forward.
+    if (RC.sim && RC.sim.blast) return null;
     const cars = (RC.sim && RC.carStates) ? RC.carStates() : [];
     if (!cars.length) return null;
     const closed = RC.isClosed();
@@ -274,6 +276,9 @@
   const CAR_TOP_LIGHTEN = '#ffffff';
   const CAR_EDGE = 'rgba(15, 30, 45, 0.75)';
 
+  // Chunks the wreck breaks into: car colours plus dark metal and a spark or two.
+  const DEBRIS_COLOURS = ['#cf3a2f', '#1f6fb2', '#2b3a45', '#c9702a', '#e0a53a'];
+
   function quad(ctx, p, fill, stroke) {
     ctx.beginPath();
     ctx.moveTo(p[0].x, p[0].y);
@@ -324,9 +329,42 @@
     quad(ctx, hi, 'rgba(0,0,0,0)', CAR_EDGE);
   }
 
+  /* A chunk of wreckage: a small box tumbling on the ground. */
+  function drawDebris(ctx, d, cam, view) {
+    const p = d.part, h = p.size;
+    const S = (dx, dy, dz) => RC.toScreen(
+      (p.x + dx) / RC.TILE_M, (p.y + dy) / RC.TILE_M, (p.z + dz) / RC.LEVEL_M, cam, view);
+    const t0 = S(-h, -h, 2 * h), t1 = S(h, -h, 2 * h), t2 = S(h, h, 2 * h), t3 = S(-h, h, 2 * h);
+    const b1 = S(h, -h, 0), b2 = S(h, h, 0), b3 = S(-h, h, 0);
+    quad(ctx, [b1, b2, t2, t1], p.colour, null);
+    quad(ctx, [b2, b3, t3, t2], p.colour, null);
+    ctx.globalAlpha = 0.28;
+    quad(ctx, [b1, b2, t2, t1], '#000', null);
+    ctx.globalAlpha = 0.14;
+    quad(ctx, [b2, b3, t3, t2], '#000', null);
+    ctx.globalAlpha = 1;
+    quad(ctx, [t0, t1, t2, t3], p.colour, CAR_EDGE);
+  }
+
   RC.trainDrawables = function (cam) {
     const out = [];
-    if (!RC.sim || RC.trackPath().pts.length < 2) return out;
+    const sim = RC.sim;
+    if (!sim) return out;
+
+    // Wrecked: the scattered debris stands in for the train.
+    if (sim.blast) {
+      for (const part of sim.blast.parts) {
+        out.push({
+          depth: RC.depth(part.x / RC.TILE_M, part.y / RC.TILE_M, part.z / RC.LEVEL_M, cam.rot) + 0.5,
+          draw: drawDebris, part
+        });
+      }
+      return out;
+    }
+
+    if (RC.trackPath().pts.length < 2) return out;
+    // Cars hanging off the end come back from carStates like any others, so
+    // they need no special case here — they are simply drawn past the rails.
     const cars = RC.carStates();
     for (let n = 0; n < cars.length; n++) {
       const p = cars[n];
@@ -336,6 +374,52 @@
       });
     }
     return out;
+  };
+
+  /* Wreckage from ONE car breaking up: chunks thrown from where that car was,
+     which then fall under gravity and settle. World METRES. Cars still high up
+     when the front hit the ground shed their parts from up there, so the
+     wreckage ends up strung along the fall rather than heaped in one place. */
+  RC.makeDebris = function (c) {
+    const parts = [];
+    const spread = 2 + Math.min(8, (c.impact || 0) * 0.3);
+    for (let n = 0; n < 8; n++) {
+      const ang = Math.random() * Math.PI * 2;
+      const horiz = spread * (0.4 + Math.random() * 0.8);
+      parts.push({
+        x: c.x + (Math.random() - 0.5) * 0.6,
+        y: c.y + (Math.random() - 0.5) * 0.6,
+        z: (c.z || 0) + 0.3 + Math.random() * 0.6,
+        // Thrown outwards, and carried on in the direction the car was going.
+        vx: Math.cos(ang) * horiz + c.fx * spread * 0.4,
+        vy: Math.sin(ang) * horiz + c.fy * spread * 0.4,
+        vz: 3 + Math.random() * 7,
+        size: 0.25 + Math.random() * 0.5,
+        colour: DEBRIS_COLOURS[(Math.random() * DEBRIS_COLOURS.length) | 0],
+        rest: false
+      });
+    }
+    return parts;
+  };
+
+  /* Advance the wreckage a frame. Returns true while anything is still moving,
+     so the animation loop knows to keep drawing. */
+  RC.stepBlast = function (dt) {
+    const b = RC.sim && RC.sim.blast;
+    if (!b) return false;
+    let moving = false;
+    for (const p of b.parts) {
+      if (p.rest) continue;
+      p.vz -= 9.81 * dt;
+      p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+      if (p.z <= 0) {
+        p.z = 0;
+        if (Math.abs(p.vz) < 1.3) { p.vx *= 0.4; p.vy *= 0.4; p.vz = 0; p.rest = true; }
+        else { p.vz = -p.vz * 0.4; p.vx *= 0.55; p.vy *= 0.55; }   // bounce
+      }
+      if (!p.rest) moving = true;
+    }
+    return moving;
   };
 
   /* ---- height labels ----------------------------------------------------
