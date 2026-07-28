@@ -2052,20 +2052,33 @@
     RC.resetSim();
     runFor(240);
 
-    // Correlate over the FREE-COASTING section only. Two things dump or add
-    // energy and would swamp the gravity-driven swap: the lift (adds ~motor
-    // energy while pinning speed) and the station brake (dumps ~290 kJ of
-    // kinetic energy against zero potential as it stops the train). Both show
-    // up in the trace — "supplied" rises only while the lift works, "th" rises
-    // only while the brakes bite — so the coasting window is where supplied is
-    // at its max and thermal at its min.
+    /* Correlate over the FREE-COASTING section only. Several things add or dump
+       energy and would swamp the gravity-driven swap: the lift and the station's
+       drive tyres put energy in, the brake run and the station brake take it out.
+
+       Coasting is simply the samples where NEITHER moved — supplied unchanged
+       and thermal unchanged since the sample before. Picking the window by
+       where supplied is highest instead used to work only because the lift was
+       the last thing to do any work; once the tyres that walk the train into
+       its berth also counted as motor energy, "highest supplied" meant the end
+       of the run and the window came out empty.
+
+       Take the LONGEST CONTIGUOUS such stretch rather than every coasting
+       sample there is. The run out to the station after the brakes qualifies
+       too, and it is flat: potential barely moves there while kinetic bleeds
+       away, which is not a trade and washes the correlation out to nothing. */
     const trace = RC.sim.trace;
-    let maxSupplied = -Infinity, minTh = Infinity;
-    for (const p of trace) {
-      if (p.supplied > maxSupplied) maxSupplied = p.supplied;
-      if (p.th < minTh) minTh = p.th;
+    let best = [], run = [];
+    for (let n = 1; n < trace.length; n++) {
+      const a = trace[n - 1], b = trace[n];
+      if (Math.abs(b.supplied - a.supplied) < 1e-6 && Math.abs(b.th - a.th) < 1e-6) {
+        run.push(b);
+        if (run.length > best.length) best = run;
+      } else {
+        run = [];
+      }
     }
-    const tr = trace.filter(p => p.supplied > maxSupplied - 1 && p.th < minTh + 1);
+    const tr = best;
     if (tr.length < 100) return `only ${tr.length} free-coasting samples`;
 
     // Over that window total mechanical energy is constant, so as the train

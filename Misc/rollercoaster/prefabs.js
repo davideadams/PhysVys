@@ -55,11 +55,16 @@
         [{ id: 'flat-to-gentle-down' }],
         rep(3, 'gentle-down'),
         [{ id: 'gentle-down-to-flat' }],
-        rep(6, 'flat'),
-        // One brake piece, not two. Two took the train down to a walk with a
-        // whole banked turn still to travel, and with friction on it died a
-        // metre short of the station — a ride that worked only because losses
-        // were switched off is not much of a demonstration of losses.
+        /* One brake piece, not two. Two took the train down to a walk with a
+           whole banked turn still to travel, and with friction on it died a
+           metre short of the station — a ride that worked only because losses
+           were switched off is not much of a demonstration of losses.
+
+           The piece it gave up is replaced by plain track, not deleted. This
+           circuit is closed by hand and every piece is a tile of it: dropping
+           one left the head a tile short of the station, which quietly turned
+           the ride into a shuttle and sent the train off the end. */
+        rep(7, 'flat'),
         [{ id: 'brake' }],
         [{ id: 'turn-right-wide' }]
       )
