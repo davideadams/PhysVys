@@ -76,8 +76,11 @@
     else if (def.launch) out.special = 'launch';
     else if (def.kind === 'loop') out.special = pe.defId;      // loop-left / loop-right
     else if (def.kind === 'turn') {
-      const d = DIRECTIONS.find(x => x.piece === pe.defId);
+      // Sloped turns are the flat id plus a suffix, so match on the prefix and
+      // read the grade off the piece itself.
+      const d = DIRECTIONS.find(x => x.piece && pe.defId.indexOf(x.piece) === 0);
       out.dir = d ? d.id : 'straight';
+      out.slope = def.gOut;
     } else {
       out.slope = def.gOut;   // straight/transition: the slope you exit at
     }
@@ -126,11 +129,24 @@
     return !sel.special && !!(dir && dir.piece);
   }
 
+  /* Slope suffix on a turn's id, matching the sloped variants in track.js.
+     A turn holds its slope rather than changing it, so there is no sloped
+     equivalent of the transition straights: the track has to already be on
+     that grade before it can curve along it. */
+  const TURN_SUFFIX = {};
+  TURN_SUFFIX[S.GENTLE_DOWN] = '-gentle-down';
+  TURN_SUFFIX[S.STEEP_DOWN] = '-steep-down';
+  TURN_SUFFIX[S.GENTLE_UP] = '-gentle-up';
+  TURN_SUFFIX[S.STEEP_UP] = '-steep-up';
+
   /* What would "build" place, for a given selection? */
   function resolveWith(dirId, slopeG, specialId) {
     if (specialId) return RC.pieceDef(specialId);
     const dir = DIRECTIONS.find(d => d.id === dirId);
-    if (dir && dir.piece) return RC.pieceDef(dir.piece);
+    if (dir && dir.piece) {
+      const suffix = TURN_SUFFIX[slopeG];
+      return RC.pieceDef(suffix ? dir.piece + suffix : dir.piece);
+    }
     const head = RC.track.head;
     if (!head) return null;
     return STRAIGHTS.get(head.g + '>' + slopeG) || null;

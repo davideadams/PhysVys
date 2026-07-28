@@ -233,10 +233,26 @@
   }
   RC.updateEnergyPanels = updateEnergyPanels;
 
+  /* Shuttle is a fallback for track that is not a closed circuit: it lets an
+     unfinished layout be run out-and-back instead of refusing to test. On a
+     circuit it has no bearing at all — circuitStatus settles that the train
+     goes round before it ever consults the setting — so the button must not
+     sit there lit, implying the ride is being run as a shuttle when it is not. */
   function updateShuttleBtn() {
-    const on = RC.sim.shuttleMode;
+    let kind = 'empty';
+    try { kind = RC.circuitStatus().kind; } catch (e) { kind = 'empty'; }
+    const settled = kind === 'closed' || kind === 'closed-nostation' || kind === 'demo';
+    const on = RC.sim.shuttleMode && !settled;
+
+    btnShuttle.disabled = settled;
     btnShuttle.classList.toggle('active', on);
     btnShuttle.setAttribute('aria-pressed', on ? 'true' : 'false');
+    btnShuttle.title = settled
+      ? (kind === 'demo'
+          ? 'This is a demonstration — the trains run their own tracks'
+          : 'This track is a complete circuit, so the train goes round it')
+      : 'Run a track that isn\'t a full circuit as an out-and-back shuttle, ' +
+        'instead of requiring a closed loop';
   }
 
   function updateRideUI() {
@@ -329,6 +345,17 @@
     });
   });
 
+  /* Keep the working track for next time, a moment after the last edit rather
+     than on every one — building a lift hill is a rapid burst of clicks, and
+     serialising the whole track on each is wasted work. */
+  let autosaveTimer = 0;
+  let suppressAutosave = false;   // set while a preset or saved track is loaded
+  function queueAutosave() {
+    if (!RC.autosave || suppressAutosave) return;
+    clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(() => { try { RC.autosave(); } catch (e) { /* not fatal */ } }, 400);
+  }
+
   /* Called by build.js whenever the track is edited. */
   RC.onTrackEdit = function () {
     RC.pauseSim();
@@ -337,6 +364,7 @@
     // The release slider's range is the track length, so it has to follow.
     RC.syncTrainControls && RC.syncTrainControls();
     updateRideUI();
+    queueAutosave();
   };
 
   /* ---- frame ------------------------------------------------------------ */
@@ -365,8 +393,28 @@
 
   RC.requestRender = function () { state.dirty = true; };
 
-  /* ---- presets ---------------------------------------------------------- */
+  /* ---- presets and saved tracks -----------------------------------------
+     Both live in the one dropdown, because from the student's side they are
+     the same action: put a track on the screen. Saved ones carry a "save:"
+     prefix so a track named after a preset cannot shadow it. */
   const presetSelect = document.getElementById('preset-select');
+  const btnSave = document.getElementById('btn-save');
+  const btnDeleteSave = document.getElementById('btn-delete-save');
+
+  const SAVE_PREFIX = 'save:';
+  const savedName = v => v.indexOf(SAVE_PREFIX) === 0 ? v.slice(SAVE_PREFIX.length) : null;
+
+  function afterTrackChange() {
+    // Putting someone else's track on the screen is not the student's work, so
+    // it must not overwrite what they had half-built. Peeking at a preset and
+    // leaving should bring you back to your own track, not to the preset.
+    suppressAutosave = true;
+    RC.refreshBuild();       // rebuilds palette state, resets the sim, resyncs controls
+    suppressAutosave = false;
+    RC.resetEnergyScale();
+    updateRideUI();
+    state.dirty = true;
+  }
 
   function loadPreset(key) {
     const res = RC.loadPrefab(key);
@@ -374,38 +422,165 @@
       console.warn('Preset failed to build:', res.why);
       RC.resetTrack();
     }
-    RC.refreshBuild();       // rebuilds palette state, resets the sim, resyncs controls
-    RC.resetEnergyScale();
-    updateRideUI();
-    state.dirty = true;
+    afterTrackChange();
     return res.ok;
   }
 
-  function initPresets(defaultKey) {
+  function setBuildMessage(text) {
+    const el = document.getElementById('build-msg');
+    if (el) el.textContent = text || '';
+  }
+
+  /* Rebuild the dropdown: the ready-made rides, then whatever the student has
+     saved. Called again after every save and delete. */
+  function refreshTrackList(select) {
+    presetSelect.innerHTML = '';
+
+    const presets = document.createElement('optgroup');
+    presets.label = 'Ready-made';
     for (const key of Object.keys(RC.PREFABS)) {
       const opt = document.createElement('option');
       opt.value = key;
       opt.textContent = RC.PREFABS[key].name;
-      presetSelect.appendChild(opt);
+      presets.appendChild(opt);
     }
-    presetSelect.value = defaultKey;
-    presetSelect.addEventListener('change', () => loadPreset(presetSelect.value));
+    presetSelect.appendChild(presets);
+
+    const names = RC.listSaves ? RC.listSaves() : [];
+    if (names.length) {
+      const mine = document.createElement('optgroup');
+      mine.label = 'Saved';
+      for (const name of names) {
+        const opt = document.createElement('option');
+        opt.value = SAVE_PREFIX + name;
+        opt.textContent = name;
+        mine.appendChild(opt);
+      }
+      presetSelect.appendChild(mine);
+    }
+
+    if (select != null) presetSelect.value = select;
+    btnDeleteSave.hidden = !savedName(presetSelect.value);
   }
+
+  function chooseTrack(value) {
+    const name = savedName(value);
+    if (name === null) { loadPreset(value); btnDeleteSave.hidden = true; return; }
+    const res = RC.loadSave(name);
+    if (!res.ok) { setBuildMessage(res.why); return; }
+    afterTrackChange();
+    setBuildMessage('');
+    btnDeleteSave.hidden = false;
+  }
+
+  function initTrackList(defaultKey) {
+    refreshTrackList(defaultKey);
+    presetSelect.addEventListener('change', () => chooseTrack(presetSelect.value));
+
+    if (!RC.storageAvailable()) {
+      // Nothing can be kept, so do not offer to keep it.
+      btnSave.disabled = true;
+      btnSave.title = 'This browser will not let the page store anything';
+      return;
+    }
+
+    btnSave.addEventListener('click', () => {
+      const current = savedName(presetSelect.value);
+      const name = window.prompt('Name for this track:', current || '');
+      if (name === null) return;                 // cancelled
+      const res = RC.saveTrack(name);
+      if (!res.ok) { setBuildMessage(res.why); return; }
+      RC.autosave();
+      refreshTrackList(SAVE_PREFIX + res.name);
+      setBuildMessage(`Saved as "${res.name}".`);
+    });
+
+    btnDeleteSave.addEventListener('click', () => {
+      const name = savedName(presetSelect.value);
+      if (!name) return;
+      if (!window.confirm(`Delete the saved track "${name}"?`)) return;
+      RC.deleteSave(name);
+      refreshTrackList(defaultKey);
+      setBuildMessage(`Deleted "${name}".`);
+    });
+  }
+
+  /* ---- handing work in ---------------------------------------------------
+     The name is asked for once and kept, because a student exporting a second
+     time after fixing something should not have to type it again. */
+  const NAME_KEY = 'physvys.rc.student';
+
+  function studentName(force) {
+    let held = '';
+    try { held = window.localStorage.getItem(NAME_KEY) || ''; } catch (e) { held = ''; }
+    if (held && !force) return held;
+    const given = window.prompt('Your name, so your teacher knows whose this is:', held);
+    if (given === null) return null;                 // cancelled
+    try { window.localStorage.setItem(NAME_KEY, given.trim()); } catch (e) { /* fine */ }
+    return given.trim();
+  }
+
+  const btnExport = document.getElementById('btn-export');
+  const btnExportCsv = document.getElementById('btn-export-csv');
+
+  // The Build window may well be closed while the Report is open, so this
+  // reports next to the buttons that caused it rather than over there.
+  function setExportMessage(text) {
+    const el = document.getElementById('export-msg');
+    if (el) el.textContent = text || '';
+  }
+
+  if (btnExport) btnExport.addEventListener('click', () => {
+    const who = studentName(false);
+    if (who === null) return;
+    setExportMessage('Building the summary…');
+    try {
+      RC.exportSummary(who);
+      setExportMessage('Summary saved to your downloads.');
+    } catch (e) {
+      console.warn('Export failed:', e);
+      setExportMessage('Could not build the summary.');
+    }
+  });
+
+  if (btnExportCsv) btnExportCsv.addEventListener('click', () => {
+    const who = studentName(false);
+    if (who === null) return;
+    const res = RC.exportTraceCSV(who);
+    setExportMessage(res.ok ? 'Data saved to your downloads.' : res.why);
+  });
 
   RC.initWindows();
   syncGraphMode();
-  // Start with a working ride standing, so the page is useful before anything
-  // is clicked. Falls back to a bare station if the prefab ever fails to build.
-  const prefab = RC.loadPrefab('first-drop');
+
+  /* Start with a working ride standing, so the page is useful before anything
+     is clicked. Falls back to a bare station if the prefab ever fails. */
+  const DEFAULT_TRACK = 'first-drop';
+  const prefab = RC.loadPrefab(DEFAULT_TRACK);
   if (!prefab.ok) {
     console.warn('Prefab failed to build:', prefab.why);
     RC.resetTrack();
   }
+
+  /* ...unless something was left half-built last visit, in which case that is
+     what the student came back for. A save that cannot be read is not worth
+     breaking the page over: the default ride is already standing behind it. */
+  let opening = DEFAULT_TRACK;
+  try {
+    if (RC.hasAutosave && RC.hasAutosave()) {
+      const back = RC.restoreAutosave();
+      if (back.ok) opening = '';
+      else console.warn('Could not restore the last track:', back.why);
+    }
+  } catch (e) {
+    console.warn('Could not restore the last track:', e);
+  }
+
   RC.initBuild();
   RC.resetSim();
   RC.resetEnergyScale();
   RC.initControls();
-  initPresets('first-drop');
+  initTrackList(opening);
   updateRideUI();
   resize();
   requestAnimationFrame(frame);

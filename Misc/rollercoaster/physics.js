@@ -17,6 +17,11 @@
   const MAX_FRAME = 0.1;     // s — ignore huge gaps after a tab switch
   const STATION_BRAKE = 5;      // m/s^2 once the lap is done
   const STATION_DISPATCH = 2.5; // m/s — drive tyres pushing the train out
+  const STATION_HOME = 1.5;     // m/s — and walking it back into its berth
+  /* m/s^2 — how hard a brake run bites. About 1.5 g, which is a firm but
+     ordinary trim brake; two pieces of it take a train from 16 m/s to a walk,
+     which is roughly what the old instant clamp did. */
+  const BRAKE_DECEL = 15;
 
   /* ---- what a real coaster is allowed to pull ---------------------------
      Roughly the envelopes in the ride-design standards (ASTM F2291 and
@@ -346,6 +351,37 @@
     return { a, heatRate };
   }
 
+  /* Bring a train that has finished its ride back to exactly where it set off
+     from, the way the real thing does: the station's drive tyres slow it if it
+     arrives quickly and carry it the rest of the way at a walking pace.
+
+     It used to stop as soon as it was under half a metre per second and snap to
+     the berth, which took a train from the station THRESHOLD to its berth in
+     one frame — the run appeared to end the moment the front car reached the
+     platform, a dozen metres short of where it started. Now it drives in.
+
+     `sign` is +1 when the berth lies ahead (a circuit, arriving forwards) and
+     -1 when it lies behind (a shuttle, rolling back in). Returns true once the
+     train is home. */
+  function stationHome(sim, m, dt, sign, onStation) {
+    if ((sim.startS - sim.s) * sign <= 0) return true;
+    if (!onStation) return false;              // still out on the track
+
+    const closing = sim.v * sign;              // how fast it is nearing the berth
+    const target = closing > STATION_HOME
+      ? Math.max(STATION_HOME, closing - STATION_BRAKE * dt)
+      : STATION_HOME;
+
+    // Slowing it down sheds energy as heat; nudging it along costs the motor.
+    const before = 0.5 * m * sim.v * sim.v;
+    const after = 0.5 * m * target * target;
+    if (after > before) sim.eMotor += after - before;
+    else sim.eThermal += before - after;
+
+    sim.v = target * sign;
+    return false;
+  }
+
   /* ---- one physics substep --------------------------------------------- */
   function substep(dt) {
     const sim = RC.sim;
@@ -394,14 +430,19 @@
       sim.v = sim.launchSpeed;
     }
 
-    // Brakes bleed energy to heat.
+    /* Brakes bleed energy to heat, at a rate, over the length of the brake run
+       — they do not simply clamp the train to the brake speed the instant it
+       touches one. Clamping made the number of brake pieces meaningless: one
+       stopped a train exactly as hard as four, and "shorten the brake run" was
+       not something a student could do. A run now bites over its own length,
+       and cannot take a train below the speed it is set to hold. */
     const onBrake = cars.some(p => p.def && p.def.brake);
     if (onBrake && Math.abs(sim.v) > sim.brakeSpeed) {
-      const target = Math.sign(sim.v) * sim.brakeSpeed;
-      const dv = target - sim.v;
-      const lost = 0.5 * m * (sim.v * sim.v - target * target);
-      sim.eThermal += Math.max(0, lost);
-      sim.v += dv;
+      const sign = Math.sign(sim.v);
+      const speed = Math.abs(sim.v);
+      const after = Math.max(sim.brakeSpeed, speed - BRAKE_DECEL * dt);
+      sim.eThermal += 0.5 * m * (speed * speed - after * after);
+      sim.v = sign * after;
     }
 
     sim.s += sim.v * dt;
@@ -552,17 +593,8 @@
       }
       if (sim.lapDone) {
         const onStation = cars.some(p => p.def && p.def.station);
-        if (onStation && sim.v > 0) {
-          const dv = Math.min(sim.v, STATION_BRAKE * dt);
-          const after = sim.v - dv;
-          sim.eThermal += 0.5 * m * (sim.v * sim.v - after * after);
-          sim.v = after;
-        }
-        const berthed = sim.s >= sim.startS;
-        // Below a crawl the station's drive tyres see it home; without this
-        // a train that brakes early would stall short of its berth.
-        const crawling = sim.v < 0.5;
-        if (berthed || crawling) {
+        // The berth is ahead of it: it came round and pulls forward into place.
+        if (stationHome(sim, m, dt, 1, onStation)) {
           sim.eThermal += 0.5 * m * sim.v * sim.v;
           sim.s = sim.startS;
           sim.v = 0;
@@ -586,20 +618,15 @@
       // gated on actually being ON the station — otherwise the crawl at the
       // top of the spike (|v| ~ 0 as it reverses) would wrongly "finish" the
       // run out on the spike and leak all its energy.
-      if (sim.launchedOut && sim.v < 0) {
-        const onStation = cars.some(p => p.def && p.def.station);
-        if (onStation) {
-          const dv = Math.min(-sim.v, STATION_BRAKE * dt);
-          const after = sim.v + dv;   // v is negative; ease it toward zero
-          sim.eThermal += 0.5 * m * (sim.v * sim.v - after * after);
-          sim.v = after;
-          if (sim.s <= sim.startS || Math.abs(sim.v) < 0.5) {
-            sim.eThermal += 0.5 * m * sim.v * sim.v;
-            sim.s = sim.startS;
-            sim.v = 0;
-            sim.state = 'finished';
-            sim.note = 'The shuttle rolled back to the station.';
-          }
+      const onStation = cars.some(p => p.def && p.def.station);
+      if (sim.launchedOut && onStation && sim.v <= 0) {
+        // The berth is behind it: it rolls back in the way it came out.
+        if (stationHome(sim, m, dt, -1, true)) {
+          sim.eThermal += 0.5 * m * sim.v * sim.v;
+          sim.s = sim.startS;
+          sim.v = 0;
+          sim.state = 'finished';
+          sim.note = 'The shuttle rolled back to the station.';
         }
       }
     } else {

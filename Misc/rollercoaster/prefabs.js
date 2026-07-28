@@ -56,7 +56,11 @@
         rep(3, 'gentle-down'),
         [{ id: 'gentle-down-to-flat' }],
         rep(6, 'flat'),
-        [{ id: 'brake' }, { id: 'brake' }],
+        // One brake piece, not two. Two took the train down to a walk with a
+        // whole banked turn still to travel, and with friction on it died a
+        // metre short of the station — a ride that worked only because losses
+        // were switched off is not much of a demonstration of losses.
+        [{ id: 'brake' }],
         [{ id: 'turn-right-wide' }]
       )
     },
@@ -163,6 +167,77 @@
       }
     },
 
+    /* A mine train after Big Thunder Mountain Railroad. Not a replica — quarter
+       turns come in two radii and heights in whole metres, so the proportions
+       round off — but the shape of the ride is there: three chain lifts, three
+       modest drops rather than one big one, banked curves throughout, and the
+       last and tallest lift feeding a banked curving drop into the brake run.
+
+       No inversions, because it has none.
+
+       It began with a full 360-degree helix off the third lift, which had to
+       go. A helix turning through PHI at pitch theta drops r*PHI*sin(theta),
+       so v^2 = 2g*r*PHI*sin(theta) and the lateral v^2/r = 2g*PHI*sin(theta):
+       the radius cancels. A full circle at our shallowest grade is 5.6 g at the
+       bottom whatever radius it is drawn at, and no amount of widening saves
+       it. A quarter turn on the same grade is 1.4 g. So the drop curves through
+       ninety degrees, not three hundred and sixty, and it is placed straight
+       off the lift where the train is still doing walking pace.
+
+       The circuit closes exactly on its own — the auto-close solver is not
+       involved. Four right turns, one per corner, is what brings it back to
+       the station on the same heading. */
+    'big-thunder': {
+      name: 'Big Thunder Mountain',
+      blurb: 'A runaway mine train: three lift hills, three drops, banked curves ' +
+             'all the way round and a helix into the final brake run.',
+      start: { i: 7, j: 9, dir: 0, k: 0, g: 0 },
+      build: [].concat(
+        rep(3, 'station'),
+
+        // Lift 1, out of the station: 0 -> 14 m.
+        [{ id: 'flat-to-gentle-up', lift: true }],
+        rep(6, 'gentle-up', { lift: true }),
+        [{ id: 'gentle-up-to-flat', lift: true }],
+        rep(5, 'flat'),
+        [{ id: 'turn-right-wide', bank: true }],
+
+        // Drop 1: 14 -> 4, then straight into the second lift.
+        [{ id: 'flat-to-gentle-down' }],
+        rep(4, 'gentle-down'),
+        [{ id: 'gentle-down-to-flat' }],
+        [{ id: 'flat' }],
+        [{ id: 'flat-to-gentle-up', lift: true }],
+        rep(5, 'gentle-up', { lift: true }),
+        [{ id: 'gentle-up-to-flat', lift: true }],   // 4 -> 16 m
+        [{ id: 'flat' }],
+        [{ id: 'turn-right-wide', bank: true }],
+
+        // Drop 2: 16 -> 6, then the tallest lift.
+        [{ id: 'flat-to-gentle-down' }],
+        rep(4, 'gentle-down'),
+        [{ id: 'gentle-down-to-flat' }],
+        [{ id: 'flat' }],
+        [{ id: 'flat-to-gentle-up', lift: true }],
+        rep(5, 'gentle-up', { lift: true }),
+        [{ id: 'gentle-up-to-flat', lift: true }],   // 6 -> 18 m
+        [{ id: 'flat' }],
+
+        // The finale, straight off the lift while the train is still crawling:
+        // the drop curves away through a banked quarter turn, then runs out
+        // straight to the ground.
+        [{ id: 'flat-to-gentle-down' }],
+        [{ id: 'turn-right-wide-gentle-down', bank: true }],   // 17 -> 9 m
+        rep(4, 'gentle-down'),
+        [{ id: 'gentle-down-to-flat' }],                       // 9 -> 0 m
+
+        // Brake into the station.
+        rep(8, 'flat'),
+        rep(2, 'brake'),
+        [{ id: 'turn-right-wide', bank: true }]
+      )
+    },
+
     'shuttle-loop': {
       name: 'Shuttle Loop',
       blurb: 'Launched from the station through a loop and up a tall spike, then rolls back ' +
@@ -254,6 +329,17 @@
 
     RC.resetTrack();
     if (prefab.demo) return loadDemo(prefab);
+
+    /* A preset may place its own station rather than take the one in the middle
+       of the park that RC.resetTrack lays down. A layout of any size has to, or
+       it can only ever grow into the quarter of the park that happens to lie
+       ahead of that fixed spot. Such a preset builds its own station pieces. */
+    if (prefab.start) {
+      RC.track.pieces = [];
+      RC.track.start = Object.assign({}, prefab.start);
+      RC.track.head = Object.assign({}, prefab.start);
+      RC.version++;
+    }
     for (let n = 0; n < prefab.build.length; n++) {
       const step = prefab.build[n];
       if (!RC.place(step.id, step)) {

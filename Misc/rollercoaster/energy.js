@@ -494,34 +494,53 @@
               `</tr>`;
     }
     html += `</tbody></table>`;
-
-    // Say plainly whether the speeds agree, and if not, why not.
-    const got = rows.filter(r => r.vGround !== null).map(r => r.vGround);
-    if (got.length === rows.length) {
-      const spread = Math.max.apply(null, got) - Math.min.apply(null, got);
-      const ideal = Math.sqrt(2 * 9.81 * RC.demo.drop);
-      html += spread <= 0.15
-        ? `<p class="report-note">All ${rows.length} reached the bottom at the same speed, ` +
-          `about ${ideal.toFixed(1)}&nbsp;m/s — the &radic;(2gh) for a ${RC.demo.drop}&nbsp;m ` +
-          `drop, whichever way down they came.</p>`
-        : `<p class="report-note">The speeds differ by ${spread.toFixed(1)}&nbsp;m/s. With ` +
-          `friction on they must: the losses follow the LENGTH of each path, not the ` +
-          `height it drops, so the long shallow route gives up the most.</p>`;
-    }
     return html;
   }
 
-  RC.updateReport = function () {
-    const el = document.getElementById('report-body');
-    if (!el) return;
+  /* What the run was made under. Two students handing in the same track get
+     different numbers if one had friction on, so the conditions have to travel
+     with the figures or the figures cannot be compared.
+
+     Only what bears on this track is listed: the friction constants are no use
+     when friction is off, and a lift speed means nothing on a ride with no
+     chain on it. */
+  function settingsSection() {
+    const sim = RC.sim;
+    let hasLift = false, hasBrake = false, hasLaunch = false;
+    for (const p of RC.track.pieces) {
+      const def = RC.pieceDef(p.defId);
+      if (p.lift) hasLift = true;
+      if (def.brake) hasBrake = true;
+      if (def.launch) hasLaunch = true;
+    }
+
+    let html = `<div class="report-hd">Settings</div>`;
+    html += row('Train', `${sim.cars} ${sim.cars === 1 ? 'car' : 'cars'}, ` +
+                         `${(RC.trainMass() / 1000).toFixed(1)} t`);
+    html += row('Released from', sim.releaseS == null
+      ? 'the station' : sim.releaseS.toFixed(1) + ' m along');
+    html += row('Friction', sim.friction ? 'on' : 'off');
+    if (sim.friction) {
+      html += row('Rolling resistance <span class="muted">&mu;</span>', sim.mu.toFixed(3));
+      html += row('Air drag <span class="muted">k</span>', sim.kDrag.toFixed(4));
+    }
+    if (hasLift) html += row('Chain lift speed', sim.liftSpeed.toFixed(1) + ' m/s');
+    if (hasBrake) html += row('Brake speed', sim.brakeSpeed.toFixed(1) + ' m/s');
+    if (hasLaunch) html += row('Launch speed', sim.launchSpeed.toFixed(1) + ' m/s');
+    return html;
+  }
+
+  /* The report as a string, so it can be written to the page or dropped into an
+     exported document without either having to know about the other. */
+  RC.reportHTML = function () {
     const sim = RC.sim;
     const e = RC.energy();
     const st = RC.circuitStatus();
 
     if (!sim.time) {
-      el.innerHTML = row('Track length', RC.trackLength().toFixed(0) + ' m') +
-                     row('Circuit', st.label);
-      return;
+      return row('Track length', RC.trackLength().toFixed(0) + ' m') +
+             row('Circuit', st.label) +
+             settingsSection();
     }
 
     const drift = Math.abs(e.total - e.supplied);
@@ -537,6 +556,8 @@
     html += row('Highest point', sim.maxZ.toFixed(1) + ' m');
     html += row('Ride time', sim.time.toFixed(1) + ' s');
     html += row('Track length', RC.trackLength().toFixed(0) + ' m');
+
+    html += settingsSection();
 
     // Ran off the end: the numbers a student needs to work out how much more
     // spike (or less launch) it would have taken to hold the train.
@@ -609,6 +630,11 @@
       for (const wmsg of sim.warnings) html += `<p class="report-warn">${wmsg}</p>`;
     }
 
-    el.innerHTML = html;
+    return html;
+  };
+
+  RC.updateReport = function () {
+    const el = document.getElementById('report-body');
+    if (el) el.innerHTML = RC.reportHTML();
   };
 })();

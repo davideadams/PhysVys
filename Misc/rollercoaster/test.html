@@ -60,6 +60,7 @@
 
 <script src="iso.js"></script>
 <script src="track.js"></script>
+<script src="storage.js"></script>
 <script src="physics.js"></script>
 <script src="energy.js"></script>
 <script src="prefabs.js"></script>
@@ -68,6 +69,7 @@
      here without the construction window's markup. -->
 <script src="render.js"></script>
 <script src="build.js"></script>
+<script src="export.js"></script>
 <script>
 (function () {
   const RC = window.RC;
@@ -1807,6 +1809,79 @@
     if (RC.sim.state !== 'finished') return `state "${RC.sim.state}" after 120 s (note "${RC.sim.note}")`;
   });
 
+  check('the train drives all the way into its berth, it does not jump there', () => {
+    // It used to finish as soon as it was under half a metre per second and
+    // snap to the berth, which ended the run at the station THRESHOLD and
+    // teleported the train the length of the platform in one frame.
+    RC.loadPrefab('first-drop');
+    RC.sim.cars = 4;
+    RC.sim.friction = false;
+    RC.resetSim();
+    const berth = RC.sim.startS;
+    if (!(berth > 2)) return 'this track has no station length to travel along';
+
+    // Watch every frame for a jump: the train may never move further in one
+    // frame than its speed allows.
+    RC.sim.state = 'running';
+    const dt = 1 / 60;
+    let worst = 0;
+    for (let n = 0; n < 240 * 60 && RC.sim.state === 'running'; n++) {
+      const before = RC.sim.s, v = Math.abs(RC.sim.v);
+      RC.stepSim(dt);
+      const moved = Math.abs(RC.sim.s - before);
+      // Ignore the lap wrap, which legitimately subtracts a whole lap. The
+      // allowance lets the train speed up by 30 m/s^2 during the frame.
+      if (moved < RC.trackPath().total / 2) {
+        worst = Math.max(worst, moved - (v + 30 * dt) * dt);
+      }
+    }
+    if (RC.sim.state !== 'finished') return `state "${RC.sim.state}" after 240 s`;
+    if (worst > 0.05) return `the train jumped ${worst.toFixed(2)} m further than its speed allowed`;
+    if (Math.abs(RC.sim.s - berth) > 1e-6) {
+      return `ended at ${RC.sim.s.toFixed(3)} m, berth is ${berth.toFixed(3)} m`;
+    }
+  });
+
+  check('a shuttle rolls right back into its berth too', () => {
+    RC.loadPrefab('shuttle-loop');
+    RC.sim.cars = 2;
+    RC.sim.friction = false;
+    RC.resetSim();
+    const berth = RC.sim.startS;
+    runFor(120);
+    if (RC.sim.state !== 'finished') return `state "${RC.sim.state}"`;
+    if (Math.abs(RC.sim.s - berth) > 1e-6) {
+      return `ended at ${RC.sim.s.toFixed(3)} m, berth is ${berth.toFixed(3)} m`;
+    }
+    // The tyres that walk it in are motor work, so the books still balance.
+    const e = RC.energy();
+    if (Math.abs(e.total - e.supplied) / Math.max(1, e.supplied) > 0.02) {
+      return `energy does not balance: total ${e.total.toFixed(0)} vs ${e.supplied.toFixed(0)} J`;
+    }
+    RC.sim.cars = 4;
+  });
+
+  check('a closed circuit is never run as a shuttle, whatever the setting says', () => {
+    // Shuttle is a fallback for track that does not close. On a circuit the
+    // train goes round, and leaving the setting on must not change that — nor
+    // may it read back as a shuttle, which is what the toolbar shows.
+    for (const key of ['first-drop', 'looper', 'big-thunder']) {
+      const res = RC.loadPrefab(key);
+      if (!res.ok) return `${key}: ${res.why}`;
+      for (const setting of [true, false]) {
+        RC.sim.shuttleMode = setting;
+        const st = RC.circuitStatus();
+        if (st.kind !== 'closed') {
+          return `${key} reads as "${st.kind}" with shuttle ${setting ? 'on' : 'off'}`;
+        }
+        if (RC.isShuttle()) return `${key} claims to be a shuttle with the setting ${setting}`;
+        if (!RC.isClosed()) return `${key} is not treated as closed with the setting ${setting}`;
+      }
+    }
+    RC.sim.shuttleMode = true;
+    RC.sim.cars = 4;
+  });
+
   check('shuttle mode makes an unfinished track testable, and off insists on a circuit', () => {
     // A station and a short out-and-back ramp that never returns to the start.
     RC.resetTrack();
@@ -1846,6 +1921,64 @@
              `s = ${RC.sim.s.toFixed(1)} of ${RC.trackPath().total.toFixed(1)} m, ` +
              `v = ${RC.sim.v.toFixed(2)} m/s, note "${RC.sim.note}"`;
     }
+  });
+
+  check('the default prefab completes a lap with friction on, not just off', () => {
+    // A ride that only works with the losses switched off is a poor advert for
+    // a sim about losses. It used to die a metre short of the station.
+    RC.loadPrefab('first-drop');
+    RC.sim.cars = 4;
+    RC.sim.friction = true;
+    RC.sim.mu = 0.02;
+    RC.sim.kDrag = 0.0012;
+    RC.resetSim();
+    runFor(400);
+    if (RC.sim.state !== 'finished') {
+      return `state "${RC.sim.state}" with friction on — s = ${RC.sim.s.toFixed(1)} of ` +
+             `${RC.trackPath().total.toFixed(1)} m, v = ${RC.sim.v.toFixed(2)} m/s`;
+    }
+    RC.sim.friction = false;
+  });
+
+  check('a brake run bites over its length, so more of it slows a train more', () => {
+    // Brakes used to clamp to the brake speed the instant a train touched one,
+    // which made the length of a brake run count for nothing.
+    // Both tracks are the same length — only how much of the run-out is brake
+    // differs — so the speeds are read at the same place and are comparable.
+    const speedAfter = brakes => {
+      RC.track.pieces = [];
+      RC.track.start = { i: 4, j: 20, dir: 0, k: 20, g: 0 };
+      RC.track.head = Object.assign({}, RC.track.start);
+      RC.version++;
+      const seq = ['flat-to-gentle-down'].concat(new Array(8).fill('gentle-down'))
+        .concat(['gentle-down-to-flat'])
+        .concat(new Array(brakes).fill('brake'))
+        .concat(new Array(10 - brakes).fill('flat'));
+      for (const id of seq) if (!RC.place(id)) return null;
+      RC.sim.cars = 1;
+      RC.sim.friction = false;
+      RC.sim.brakeSpeed = 3;
+      RC.resetSim(2);
+      const mark = RC.trackPath().total - 4;
+      let out = null;
+      runUntil(120, () => {
+        if (out === null && RC.sim.s >= mark) { out = Math.abs(RC.sim.v); return true; }
+        return false;
+      });
+      return out;
+    };
+
+    const one = speedAfter(1), four = speedAfter(4);
+    if (one === null || four === null) return 'could not build the test track';
+    if (!(four < one - 0.5)) {
+      return `one brake left ${one.toFixed(2)} m/s and four left ${four.toFixed(2)} — ` +
+             `the length of the run made no difference`;
+    }
+    // But no brake run drags a train below the speed it is set to hold.
+    if (four < RC.sim.brakeSpeed - 1e-6) {
+      return `braked to ${four.toFixed(2)} m/s, below the ${RC.sim.brakeSpeed} it should hold`;
+    }
+    RC.sim.cars = 4;
   });
 
   check('the default prefab runs without runaway forces', () => {
@@ -2476,6 +2609,510 @@
       return `lateral peak at s=${peak.s.toFixed(1)} m is outside T1's span ` +
              `[${turn.s0.toFixed(1)}, ${turn.s1.toFixed(1)}]`;
     }
+  });
+
+  /* ---- exporting for marking ---------------------------------------------- */
+  check('the exported summary carries the track, the report and the graphs', () => {
+    RC.loadPrefab('looper');
+    RC.sim.cars = 4;
+    RC.sim.friction = false;
+    RC.resetSim();
+    runFor(240);
+
+    const html = RC.buildExportHTML('Ada Lovelace');
+    if (!/^<!DOCTYPE html>/.test(html)) return 'not a standalone HTML document';
+    if (html.indexOf('Ada Lovelace') < 0) return 'the student\'s name is missing';
+    if (html.indexOf('</html>') < 0) return 'the document is not closed';
+
+    // Every image inlined, so nothing breaks loose when the file is moved.
+    const imgs = html.match(/<img[^>]*>/g) || [];
+    if (imgs.length < 4) return `${imgs.length} images, expected the track and three graphs`;
+    for (const tag of imgs) {
+      if (tag.indexOf('src="data:image/png;base64,') < 0) return 'an image is not inlined';
+    }
+    if (/src="(?!data:)/.test(html)) return 'something is loaded from outside the file';
+
+    // The task a teacher sets is usually about the shape, so it has to be there.
+    for (const want of ['Circuit', 'Track length', 'Highest point', 'Loops', 'Turns']) {
+      if (html.indexOf(want) < 0) return `the shape summary has no "${want}" row`;
+    }
+    if (html.indexOf('Loop 1') < 0) return 'the feature list does not name the loop that was built';
+    // Escaping must not eat the separators' own ampersands and leave the entity
+    // showing as text. Nothing in the document should read "&amp;" followed by
+    // an entity name.
+    const doubled = html.match(/&amp;[a-z]+;/g);
+    if (doubled) return `an entity was escaped twice and will show as text: ${doubled[0]}`;
+    if (html.indexOf('&rarr;') < 0) return 'the feature list lost its separators';
+    // And the ride figures.
+    if (html.indexOf('Top speed') < 0) return 'the ride report is missing';
+  });
+
+  check('the report records the conditions the run was made under', () => {
+    // Without these the figures cannot be compared between two students, or
+    // against the same student's earlier attempt.
+    RC.loadPrefab('first-drop');
+    RC.sim.cars = 3;
+    RC.sim.friction = false;
+    RC.sim.releaseS = null;
+    RC.resetSim();
+    runFor(240);
+
+    let html = RC.reportHTML();
+    if (html.indexOf('Settings') < 0) return 'no settings section';
+    if (html.indexOf('3 cars') < 0) return 'the train length is missing';
+    if (html.indexOf('1.5 t') < 0) return 'the train mass is missing';
+    if (html.indexOf('the station') < 0) return 'the release point is missing';
+    if (!/Friction<\/span><span>off/.test(html.replace(/\s+/g, ''))) {
+      return 'friction is not recorded as off';
+    }
+    // Friction's constants are noise when it is off, so they stay out.
+    if (html.indexOf('Rolling resistance') >= 0) return 'mu is listed while friction is off';
+    // This ride has a chain and brakes, so those speeds matter and are shown.
+    if (html.indexOf('Chain lift speed') < 0) return 'the lift speed is missing';
+    if (html.indexOf('Brake speed') < 0) return 'the brake speed is missing';
+    // It has no launch, so that one must not appear.
+    if (html.indexOf('Launch speed') >= 0) return 'a launch speed is listed on a ride with no launch';
+
+    // With friction on, its constants come with it.
+    RC.sim.friction = true;
+    RC.resetSim();
+    runFor(240);
+    html = RC.reportHTML();
+    if (html.indexOf('Rolling resistance') < 0) return 'mu is missing while friction is on';
+    if (html.indexOf('Air drag') < 0) return 'the drag constant is missing while friction is on';
+
+    // And they reach the export, which is what gets handed in.
+    const doc = RC.buildExportHTML('Grace Hopper');
+    if (doc.indexOf('Settings') < 0) return 'the settings did not reach the exported summary';
+    if (doc.indexOf('3 cars') < 0) return 'the train length did not reach the export';
+
+    RC.sim.friction = false;
+    RC.sim.cars = 4;
+  });
+
+  check('the settings show before the train has been run', () => {
+    // A student should be able to check what they are about to run under.
+    RC.loadPrefab('shuttle-loop');
+    RC.sim.cars = 2;
+    RC.resetSim();
+    const html = RC.reportHTML();
+    if (html.indexOf('Settings') < 0) return 'no settings on an unrun track';
+    if (html.indexOf('2 cars') < 0) return 'the train length is missing';
+    // A launched ride, so the launch speed matters here and the chain does not.
+    if (html.indexOf('Launch speed') < 0) return 'the launch speed is missing on a launched ride';
+    if (html.indexOf('Chain lift speed') >= 0) return 'a lift speed is listed on a ride with no chain';
+    RC.sim.cars = 4;
+  });
+
+  check('an unrun track still exports, and says so', () => {
+    RC.loadPrefab('first-drop');
+    RC.resetSim();                       // built but never tested
+    const html = RC.buildExportHTML('');
+    if (html.indexOf('never run') < 0) return 'does not say the train was never run';
+    // The track picture is still worth having; the graphs are not.
+    const imgs = html.match(/<img[^>]*>/g) || [];
+    if (imgs.length !== 1) return `${imgs.length} images, expected just the track`;
+  });
+
+  check('a name with markup in it cannot break the exported page', () => {
+    RC.loadPrefab('gentle-hills');
+    RC.resetSim();
+    const html = RC.buildExportHTML('<script>alert(1)</' + 'script>');
+    if (html.indexOf('<script>alert') >= 0) return 'the name was not escaped';
+    if (html.indexOf('&lt;script&gt;') < 0) return 'the name is not in the document at all';
+  });
+
+  check('the trace exports as CSV a spreadsheet can read', () => {
+    RC.loadPrefab('first-drop');
+    RC.sim.cars = 4;
+    RC.sim.friction = true;
+    RC.resetSim();
+    runFor(240);
+
+    const csv = RC.traceCSV();
+    const lines = csv.split('\n');
+    if (lines.length < 20) return `only ${lines.length} lines of trace`;
+    const head = lines[0].split(',');
+    if (head[0] !== 'distance_m') return 'no header row';
+    if (head.length !== 11) return `${head.length} columns, expected 11`;
+    for (let n = 1; n < lines.length; n++) {
+      const cells = lines[n].split(',');
+      if (cells.length !== head.length) return `row ${n} has ${cells.length} cells`;
+      for (const c of cells) {
+        if (c === '' || isNaN(parseFloat(c))) return `row ${n} has a cell that is not a number: "${c}"`;
+      }
+    }
+    RC.sim.friction = false;
+  });
+
+  check('exporting before a run offers nothing to export as data', () => {
+    RC.loadPrefab('first-drop');
+    RC.resetSim();
+    const res = RC.exportTraceCSV('someone');
+    if (res.ok) return 'offered a CSV with no trace behind it';
+    if (!res.why) return 'refused without saying why';
+  });
+
+  /* ---- saving a track ----------------------------------------------------- */
+  check('a track survives being written down and read back', () => {
+    // Everything a built track is: the piece order, the lift and bank flags,
+    // and the geometry they produce.
+    RC.loadPrefab('first-drop');
+    const before = RC.track.pieces.map(p => p.defId + (p.lift ? '+L' : '') + (p.bank ? '+B' : ''));
+    const beforeHead = Object.assign({}, RC.track.head);
+    const beforeTotal = RC.trackPath().total;
+
+    const data = RC.serializeTrack();
+    RC.resetTrack();                       // wipe it, so a bad restore shows
+    if (RC.track.pieces.length === before.length) return 'the track was not actually cleared';
+
+    const res = RC.applyTrackData(data);
+    if (!res.ok) return res.why;
+
+    const after = RC.track.pieces.map(p => p.defId + (p.lift ? '+L' : '') + (p.bank ? '+B' : ''));
+    if (after.join(',') !== before.join(',')) return 'the pieces came back different';
+    if (!RC.sameNode(RC.track.head, beforeHead)) return 'the build head came back in the wrong place';
+    if (Math.abs(RC.trackPath().total - beforeTotal) > 1e-9) {
+      return `track length changed: ${beforeTotal.toFixed(2)} -> ${RC.trackPath().total.toFixed(2)} m`;
+    }
+    if (RC.circuitStatus().kind !== 'closed') return 'the restored circuit is no longer closed';
+  });
+
+  check('a resized loop keeps its size across a save', () => {
+    // Loop radius is set after the piece is laid and lives on the node, so it
+    // is the one thing replaying the piece list would otherwise lose.
+    RC.resetTrack();
+    if (!RC.place('loop-right')) return 'loop refused';
+    const grown = RC.setLoopR(RC.track.pieces.length - 1, RC.loopR(RC.track.pieces.length - 1) + 1);
+    if (!grown.ok) return 'could not resize the loop: ' + grown.why;
+    const wanted = grown.R;
+
+    const data = RC.serializeTrack();
+    RC.resetTrack();
+    const res = RC.applyTrackData(data);
+    if (!res.ok) return res.why;
+
+    const idx = RC.track.pieces.findIndex(p => RC.pieceDef(p.defId).kind === 'loop');
+    if (idx < 0) return 'the loop did not come back';
+    if (Math.abs(RC.loopR(idx) - wanted) > 1e-9) {
+      return `loop came back at R = ${RC.loopR(idx)}, saved at ${wanted}`;
+    }
+  });
+
+  check('a corrupt or foreign save is refused without wrecking the track', () => {
+    RC.loadPrefab('first-drop');
+    const good = RC.track.pieces.length;
+    const bad = [
+      null,
+      {},
+      { v: 999, start: { i: 0, j: 0, dir: 0, k: 0, g: 0 }, pieces: [] },
+      { v: 1, start: { i: 0, j: 0, dir: 0, k: 0, g: 0 }, pieces: [{ d: 'no-such-piece' }] },
+      // A piece that cannot follow the one before it: flat track after a drop.
+      { v: 1, start: { i: 5, j: 5, dir: 0, k: 5, g: 0 }, pieces: [{ d: 'gentle-down' }] },
+      // Runs off the edge of the park.
+      { v: 1, start: { i: 38, j: 5, dir: 0, k: 5, g: 0 }, pieces: [{ d: 'flat' }, { d: 'flat' }, { d: 'flat' }] }
+    ];
+    for (let n = 0; n < bad.length; n++) {
+      const res = RC.applyTrackData(bad[n]);
+      if (res.ok) return `case ${n + 1} was accepted but should not have been`;
+      if (!res.why) return `case ${n + 1} was refused without saying why`;
+      if (RC.track.pieces.length !== good) {
+        return `case ${n + 1} damaged the track that was already loaded`;
+      }
+    }
+  });
+
+  check('saving, listing, loading and deleting a named track', () => {
+    if (!RC.storageAvailable()) return null;    // nothing to test against here
+    const name = '__test track__';
+    RC.deleteSave(name);                        // in case a previous run left one
+
+    RC.loadPrefab('gentle-hills');
+    const pieces = RC.track.pieces.length;
+    const saved = RC.saveTrack(name);
+    if (!saved.ok) return 'could not save: ' + saved.why;
+    if (RC.listSaves().indexOf(name) < 0) return 'the save is not in the list';
+
+    RC.loadPrefab('first-drop');
+    const back = RC.loadSave(name);
+    if (!back.ok) return 'could not load it back: ' + back.why;
+    if (RC.track.pieces.length !== pieces) {
+      return `loaded ${RC.track.pieces.length} pieces, saved ${pieces}`;
+    }
+
+    RC.deleteSave(name);
+    if (RC.listSaves().indexOf(name) >= 0) return 'the save is still listed after deleting';
+    if (RC.loadSave(name).ok) return 'a deleted save still loads';
+  });
+
+  check('an empty or unnamed track is not saved', () => {
+    if (!RC.storageAvailable()) return null;
+    if (RC.saveTrack('').ok) return 'saved without a name';
+    if (RC.saveTrack('   ').ok) return 'saved under a blank name';
+    RC.track.pieces = [];
+    RC.version++;
+    if (RC.saveTrack('__empty test__').ok) {
+      RC.deleteSave('__empty test__');
+      return 'saved a track with no pieces on it';
+    }
+  });
+
+  check('a demonstration is not kept as the student\'s own work', () => {
+    if (!RC.storageAvailable()) return null;
+    // Running the tests must not cost anyone the track they had half-built,
+    // so put back whatever was there afterwards.
+    const KEY = 'physvys.rc.autosave';
+    const held = window.localStorage.getItem(KEY);
+    const restore = () => {
+      if (held === null) window.localStorage.removeItem(KEY);
+      else window.localStorage.setItem(KEY, held);
+    };
+
+    try {
+      RC.clearAutosave();
+      RC.loadPrefab('path-independence');
+      if (RC.autosave()) return 'the demo was autosaved over whatever was being built';
+      if (RC.hasAutosave()) return 'a demo left an autosave behind';
+
+      // An ordinary track does get kept, and comes back.
+      RC.loadPrefab('first-drop');
+      const wanted = RC.track.pieces.length;
+      if (!RC.autosave()) return 'an ordinary track was not autosaved';
+      RC.resetTrack();
+      const back = RC.restoreAutosave();
+      if (!back.ok) return 'could not restore the autosave: ' + back.why;
+      if (RC.track.pieces.length !== wanted) return 'the autosave came back with the wrong track';
+    } finally {
+      restore();
+      RC.sim.cars = 4;
+    }
+  });
+
+  /* ---- sloped turns ------------------------------------------------------- */
+  const TURN_BASES = ['turn-left-tight', 'turn-left-wide', 'turn-right-wide', 'turn-right-tight'];
+  const TURN_GRADES = [['-gentle-down', -2], ['-steep-down', -6],
+                       ['-gentle-up', 2], ['-steep-up', 6]];
+
+  check('every turn has a sloped variant the palette can name', () => {
+    // The build palette resolves a turn by appending the slope to the flat id,
+    // so every combination has to exist under exactly that name.
+    for (const base of TURN_BASES) {
+      if (!RC.pieceDef(base)) return `no flat piece ${base}`;
+      for (const [suffix] of TURN_GRADES) {
+        if (!RC.pieceDef(base + suffix)) return `no piece ${base + suffix}`;
+      }
+    }
+  });
+
+  check('a sloped turn holds its grade and lands on a whole level', () => {
+    for (const base of TURN_BASES) {
+      for (const [suffix, g] of TURN_GRADES) {
+        const def = RC.pieceDef(base + suffix);
+        // A turn holds its slope rather than changing it, so it chains with
+        // straight track of the same grade.
+        if (def.gIn !== g || def.gOut !== g) {
+          return `${def.id} declares ${def.gIn}/${def.gOut}, expected ${g} both ends`;
+        }
+        if (def.dH !== Math.round(def.dH)) return `${def.id} has a fractional dH`;
+        if (Math.sign(def.dH) !== Math.sign(g)) return `${def.id} slopes the wrong way`;
+      }
+    }
+  });
+
+  check('a sloped turn sits close to the grade it is named for', () => {
+    // dH must be a whole number of levels, but the honest drop through a
+    // quarter circle is its arc times the slope and never is. The rounding is
+    // the one real compromise in sloped track, so pin how big it is: any more
+    // than about a degree and a half would show as a kink at the joints.
+    let worst = 0, worstId = '';
+    for (const base of TURN_BASES) {
+      for (const [suffix, g] of TURN_GRADES) {
+        const def = RC.pieceDef(base + suffix);
+        const arcM = def.R * RC.TILE_M * Math.PI / 2;
+        const truePitch = Math.atan2(def.dH * RC.LEVEL_M, arcM);
+        const named = Math.atan2(g * RC.LEVEL_M, RC.TILE_M);
+        const off = Math.abs(truePitch - named) * 180 / Math.PI;
+        if (off > worst) { worst = off; worstId = def.id; }
+      }
+    }
+    if (worst > 1.5) return `${worstId} sits ${worst.toFixed(2)} deg off its named slope`;
+  });
+
+  check('a sloped turn descends as it curves', () => {
+    RC.track.pieces = [];
+    RC.track.start = { i: 20, j: 20, dir: 0, k: 30, g: -RC.SLOPE.GENTLE };
+    RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
+    if (!RC.place('turn-right-wide-gentle-down')) return 'the sloped turn was refused';
+
+    const pts = RC.trackPath().pts;
+    // Height falls the whole way round, and the heading really does change.
+    for (let n = 1; n < pts.length; n++) {
+      if (pts[n].z > pts[n - 1].z + 1e-9) return `height rose at sample ${n} of a down turn`;
+    }
+    if (RC.track.head.dir === RC.track.start.dir) return 'the turn did not change heading';
+    if (RC.track.head.k !== 30 + RC.pieceDef('turn-right-wide-gentle-down').dH) {
+      return `exit is at ${RC.track.head.k}, not the piece's dH below the entry`;
+    }
+    // Curving AND descending: it must bend in plan as well as drop.
+    const first = pts[0], mid = pts[(pts.length / 2) | 0], last = pts[pts.length - 1];
+    const cross = (mid.x - first.x) * (last.y - first.y) - (mid.y - first.y) * (last.x - first.x);
+    if (Math.abs(cross) < 1e-6) return 'the piece is straight in plan — not a turn at all';
+  });
+
+  check('four sloped turns make a helix that returns over its own start', () => {
+    // The whole reason sloped turns are worth having: a helix is not a special
+    // piece, it is four of them in a row.
+    RC.track.pieces = [];
+    RC.track.start = { i: 20, j: 20, dir: 0, k: 40, g: -RC.SLOPE.GENTLE };
+    RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
+    const id = 'turn-right-wide-gentle-down';
+    const dH = RC.pieceDef(id).dH;
+    for (let n = 0; n < 4; n++) {
+      if (!RC.place(id)) {
+        return `quarter ${n + 1} refused: ` + RC.canPlace(RC.pieceDef(id), RC.track.head).why;
+      }
+    }
+    const h = RC.track.head, s = RC.track.start;
+    if (h.i !== s.i || h.j !== s.j) return `helix closed at (${h.i},${h.j}), started at (${s.i},${s.j})`;
+    if (h.dir !== s.dir) return `helix came back heading ${h.dir}, started heading ${s.dir}`;
+    if (h.k !== s.k + 4 * dH) return `helix dropped to ${h.k}, expected ${s.k + 4 * dH}`;
+    if (h.g !== s.g) return 'helix did not come back on the same grade';
+  });
+
+  check('a banked sloped turn stays the right way up', () => {
+    // Banking rolls about the tangent and the tangent now pitches, so the two
+    // have to compose without tipping the train past its side.
+    RC.track.pieces = [];
+    RC.track.start = { i: 20, j: 20, dir: 0, k: 30, g: -RC.SLOPE.STEEP };
+    RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
+    if (!RC.place('turn-right-wide-steep-down', { bank: true })) {
+      return 'a banked steep turn was refused';
+    }
+    if (!RC.track.pieces[0].bank) return 'the bank flag did not stick to a sloped turn';
+    for (const p of RC.trackPath().pts) {
+      const fr = RC.carFrame(p);
+      if (fr.u.z < 0.3) return `banked sloped turn is nearly on its side: up.z = ${fr.u.z.toFixed(3)}`;
+      // The frame must stay a proper triad however the two rotations combine.
+      if (Math.abs(Math.hypot(fr.u.x, fr.u.y, fr.u.z) - 1) > 1e-6) return 'up is not unit length';
+      if (Math.abs(fr.u.x * fr.f.x + fr.u.y * fr.f.y + fr.u.z * fr.f.z) > 1e-6) {
+        return 'up is not perpendicular to forward';
+      }
+    }
+  });
+
+  check('a train runs a helix with the energy books intact', () => {
+    RC.track.pieces = [];
+    RC.track.start = { i: 20, j: 20, dir: 0, k: 40, g: -RC.SLOPE.GENTLE };
+    RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
+    for (let n = 0; n < 4; n++) {
+      if (!RC.place('turn-right-wide-gentle-down')) return `quarter ${n + 1} refused`;
+    }
+    RC.sim.cars = 1;
+    RC.sim.friction = false;
+    RC.resetSim(0);
+    runFor(30);
+
+    if (!(RC.sim.maxV > 5)) return `the train barely moved down the helix (${RC.sim.maxV.toFixed(1)} m/s)`;
+    const e = RC.energy();
+    if (Math.abs(e.total - e.supplied) / Math.max(1, e.supplied) > 0.01) {
+      return `energy does not balance down a helix: total ${e.total.toFixed(0)} vs ` +
+             `supplied ${e.supplied.toFixed(0)} J`;
+    }
+    // A 32 m drop, so it should be doing about sqrt(2gh) at the bottom.
+    const ideal = Math.sqrt(2 * 9.81 * 32);
+    if (Math.abs(RC.sim.maxV - ideal) > 1.5) {
+      return `bottom speed ${RC.sim.maxV.toFixed(1)} m/s, expected about ${ideal.toFixed(1)}`;
+    }
+    RC.sim.cars = 4;
+  });
+
+  check('Big Thunder Mountain closes on its own, with three lifts and a helix', () => {
+    const res = RC.loadPrefab('big-thunder');
+    if (!res.ok) return res.why;
+    // Closed by construction: no call to the auto-close solver.
+    if (!RC.sameNode(RC.track.head, RC.track.start)) {
+      const h = RC.track.head, s = RC.track.start;
+      return `did not close: head (${h.i},${h.j},dir ${h.dir},k ${h.k}) ` +
+             `vs start (${s.i},${s.j},dir ${s.dir},k ${s.k})`;
+    }
+    if (RC.circuitStatus().kind !== 'closed') return 'not a complete circuit';
+
+    // Three separate chain lifts, not one long one.
+    const pieces = RC.track.pieces;
+    let runs = 0;
+    for (let n = 0; n < pieces.length; n++) {
+      if (pieces[n].lift && !(n > 0 && pieces[n - 1].lift)) runs++;
+    }
+    if (runs !== 3) return `${runs} lift hills, expected 3`;
+
+    // The drop curves: at least one banked descending turn.
+    const curving = pieces.filter(p => {
+      const def = RC.pieceDef(p.defId);
+      return def.kind === 'turn' && def.dH < 0 && p.bank;
+    });
+    if (!curving.length) return 'no banked descending turn — the drop does not curve';
+
+    // Every turn on a mine train is banked.
+    for (const p of pieces) {
+      if (RC.pieceDef(p.defId).kind === 'turn' && !p.bank) return 'an unbanked turn';
+    }
+
+    // A mine train, so nothing extreme: the tallest point is a lift, not a plunge.
+    const pts = RC.trackPath().pts;
+    let high = 0;
+    for (const p of pts) high = Math.max(high, p.z);
+    if (high < 14 || high > 22) return `tops out at ${high} m, expected about 18`;
+  });
+
+  check('no turn kinks the track where it meets its neighbours', () => {
+    // A sloped turn's dH is rounded to a whole level, so a straight ramp would
+    // leave it slightly off the grade it joins — invisible on the drawing, but
+    // the physics differentiates the path and it came out as a one-sample g
+    // spike. The height profile eases that away; this pins it shut.
+    RC.track.pieces = [];
+    RC.track.start = { i: 20, j: 20, dir: 0, k: 30, g: 0 };
+    RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
+    for (const id of ['flat-to-gentle-down', 'gentle-down',
+                      'turn-right-wide-gentle-down', 'gentle-down', 'gentle-down-to-flat']) {
+      if (!RC.place(id)) return `${id} refused`;
+    }
+    const pts = RC.trackPath().pts;
+    // Curvature is 1/radius; on this track nothing should bend tighter than the
+    // 10 m turn itself, and certainly not at a joint.
+    let worst = 0, where = 0;
+    for (let n = 1; n < pts.length - 1; n++) {
+      if (pts[n].curv > worst) { worst = pts[n].curv; where = pts[n].s; }
+    }
+    const r = worst > 1e-9 ? 1 / worst : Infinity;
+    if (r < 8) {
+      return `something bends to a ${r.toFixed(1)} m radius at s = ${where.toFixed(1)} m; ` +
+             `the tightest thing here is a 10 m turn`;
+    }
+  });
+
+  check('the mine train completes a lap and behaves like one', () => {
+    RC.loadPrefab('big-thunder');
+    RC.sim.cars = 4;
+    RC.sim.friction = false;
+    RC.resetSim();
+    runFor(400);
+    if (RC.sim.state !== 'finished') {
+      return `state "${RC.sim.state}" — s = ${RC.sim.s.toFixed(1)} of ` +
+             `${RC.trackPath().total.toFixed(1)} m, note "${RC.sim.note}"`;
+    }
+    // Three lifts means the motor tops it up three times, so it must have done
+    // more work than the single biggest climb is worth.
+    if (!(RC.sim.eMotor > 0)) return 'the chain lifts did no work';
+    // Modest by design: a mine train, not a hypercoaster.
+    if (RC.sim.maxV > 25) return `top speed ${RC.sim.maxV.toFixed(1)} m/s is too fast for a mine train`;
+    const L = RC.G_LIMITS;
+    if (RC.sim.maxVertG > L.vertExtreme) return `pulls ${RC.sim.maxVertG.toFixed(1)} g vertically`;
+    if (RC.sim.minVertG < L.airtimeHard) return `throws riders out at ${RC.sim.minVertG.toFixed(1)} g`;
   });
 
   /* ---- demonstrations ----------------------------------------------------- */

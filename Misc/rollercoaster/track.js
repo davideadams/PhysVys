@@ -62,12 +62,53 @@
 
   /* Quarter turns. The exit lands on an edge midpoint only when the radius is
      a half-integer number of tiles, so the usable radii are 1.5 (6 m) and
-     2.5 (10 m). Flat only for now; sloped turns are a later phase. */
-  function turn(id, label, dir, R) {
+     2.5 (10 m).
+
+     A turn can be sloped, which is how track curves during a drop — and it is
+     what makes a helix nothing more special than four of them in a row.
+
+     The compromise is in dH. Track has to land on whole levels or it leaves
+     the grid, but the honest drop through a quarter circle is its horizontal
+     arc times the slope, R*(pi/2)*g, which is never a whole number. Each piece
+     takes the nearest one, so its real pitch misses the slope it is named for
+     by at most 1.4 degrees — the tight gentle turn, worst of the eight; every
+     other combination is inside half a degree. That is small enough not to
+     read as a kink where it joins straight track of the same slope, and far
+     smaller than the error in pretending a coaster is a bead on a wire. */
+  function turn(id, label, dir, R, g) {
+    g = g || FLAT;
     return {
-      id, label, kind: 'turn', gIn: FLAT, gOut: FLAT,
-      turn: dir, R, dH: 0
+      id, label, kind: 'turn', gIn: g, gOut: g,
+      turn: dir, R, dH: Math.round(R * Math.PI / 2 * g)
     };
+  }
+
+  /* The sloped variants of each turn, named <turn>-<slope>. Generated rather
+     than written out: it is the same four shapes against the same four slopes,
+     and spelling out sixteen near-identical lines invites one of them to be
+     quietly wrong. */
+  const TURN_SHAPES = [
+    { id: 'turn-left-tight',  label: 'Left, tight',  dir: -1, R: 1.5 },
+    { id: 'turn-right-tight', label: 'Right, tight', dir:  1, R: 1.5 },
+    { id: 'turn-left-wide',   label: 'Left, wide',   dir: -1, R: 2.5 },
+    { id: 'turn-right-wide',  label: 'Right, wide',  dir:  1, R: 2.5 }
+  ];
+  const TURN_SLOPES = [
+    { suffix: 'gentle-down', g: -GENTLE, label: 'gentle down' },
+    { suffix: 'steep-down',  g: -STEEP,  label: 'steep down' },
+    { suffix: 'gentle-up',   g: GENTLE,  label: 'gentle up' },
+    { suffix: 'steep-up',    g: STEEP,   label: 'steep up' }
+  ];
+
+  function slopedTurns() {
+    const out = [];
+    for (const sh of TURN_SHAPES) {
+      for (const sl of TURN_SLOPES) {
+        out.push(turn(sh.id + '-' + sl.suffix, sh.label + ', ' + sl.label,
+                      sh.dir, sh.R, sl.g));
+      }
+    }
+    return out;
   }
 
   /* Vertical loop. Footprint: L tiles long, finishing one tile to the left or
@@ -138,7 +179,7 @@
     straight('station', 'Station', FLAT, FLAT, { station: true }),
     straight('brake', 'Brake run', FLAT, FLAT, { brake: true }),
     straight('launch', 'Launch', FLAT, FLAT, { launch: true })
-  ];
+  ].concat(slopedTurns());
 
   const BY_ID = new Map(PIECES.map(p => [p.id, p]));
   RC.PIECES = PIECES;
@@ -225,9 +266,29 @@
     return 0.5;
   }
 
+  /* A sloped turn's dH is rounded to a whole level, so ramping straight through
+     it leaves the piece a fraction of a degree off the grade it joins at either
+     end. That reads as nothing on the drawing, but the physics differentiates
+     the path: a 1.4 degree bend inside half a metre of track is a 19 m radius,
+     and at 20 m/s that is a 2.3 g spike on the trace, in and out within one
+     sample. It looked like a fault in the ride and was really a fault here.
+
+     So shape the descent as a cubic that LEAVES AND ARRIVES at exactly the
+     declared grade and absorbs the rounding in the middle instead, where it
+     amounts to a few centimetres of extra dip spread over the whole piece.
+     h(t) = 2(m-1)t^3 - 3(m-1)t^2 + mt, where m is the grade's own drop as a
+     fraction of the rounded one: h(0)=0, h(1)=1, h'(0)=h'(1)=m. */
+  function turnHeightFrac(def, t) {
+    const natural = def.R * Math.PI / 2 * def.gIn;   // levels the grade alone gives
+    const m = natural / def.dH;
+    const k = m - 1;
+    return (2 * k * t - 3 * k) * t * t + m * t;
+  }
+
   /* Normalised height profile: 0 at t=0, 1 at t=1, with end slopes in the
      ratio gIn : gOut so slope stays continuous across joints. */
   function heightFrac(def, t) {
+    if (def.kind === 'turn' && def.dH !== 0) return turnHeightFrac(def, t);
     const a = def.gIn, b = def.gOut;
     const denom = (a + b) / 2;
     if (Math.abs(denom) < 1e-9) return t;   // flat piece, or dH === 0

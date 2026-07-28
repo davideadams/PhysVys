@@ -455,18 +455,33 @@
      than in the depth-sorted list — they are annotations, so being occluded
      by the track they annotate would defeat the point. Near pieces are drawn
      last so their tags sit over far ones where the track doubles back. */
-  RC.drawHeightLabels = function (ctx, cam, view) {
-    const pieces = RC.track.pieces;
-    if (!pieces.length) return;
+  const TAG_INK = 'rgba(21, 48, 77, 0.85)';
 
+  RC.drawHeightLabels = function (ctx, cam, view) {
     const tags = [];
-    for (const p of pieces) {
-      const def = RC.pieceDef(p.defId);
-      const c = RC.centreline(def, p.node, 0.5);
-      const m = c.z * RC.LEVEL_M;
-      const s = RC.toScreen(c.x, c.y, c.z, cam, view);
-      tags.push({ x: s.x, y: s.y, text: m.toFixed(0) + ' m', depth: RC.depth(c.x, c.y, c.z, cam.rot) });
-    }
+    const addFrom = (pieces, colour) => {
+      for (const p of pieces) {
+        const def = RC.pieceDef(p.defId);
+        const c = RC.centreline(def, p.node, 0.5);
+        const m = c.z * RC.LEVEL_M;
+        const s = RC.toScreen(c.x, c.y, c.z, cam, view);
+        tags.push({
+          x: s.x, y: s.y, colour,
+          text: m.toFixed(0) + ' m',
+          depth: RC.depth(c.x, c.y, c.z, cam.rot)
+        });
+      }
+    };
+
+    addFrom(RC.track.pieces, RC.demo ? RC.demo.mainColour : TAG_INK);
+    // A demo's comparison tracks get labelled too. The whole claim of the
+    // path-independence demo is that all three routes start from the same
+    // height, and a student should be able to read that straight off the park
+    // rather than take it on trust. Each route's tags carry its own colour, so
+    // a label belongs visibly to one track and to one row of the table.
+    if (RC.demo) for (const tr of RC.demo.trains) addFrom(tr.pieces, tr.colour);
+
+    if (!tags.length) return;
     tags.sort((a, b) => a.depth - b.depth);
 
     ctx.save();
@@ -479,13 +494,17 @@
       const h = 15, r = 4;
       let clash = false;
       for (const q of placed) {
-        if (q.text === t.text && Math.abs(q.x - t.x) < w && Math.abs(q.y - t.y) < h) {
+        // Only a repeat of the same height on the same track is redundant. A
+        // matching height on a NEIGHBOURING route is the very thing being
+        // demonstrated, so it must never be suppressed as a duplicate.
+        if (q.text === t.text && q.colour === t.colour &&
+            Math.abs(q.x - t.x) < w && Math.abs(q.y - t.y) < h) {
           clash = true;
           break;
         }
       }
       if (clash) continue;
-      placed.push({ x: t.x, y: t.y, text: t.text });
+      placed.push({ x: t.x, y: t.y, text: t.text, colour: t.colour });
       const x = t.x - w / 2, y = t.y - h / 2;
       ctx.beginPath();
       ctx.moveTo(x + r, y);
@@ -494,7 +513,7 @@
       ctx.arcTo(x, y + h, x, y, r);
       ctx.arcTo(x, y, x + w, y, r);
       ctx.closePath();
-      ctx.fillStyle = 'rgba(21, 48, 77, 0.85)';
+      ctx.fillStyle = t.colour || TAG_INK;
       ctx.fill();
       ctx.fillStyle = '#ffffff';
       ctx.fillText(t.text, t.x, t.y + 0.5);
