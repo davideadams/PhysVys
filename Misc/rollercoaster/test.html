@@ -782,13 +782,17 @@
     }
     if (!near(RC.sim.v, 0, 1e-9)) return `stopped with v = ${RC.sim.v}`;
 
-    // Braking to a stand is a real energy sink, so the books must still
-    // balance. A full circuit crosses many transition joints, where the
-    // integrator's bounded drift accumulates, so 1.5% is the honest bar for a
-    // whole lap (a short roll holds to well under 1%).
+    /* Braking to a stand is a real energy sink, so the books must still
+       balance. This used to allow 1.5%, on the grounds that a lap crosses a
+       lot of joints and the integrator drifts — but the drift was not the
+       joints, it was the chain lift charging the motor for one speed while
+       moving the train at another, every step of the climb. With that fixed
+       there is nothing left for a whole lap to accumulate. */
     const e = RC.energy();
-    if (Math.abs(e.total - e.supplied) / Math.max(1, e.supplied) > 0.015) {
-      return `total ${e.total.toFixed(1)} J vs supplied ${e.supplied.toFixed(1)} J`;
+    const off = Math.abs(e.total - e.supplied) / Math.max(1, e.supplied);
+    if (off > 0.003) {
+      return `total ${e.total.toFixed(1)} J vs supplied ${e.supplied.toFixed(1)} J ` +
+             `(out by ${(100 * off).toFixed(3)}%)`;
     }
   });
 
@@ -1777,6 +1781,77 @@
     const spread = Math.hypot(maxX - minX, maxY - minY);
     if (spread < 3) return `all the wreckage landed within ${spread.toFixed(1)} m — one heap`;
     RC.sim.cars = 4;
+  });
+
+  check('a chain lift that runs off the end keeps the energy books balanced', () => {
+    /* The case a student hit: a track that is nearly all chain lift, run as a
+       shuttle, so it hauls itself to the top and noses straight off the end.
+       Almost every substep of that run has the chain in it, all leaning the
+       same way, so a fraction of a joule per step compounds into kilojoules
+       and the report ends up accusing itself of a bug.
+
+       The breakdown in the failure says WHERE the books stopped closing —
+       on the chain, at the lip, tipping over, or in the wreck — which is the
+       only genuinely useful thing a conservation failure can tell you. */
+    RC.resetTrack();
+    const seq = ['flat-to-gentle-up'].concat(new Array(14).fill('gentle-up'));
+    for (const id of seq) {
+      if (!RC.place(id, { lift: true })) return `${id} refused`;
+    }
+    RC.sim.shuttleMode = true;
+    RC.sim.cars = 4;
+    RC.sim.friction = false;
+    RC.resetSim();
+
+    const drift = () => {
+      const e = RC.energy();
+      return (e.total - e.supplied) / Math.max(1, e.supplied);
+    };
+    const pct = x => (x === null ? '(never)' : (100 * x).toFixed(3) + '%');
+
+    let onRails = 0, atEdge = null, atTip = null;
+    let worst = 0, worstAt = 0, worstWhat = 'nothing';
+    let last = drift();
+
+    RC.sim.state = 'running';
+    for (let n = 0; n < 60 * 60 && RC.sim.state === 'running'; n++) {
+      const wasHanging = !!RC.sim.overhang;
+      const wasCommitted = !!(RC.sim.overhang && RC.sim.overhang.committed);
+      RC.stepSim(1 / 60);
+      const now = drift();
+      if (Math.abs(now - last) > Math.abs(worst)) {
+        worst = now - last;
+        worstAt = RC.sim.s;
+        worstWhat = RC.sim.wrecked ? 'hitting the ground'
+          : (!wasCommitted && RC.sim.overhang && RC.sim.overhang.committed) ? 'tipping over the lip'
+          : (!wasHanging && RC.sim.overhang) ? 'the nose leaving the rails'
+          : 'just rolling along';
+      }
+      last = now;
+      if (!RC.sim.overhang && !RC.sim.wrecked) onRails = now;
+      if (atEdge === null && RC.sim.overhang) atEdge = now;
+      if (atTip === null && RC.sim.overhang && RC.sim.overhang.committed) atTip = now;
+    }
+
+    if (RC.sim.state !== 'crashed') {
+      return `state "${RC.sim.state}" — expected it to run off the top ` +
+             `(s = ${RC.sim.s.toFixed(1)}, note "${RC.sim.note}")`;
+    }
+
+    // A whole climb's worth of steps all pushing the same way, so this is the
+    // sharpest conservation bar in the suite. Anything above it is a leak with
+    // a mechanism, not integrator noise.
+    const e = RC.energy();
+    if (Math.abs(e.total - e.supplied) / Math.max(1, e.supplied) > 0.003) {
+      return `total ${(e.total / 1000).toFixed(1)} kJ vs supplied ` +
+             `${(e.supplied / 1000).toFixed(1)} kJ, out by ${pct(drift())}\n` +
+             `  still on the rails:   ${pct(onRails)}\n` +
+             `  nose over the edge:   ${pct(atEdge)}\n` +
+             `  tipped over the lip:  ${pct(atTip)}\n` +
+             `  after the wreck:      ${pct(drift())}\n` +
+             `  worst single frame:   ${pct(worst)} at s = ${worstAt.toFixed(1)} m, ` +
+             `${worstWhat}`;
+    }
   });
 
   check('the loop presets are fast enough to stay on the track', () => {
@@ -2915,6 +2990,211 @@
         if (!RC.pieceDef(base + suffix)) return `no piece ${base + suffix}`;
       }
     }
+  });
+
+  check('the build menu offers a corner on whatever grade the track is on', () => {
+    // Build a transition onto a climb and a corner must be immediately
+    // available. The palette used to test every turn as though it were flat,
+    // so the moment the track tilted all four corners went grey.
+    RC.clearSelection();
+    const wanted = {};
+    wanted[0] = '';
+    wanted[RC.SLOPE.GENTLE] = '-gentle-up';
+    wanted[-RC.SLOPE.GENTLE] = '-gentle-down';
+    wanted[RC.SLOPE.STEEP] = '-steep-up';
+    wanted[-RC.SLOPE.STEEP] = '-steep-down';
+
+    for (const [onto, ids] of [
+      [0, []],
+      [RC.SLOPE.GENTLE, ['flat-to-gentle-up']],
+      [-RC.SLOPE.GENTLE, ['flat-to-gentle-down']],
+      [RC.SLOPE.STEEP, ['flat-to-gentle-up', 'gentle-to-steep-up']],
+      [-RC.SLOPE.STEEP, ['flat-to-gentle-down', 'gentle-to-steep-down']]
+    ]) {
+      // Tight turns, and starting mid-air: a steep quarter turn moves 14 m of
+      // height, so a wide one either digs in or runs past the height cap.
+      RC.track.pieces = [];
+      RC.track.start = { i: 8, j: 20, dir: 0, k: 30, g: 0 };
+      RC.track.head = Object.assign({}, RC.track.start);
+      RC.version++;
+      for (const id of ids) if (!RC.place(id)) return `${id} refused`;
+      if (RC.track.head.g !== onto) return `expected to be on grade ${onto}`;
+
+      // Whatever the slope row happens to be set to, asking for a corner has
+      // to give the corner that fits here.
+      for (const slope of [0, RC.SLOPE.GENTLE, -RC.SLOPE.STEEP]) {
+        RC.build.dir = 'right-tight';
+        RC.build.slope = slope;
+        RC.build.special = null;
+        const def = RC.ghostDef();
+        if (!def) return `no piece offered on grade ${onto}`;
+        if (def.id !== 'turn-right-tight' + wanted[onto]) {
+          return `on grade ${onto} the menu offered "${def.id}"`;
+        }
+        if (!RC.canPlace(def, RC.track.head).ok) {
+          return `"${def.id}" cannot actually be built on grade ${onto}: ` +
+                 RC.canPlace(def, RC.track.head).why;
+        }
+      }
+      // And it really goes down.
+      if (!RC.place('turn-right-tight' + wanted[onto])) return `could not build on grade ${onto}`;
+    }
+    RC.build.dir = 'straight';
+    RC.build.slope = 0;
+  });
+
+  check('a chain goes on a corner that climbs, and not on one that falls', () => {
+    // A lift hill is allowed to bend. RC.place used to drop the flag on any
+    // turn, so a chain could be chosen and simply never appeared.
+    const startOn = g => {
+      RC.track.pieces = [];
+      RC.track.start = { i: 8, j: 20, dir: 0, k: 20, g };
+      RC.track.head = Object.assign({}, RC.track.start);
+      RC.version++;
+    };
+
+    startOn(RC.SLOPE.GENTLE);
+    if (!RC.place('turn-right-tight-gentle-up', { lift: true })) return 'climbing corner refused';
+    if (!RC.track.pieces[0].lift) return 'the chain did not stick to a climbing corner';
+    // Banked and chained at once.
+    if (!RC.place('turn-right-tight-gentle-up', { lift: true, bank: true })) {
+      return 'banked climbing corner refused';
+    }
+    const both = RC.track.pieces[1];
+    if (!both.lift || !both.bank) return 'a banked climbing corner did not take both';
+
+    startOn(-RC.SLOPE.GENTLE);
+    RC.place('turn-right-tight-gentle-down', { lift: true });
+    if (RC.track.pieces[0].lift) return 'a corner that falls accepted a chain';
+
+    startOn(0);
+    RC.place('turn-right-tight', { lift: true });
+    if (RC.track.pieces[0].lift) return 'a level corner accepted a chain';
+  });
+
+  check('the chain button is offered only where a chain would do something', () => {
+    // It used to stay live everywhere while RC.place quietly discarded the
+    // flag, which looked exactly like a chain that had been laid and failed.
+    RC.clearSelection();
+    RC.build.special = null;
+    RC.build.dir = 'right-tight';
+
+    RC.track.pieces = [];
+    RC.track.start = { i: 8, j: 20, dir: 0, k: 20, g: RC.SLOPE.GENTLE };
+    RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
+    if (!RC.chainable()) return 'no chain offered on a climbing corner';
+
+    RC.track.start.g = -RC.SLOPE.GENTLE;
+    RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
+    if (RC.chainable()) return 'a chain offered on a corner that falls';
+
+    RC.track.start.g = 0;
+    RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
+    if (RC.chainable()) return 'a chain offered on a level corner';
+
+    // Straight climbing track still takes one, as it always did.
+    RC.build.dir = 'straight';
+    RC.build.slope = RC.SLOPE.GENTLE;
+    if (!RC.chainable()) return 'no chain offered on a straight climb';
+    RC.build.slope = 0;
+  });
+
+  check('the chain is put away on leaving a climb, not left armed', () => {
+    // Latching it would mean building a lift hill, then a drop, then an
+    // airtime hill — and finding a chain had quietly been laid up the hill the
+    // train was meant to coast over.
+    RC.clearSelection();
+    RC.build.special = null;
+    RC.build.dir = 'straight';
+
+    RC.track.pieces = [];
+    RC.track.start = { i: 8, j: 20, dir: 0, k: 20, g: RC.SLOPE.GENTLE };
+    RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
+
+    // On a climb the chain can be armed and stays armed.
+    RC.build.slope = RC.SLOPE.GENTLE;
+    RC.build.lift = true;
+    if (!RC.syncChain()) return 'the chain would not stay on a climb';
+
+    // Aim at track that falls away and it is put away by itself.
+    RC.build.slope = 0;                        // gentle up -> flat, still a climb piece
+    if (!RC.syncChain()) return 'levelling off the top of a lift dropped the chain early';
+
+    RC.track.start.g = 0;
+    RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
+    RC.build.slope = -RC.SLOPE.GENTLE;         // flat -> gentle down
+    if (RC.syncChain()) return 'the chain survived onto track that falls';
+    if (RC.build.lift) return 'the chain is still armed and will come back on the next climb';
+  });
+
+  check('a chain on a curving lift hauls the train up it', () => {
+    RC.track.pieces = [];
+    RC.track.start = { i: 8, j: 20, dir: 0, k: 5, g: RC.SLOPE.GENTLE };
+    RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
+    for (let n = 0; n < 3; n++) {
+      if (!RC.place('turn-right-tight-gentle-up', { lift: true, bank: true })) {
+        return `quarter ${n + 1} refused`;
+      }
+    }
+    RC.sim.cars = 1;
+    RC.sim.friction = false;
+    RC.resetSim(0);
+    runFor(30);
+
+    if (!(RC.sim.eMotor > 0)) return 'the chain did no work on a curving lift';
+    // Three quarters at 5 m each, from 5 m up.
+    if (!(RC.sim.maxZ > 18)) {
+      return `the train only got to ${RC.sim.maxZ.toFixed(1)} m, expected about 20`;
+    }
+    RC.sim.cars = 4;
+  });
+
+  check('choosing a corner greys out the slopes it cannot be built on', () => {
+    // With a corner selected the slope row is a readout, not a choice: exactly
+    // one grade is possible, and it is the one the track is already on. Showing
+    // it lit is how a student sees which corner they are about to get.
+    RC.clearSelection();
+    RC.track.pieces = [];
+    RC.track.start = { i: 8, j: 20, dir: 0, k: 30, g: 0 };
+    RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
+    if (!RC.place('flat-to-gentle-up')) return 'could not get onto a climb';
+
+    RC.build.special = null;
+    RC.build.dir = 'right-tight';
+    RC.build.slope = 0;                 // deliberately NOT the grade we are on
+
+    const choices = RC.slopeChoices();
+    if (!choices.every(c => c.turning)) return 'the row does not know a corner is selected';
+    const live = choices.filter(c => c.ok);
+    if (live.length !== 1) {
+      return `${live.length} slopes offered for a corner, expected exactly 1`;
+    }
+    if (live[0].g !== RC.SLOPE.GENTLE) {
+      return `the live slope is ${live[0].g}, not the grade the track is on`;
+    }
+    if (live[0].def.id !== 'turn-right-tight-gentle-up') {
+      return `the live slope points at "${live[0].def.id}"`;
+    }
+    // The greyed ones say why, so the rule is discoverable rather than a puzzle.
+    for (const c of choices) {
+      if (!c.ok && !c.why) return `the ${c.label} button greys out without saying why`;
+    }
+
+    // Going straight on, the row is a real choice again.
+    RC.build.dir = 'straight';
+    const straight = RC.slopeChoices();
+    if (straight.some(c => c.turning)) return 'still treating the row as a corner readout';
+    if (straight.filter(c => c.ok).length < 3) {
+      return `only ${straight.filter(c => c.ok).length} slopes offered for straight track`;
+    }
+    RC.build.slope = 0;
   });
 
   check('a sloped turn holds its grade and lands on a whole level', () => {

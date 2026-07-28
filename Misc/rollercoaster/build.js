@@ -129,6 +129,26 @@
     return !sel.special && !!(dir && dir.piece);
   }
 
+  /* A chain only goes on track that climbs, straight or curved. Asked here so
+     the button can go dead where it would do nothing: it used to stay live on
+     any piece at all, and RC.place would quietly drop the flag, which looked
+     for all the world like the chain had been laid and simply not worked. */
+  function chainable() {
+    const def = resolve();
+    return !!(def && def.liftable);
+  }
+  RC.chainable = chainable;
+
+  /* Moving onto track that cannot carry a chain puts the chain away, rather
+     than leaving it armed to come back by itself on the next climb. Latching
+     it would mean building a lift hill, then a drop, then an airtime hill —
+     and finding a chain had quietly been laid up the hill the train was
+     supposed to coast over. */
+  RC.syncChain = function () {
+    if (!chainable()) sel.lift = false;
+    return sel.lift;
+  };
+
   /* Slope suffix on a turn's id, matching the sloped variants in track.js.
      A turn holds its slope rather than changing it, so there is no sloped
      equivalent of the transition straights: the track has to already be on
@@ -139,20 +159,57 @@
   TURN_SUFFIX[S.GENTLE_UP] = '-gentle-up';
   TURN_SUFFIX[S.STEEP_UP] = '-steep-up';
 
-  /* What would "build" place, for a given selection? */
+  /* What would "build" place, for a given selection?
+
+     A turn is resolved against the grade the track is ALREADY on, not against
+     the slope row. A turn holds its grade and cannot change one, so the only
+     turn that can be built from a given head is the one matching it — reading
+     the slope row instead would mean a corner could only be built after
+     selecting the very slope you were already travelling at, and on anything
+     but the flat the direction buttons simply went grey. */
   function resolveWith(dirId, slopeG, specialId) {
     if (specialId) return RC.pieceDef(specialId);
+    const head = RC.track.head;
     const dir = DIRECTIONS.find(d => d.id === dirId);
     if (dir && dir.piece) {
-      const suffix = TURN_SUFFIX[slopeG];
+      const suffix = head ? TURN_SUFFIX[head.g] : null;
       return RC.pieceDef(suffix ? dir.piece + suffix : dir.piece);
     }
-    const head = RC.track.head;
     if (!head) return null;
     return STRAIGHTS.get(head.g + '>' + slopeG) || null;
   }
 
   function resolve() { return resolveWith(sel.dir, sel.slope, sel.special); }
+
+  /* What the slope row can offer from where the track currently is.
+
+     With a corner chosen it stops being a choice and becomes a readout: a turn
+     keeps the grade it is on, so exactly one slope is possible — the one the
+     track is already travelling at. Greying the rest shows at a glance WHICH
+     corner is about to be built, rather than leaving five live-looking buttons
+     that would all build the same piece.
+
+     Separate from the drawing so the rule can be checked without a page to
+     render it into. */
+  RC.slopeChoices = function () {
+    const head = RC.track.head;
+    const d = sel.special ? null : DIRECTIONS.find(x => x.id === sel.dir);
+    const turning = !!(d && d.piece);
+
+    return SLOPES.map(s => {
+      let def, check;
+      if (turning) {
+        def = (head && head.g === s.g) ? resolveWith(sel.dir, s.g, null) : null;
+        check = def ? RC.canPlace(def, head)
+                    : { ok: false, why: 'a turn holds the grade it is already on' };
+      } else {
+        def = resolveWith('straight', s.g, null);
+        check = def ? RC.canPlace(def, head)
+                    : { ok: false, why: 'Not possible from this slope' };
+      }
+      return { g: s.g, label: s.label, turning, def, ok: !!check.ok, why: check.why || '' };
+    });
+  };
 
   /* Hovering a button previews that choice without committing to it. */
   let hover = null;
@@ -344,24 +401,30 @@
     for (const d of DIRECTIONS) {
       const b = dirBtns.get(d.id);
       if (!b) continue;
-      const def = resolveWith(d.id, d.piece ? S.LEVEL : sel.slope, null);
+      // Turns ignore the slope row and take the grade of the head, so testing
+      // them at LEVEL greyed out every corner the moment the track tilted.
+      const def = resolveWith(d.id, sel.slope, null);
       const check = def ? RC.canPlace(def, head) : { ok: false, why: 'Not possible here' };
       b.disabled = gate(check);
       b.title = check.ok ? d.label : `${d.label} — ${check.why}`;
       b.classList.toggle('selected', !sel.special && sel.dir === d.id);
     }
 
-    for (const s of SLOPES) {
-      const b = slopeBtns.get(s.g);
+    for (const c of RC.slopeChoices()) {
+      const b = slopeBtns.get(c.g);
       if (!b) continue;
-      const def = resolveWith('straight', s.g, null);
-      const check = def ? RC.canPlace(def, head) : { ok: false, why: 'Not possible from this slope' };
-      b.disabled = gate(check);
-      // The label says where you'll end up, not which piece it takes to get there.
-      b.title = check.ok
-        ? (def.gIn === def.gOut ? s.label : `${s.label} (via ${def.label.toLowerCase()})`)
-        : `${s.label} — ${check.why}`;
-      b.classList.toggle('selected', !sel.special && sel.dir === 'straight' && sel.slope === s.g);
+      b.disabled = gate(c);
+      b.title = c.ok
+        ? (c.turning
+            ? `${c.label} — ${c.def.label}`
+            // The label says where you'll end up, not which piece gets you there.
+            : (c.def.gIn === c.def.gOut ? c.label : `${c.label} (via ${c.def.label.toLowerCase()})`))
+        : `${c.label} — ${c.why}`;
+      // With a corner chosen, mark the one that WILL be built rather than
+      // whatever the row was last set to.
+      b.classList.toggle('selected', c.turning
+        ? c.ok
+        : (!sel.special && sel.dir === 'straight' && sel.slope === c.g));
     }
 
     for (const sp of SPECIALS) {
@@ -390,8 +453,16 @@
       b.classList.toggle('selected', canBank && sel.bank === r.bank);
     }
 
+    const canChain = chainable();
+    if (!inspecting) RC.syncChain();      // the chain does not survive leaving a climb
     const liftBtn = document.getElementById('btn-lift');
-    if (liftBtn) liftBtn.classList.toggle('active', sel.lift);
+    if (liftBtn) {
+      liftBtn.disabled = inspecting ? false : !canChain;
+      liftBtn.classList.toggle('active', sel.lift && canChain);
+      liftBtn.title = canChain
+        ? 'Put a chain on this piece'
+        : 'Chain lift — only track that climbs can carry one';
+    }
 
     const nameEl = document.getElementById('preview-name');
     const whyEl = document.getElementById('preview-why');

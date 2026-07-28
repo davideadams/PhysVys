@@ -79,7 +79,11 @@
     g = g || FLAT;
     return {
       id, label, kind: 'turn', gIn: g, gOut: g,
-      turn: dir, R, dH: Math.round(R * Math.PI / 2 * g)
+      turn: dir, R, dH: Math.round(R * Math.PI / 2 * g),
+      // A chain can be put on a corner that climbs, the same as on a straight
+      // one: a lift hill is allowed to bend. Only on a climb, though — a chain
+      // hauls a train up, and there is nothing for it to do on the way down.
+      liftable: g > 0
     };
   }
 

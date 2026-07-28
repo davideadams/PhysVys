@@ -333,22 +333,52 @@
      at `cars`. Shared by the ride and by a demo's comparison trains, so those
      are running the same physics rather than a second, subtly different copy
      of it — which for a demonstration about conservation of energy is rather
-     the point. Heat comes back as a rate; the caller multiplies by its step. */
+     the point.
+
+     Heat comes back per METRE travelled, not per second. Friction is a force,
+     and the energy it takes is that force times the distance the train
+     actually moves in the step — so charging it against the same displacement
+     that gravity is charged against keeps the two exactly in step. Billing it
+     per second instead used the speed at the START of the step against a
+     displacement made at the MEAN speed, which is a small mismatch that
+     accumulates over thousands of steps. Signed, so a train that reverses
+     inside a single step is still booked consistently. */
   function rollingForces(cars, v, mass) {
     const slope = meanOf(cars, 'dzds');          // sin of pitch, averaged
     const cosPitch = Math.sqrt(Math.max(0, 1 - Math.min(1, slope * slope)));
 
     let a = -G * slope;                          // gravity along the track
-    let heatRate = 0;
+    let heatPerM = 0;
 
     // Resistances always oppose motion.
     const sim = RC.sim;
     if (sim.friction && Math.abs(v) > 1e-6) {
       const aFric = sim.mu * G * cosPitch + sim.kDrag * v * v;
-      a -= Math.sign(v) * aFric;
-      heatRate = mass * aFric * Math.abs(v);
+      const dir = Math.sign(v);
+      a -= dir * aFric;
+      heatPerM = mass * aFric * dir;
     }
-    return { a, heatRate };
+    return { a, heatPerM };
+  }
+
+  /* Advance a bead on the wire by one step, and say how far it went.
+
+     The order here is the whole of the energy bookkeeping, so it is worth
+     being explicit about. Gravity changes the speed over the step, which
+     changes the kinetic energy by m*a*v_mean*dt where v_mean is the MEAN speed
+     across the step. The potential energy changes by m*g*slope*ds. Those two
+     cancel exactly — but only if the step moves the train by v_mean*dt.
+
+     Moving it by the END speed instead (v += a*dt; s += v*dt) makes the
+     distance climbed slightly disagree with the kinetic energy paid for it,
+     by half*m*a^2*dt^2 every step. One step of that is nothing; a lift hill is
+     tens of thousands of steps all leaning the same way, which is what put
+     "energy is not adding up" on the report for a track that was almost
+     entirely chain lift. */
+  function glide(state, a, dt) {
+    const ds = (state.v + a * dt / 2) * dt;
+    state.v += a * dt;
+    return ds;
   }
 
   /* Bring a train that has finished its ride back to exactly where it set off
@@ -391,10 +421,20 @@
     const cars = RC.carStates();
     if (!cars.length) return;
 
-    const roll = rollingForces(cars, sim.v, m);
-    const a = roll.a;            // tangential acceleration, for the g-forces below
-    sim.eThermal += roll.heatRate * dt;
-    sim.v += a * dt;
+    /* Everything down to the brakes is a DRIVE SYSTEM, and every one of them
+       works by setting the speed outright. They go FIRST, before the train
+       has moved anywhere, so each is a pure change of kinetic energy over no
+       distance at all — which makes what it costs the motor, or gives up to
+       the brakes, exactly the kinetic energy it changed. The glide that
+       follows is then the only thing that moves the train, and it balances
+       against gravity on its own.
+
+       Order matters twice over. Gliding first and clamping afterwards books
+       the same energy, but it lets a train standing at the bottom of a lift
+       slide backwards for one step before the chain catches it — and a train
+       parked at s = 0 slides straight off the start of the track and the run
+       ends before it has begun. The chain holds the train; it does not catch
+       it after it has already let go. */
 
     // Station dispatch: while the train is still leaving the station on its way
     // out, the station's drive tyres push it forward onto the lift (or launch).
@@ -445,7 +485,16 @@
       sim.v = sign * after;
     }
 
-    sim.s += sim.v * dt;
+    /* Now roll. Gravity and the resistances act over the step, and the train
+       moves by the MEAN speed across it — which is what makes the height it
+       gains agree exactly with the kinetic energy it paid, and the heat agree
+       exactly with the distance it rubbed along. */
+    const roll = rollingForces(cars, sim.v, m);
+    const a = roll.a;            // tangential acceleration, for the g-forces below
+    const ds = glide(sim, a, dt);
+    sim.eThermal += roll.heatPerM * ds;
+
+    sim.s += ds;
     sim.time += dt;
 
     // Once the train has cleared the berth it has "launched out"; this stops
@@ -728,21 +777,23 @@
     if (!oh || !oh.pts.length) return null;
     const pts = oh.pts;
 
-    // Behind the edge: a car that has not reached it yet, on a train that has
-    // already tipped. It trails back along the departure tangent, which is
-    // where the track it just left was pointing.
+    /* Behind the edge: a car that has not reached it yet, on a train that has
+       already tipped. It is still strung out along the track it has not
+       finished travelling, so that is where it is drawn from — the track
+       point, flagged as off the rails so no station, chain or brake can grab
+       an airborne train through it.
+
+       It used to trail back along the departure TANGENT instead, a straight
+       line out of the last sleeper. On constant-grade track the two are the
+       same line, which is why it went unnoticed; on anything that curves
+       vertically they part company, and the moment the train committed, half
+       its cars jumped to a different height. Potential energy appeared out of
+       nowhere in a single frame, and the report — correctly — called it a bug
+       in the simulation. Geometry a car is standing on must never change
+       discontinuously, whatever the car is doing. */
     if (u < 0) {
-      const p0 = pts[0];
-      return {
-        s: oh.s0 + u,
-        x: (p0.x + p0.fx * u) / RC.TILE_M,
-        y: (p0.y + p0.fy * u) / RC.TILE_M,
-        z: (p0.z + p0.fz * u) / RC.LEVEL_M,
-        dzds: p0.fz, curv: 0, kx: 0, ky: 0, kz: 0, bank: 0,
-        fx: p0.fx, fy: p0.fy, fz: p0.fz,
-        ux: p0.ux, uy: p0.uy, uz: p0.uz,
-        piece: null, def: null, overhang: true
-      };
+      const p = RC.pathAt(oh.s0 + u, RC.isClosed());
+      return p && Object.assign({}, p, { piece: null, def: null, overhang: true });
     }
 
     let a, b, f;
@@ -864,9 +915,9 @@
     const m = demoMass(tr);
 
     const roll = rollingForces(cars, tr.v, m);
-    tr.eThermal += roll.heatRate * dt;
-    tr.v += roll.a * dt;
-    tr.s += tr.v * dt;
+    const ds = glide(tr, roll.a, dt);
+    tr.eThermal += roll.heatPerM * ds;
+    tr.s += ds;
     tr.time += dt;
 
     // First arrival at the bottom: the number the demo exists to show.
