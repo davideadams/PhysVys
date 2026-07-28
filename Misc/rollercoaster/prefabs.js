@@ -18,6 +18,11 @@
   const rep = (n, id, opts) =>
     new Array(n).fill(0).map(() => Object.assign({ id }, opts || {}));
 
+  /* Demo lanes are plain lists of piece ids rather than build steps. */
+  const repId = (n, id) => new Array(n).fill(id);
+
+  const GENTLE = RC.SLOPE.GENTLE, STEEP = RC.SLOPE.STEEP;
+
   RC.PREFABS = {
     'first-drop': {
       name: 'First Drop',
@@ -113,6 +118,51 @@
       build: []
     },
 
+    /* Three trains, three routes down the same 23 m, released together.
+       Whatever shape the track is, each arrives at the bottom doing the same
+       speed, because gravity's work depends on the height dropped and nothing
+       else. They arrive at very different TIMES, which is the other half of
+       the point — and switching friction on breaks the match, because losses
+       go with the length of the path rather than the height of it.
+
+       Heights below are in levels (= metres), all from 23 down to 0:
+         Steep    -6 -6 -6 -4 -1                       over 5 tiles
+         Shallow  -2 x11, -1                           over 12 tiles
+         Varied   -6 -4 -2 -1  0  0 -1 -4 -4 -1        over 10 tiles
+       Each is padded with level track to the same finish line, so the trains
+       end up side by side, still moving, at matching speeds. */
+    'path-independence': {
+      name: 'Path independence',
+      blurb: 'Three trains race 23 m down a steep, a shallow and a varied track. ' +
+             'Different routes, different times, identical speed at the bottom.',
+      demo: {
+        label: 'Path independence',
+        cars: 1,             // a point mass, so the demo is about the path alone
+        drop: 23,
+        lanes: [
+          {
+            label: 'Steep', colour: '#cf3a2f', j: 12, g: -STEEP,
+            ids: repId(3, 'steep-down')
+              .concat(['steep-to-gentle-down', 'gentle-down-to-flat'])
+              .concat(repId(15, 'flat'))
+          },
+          {
+            label: 'Shallow', colour: '#1f6fb2', j: 20, g: -GENTLE,
+            ids: repId(11, 'gentle-down')
+              .concat(['gentle-down-to-flat'])
+              .concat(repId(8, 'flat'))
+          },
+          {
+            label: 'Varied', colour: '#2f855a', j: 28, g: -STEEP,
+            ids: ['steep-down', 'steep-to-gentle-down', 'gentle-down',
+                  'gentle-down-to-flat', 'flat', 'flat', 'flat-to-gentle-down',
+                  'gentle-to-steep-down', 'steep-to-gentle-down', 'gentle-down-to-flat']
+              .concat(repId(10, 'flat'))
+          }
+        ]
+      }
+    },
+
     'shuttle-loop': {
       name: 'Shuttle Loop',
       blurb: 'Launched from the station through a loop and up a tall spike, then rolls back ' +
@@ -142,11 +192,68 @@
   /* Build a prefab. Pieces go through the normal RC.place, so a prefab can only
      contain track a student could have built by hand. Closed presets are then
      auto-closed with RC.completeTrack. */
+  /* A demonstration: several tracks side by side, each with its own train.
+     The FIRST lane becomes the editable track, so the build window, the graphs
+     and the report all keep working on something real; the rest are comparison
+     tracks the demo stands beside it.
+
+     These start part way down a slope rather than from a station, because the
+     station's drive tyres would add energy and the whole point is that gravity
+     did all of it. The start node carries the entry slope, so the trains are
+     already on the grade and move the moment they are released — from level
+     track at s = 0 they would simply sit there. */
+  function loadDemo(prefab) {
+    const d = prefab.demo;
+    const lanes = d.lanes;
+    const startFor = lane => ({ i: 3, j: lane.j, dir: 0, k: d.drop, g: lane.g });
+
+    // Lane 0 replaces the station RC.resetTrack just laid down.
+    const main = lanes[0];
+    RC.track.pieces = [];
+    RC.track.start = startFor(main);
+    RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
+    for (let n = 0; n < main.ids.length; n++) {
+      if (!RC.place(main.ids[n])) {
+        const why = RC.canPlace(RC.pieceDef(main.ids[n]), RC.track.head).why;
+        return { ok: false, why: `${prefab.name}: ${main.label} piece ${n + 1} refused — ${why}` };
+      }
+    }
+
+    const trains = [];
+    for (let n = 1; n < lanes.length; n++) {
+      const lane = lanes[n];
+      const chain = RC.buildChain(startFor(lane), lane.ids);
+      if (!chain.ok) return { ok: false, why: `${prefab.name}: ${lane.label} — ${chain.why}` };
+      trains.push({
+        label: lane.label,
+        colour: lane.colour,
+        pieces: chain.pieces,
+        path: RC.buildPath(chain.pieces),
+        s: 0, v: 0, time: 0, eThermal: 0, E0: 0, h0: 0,
+        vGround: null, tGround: null, done: false
+      });
+    }
+
+    RC.demo = {
+      key: prefab.key,
+      label: d.label,
+      drop: d.drop,
+      mainLabel: main.label,
+      mainColour: main.colour,
+      trains
+    };
+    if (d.cars) RC.sim.cars = d.cars;
+    return { ok: true, demo: true, closed: false, shuttle: false };
+  }
+
   RC.loadPrefab = function (key) {
     const prefab = RC.PREFABS[key];
     if (!prefab) return { ok: false, why: `No prefab called "${key}"` };
+    prefab.key = key;
 
     RC.resetTrack();
+    if (prefab.demo) return loadDemo(prefab);
     for (let n = 0; n < prefab.build.length; n++) {
       const step = prefab.build[n];
       if (!RC.place(step.id, step)) {

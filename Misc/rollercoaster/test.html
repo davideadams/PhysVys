@@ -593,9 +593,20 @@
   function runFor(seconds) {
     RC.sim.state = 'running';
     const dt = 1 / 60;
-    for (let n = 0; n < seconds * 60 && RC.sim.state === 'running'; n++) {
+    const going = () => RC.sim.state === 'running' || (RC.demoRunning && RC.demoRunning());
+    for (let n = 0; n < seconds * 60 && going(); n++) {
       RC.stepSim(dt);
     }
+  }
+
+  /* How far along a path the train is still descending: the arc position where
+     it first reaches ground level. This, not the total, is what separates the
+     demo's routes — every lane is padded with level track to a common finish
+     line, and a steep piece covers more track per tile than a shallow one, so
+     the totals come out close together. */
+  function descentOf(path) {
+    for (const q of path.pts) if (q.z <= 1e-9) return q.s;
+    return path.total;
   }
 
   /* Run until `cond` first holds, so a test can inspect the sim mid-ride
@@ -1505,8 +1516,9 @@
      looking fine and Test silently refuses. */
   check('every prefab builds; closed ones close, shuttles are testable shuttles', () => {
     for (const key of Object.keys(RC.PREFABS)) {
-      // A blank preset is deliberately just a station: nothing to close or test.
-      if (RC.PREFABS[key].blank) continue;
+      // A blank preset is deliberately just a station: nothing to close or
+      // test. A demo is a straight run down a hill, with its own checks below.
+      if (RC.PREFABS[key].blank || RC.PREFABS[key].demo) continue;
       const res = RC.loadPrefab(key);
       if (!res.ok) return res.why;
       const st = RC.circuitStatus();
@@ -1524,7 +1536,8 @@
 
   check('every prefab has a station and reaches a sensible height', () => {
     for (const key of Object.keys(RC.PREFABS)) {
-      if (RC.PREFABS[key].blank) continue;
+      // Demos have no station on purpose — a dispatch would add energy.
+      if (RC.PREFABS[key].blank || RC.PREFABS[key].demo) continue;
       RC.loadPrefab(key);
       const pieces = RC.track.pieces;
       if (!pieces.some(p => RC.pieceDef(p.defId).station)) return `"${key}" has no station`;
@@ -2463,6 +2476,196 @@
       return `lateral peak at s=${peak.s.toFixed(1)} m is outside T1's span ` +
              `[${turn.s0.toFixed(1)}, ${turn.s1.toFixed(1)}]`;
     }
+  });
+
+  /* ---- demonstrations ----------------------------------------------------- */
+  check('the path-independence demo builds three tracks dropping the same height', () => {
+    const res = RC.loadPrefab('path-independence');
+    if (!res.ok) return res.why;
+    if (!RC.demo) return 'no demo was set up';
+    if (RC.demo.trains.length !== 2) {
+      return `${RC.demo.trains.length} comparison trains, expected 2 beside the main one`;
+    }
+    // Every route must start at the drop height and finish at ground level.
+    const paths = [RC.trackPath()].concat(RC.demo.trains.map(t => t.path));
+    const labels = [RC.demo.mainLabel].concat(RC.demo.trains.map(t => t.label));
+    for (let n = 0; n < paths.length; n++) {
+      const pts = paths[n].pts;
+      if (!near(pts[0].z, RC.demo.drop, 1e-9)) {
+        return `${labels[n]} starts at ${pts[0].z} m, not ${RC.demo.drop}`;
+      }
+      let low = Infinity;
+      for (const p of pts) low = Math.min(low, p.z);
+      if (!near(low, 0, 1e-9)) return `${labels[n]} bottoms out at ${low} m, not 0`;
+      if (!near(pts[pts.length - 1].z, 0, 1e-9)) {
+        return `${labels[n]} does not finish at ground level`;
+      }
+    }
+    // And they must genuinely be different routes — see descentOf for why the
+    // totals are the wrong thing to compare.
+    const descents = paths.map(descentOf);
+    if (Math.max.apply(null, descents) - Math.min.apply(null, descents) < 10) {
+      return `the three descents are all about the same length ` +
+             `(${descents.map(d => d.toFixed(0)).join(', ')} m)`;
+    }
+  });
+
+  check('a demo waits for the Test button, then releases every train together', () => {
+    // The comparison trains have to be held at the top until the run starts.
+    // Treating "not finished yet" as "under way" set them rolling the moment
+    // the preset loaded, while the ride's own train sat waiting to be tested.
+    const res = RC.loadPrefab('path-independence');
+    if (!res.ok) return res.why;
+    RC.resetSim();
+    if (RC.demoRunning()) return 'the demo called itself running before Test';
+
+    // A second of frames, exactly as the page's animation loop delivers them.
+    for (let n = 0; n < 60; n++) RC.stepSim(1 / 60);
+    if (RC.sim.s !== 0 || RC.sim.v !== 0) {
+      return `the ride's train crept to s = ${RC.sim.s.toFixed(2)} m before Test`;
+    }
+    for (const tr of RC.demo.trains) {
+      if (tr.s !== 0 || tr.v !== 0) {
+        return `${tr.label} rolled to s = ${tr.s.toFixed(2)} m before Test was pressed`;
+      }
+    }
+
+    // Started, they all set off on the same frame.
+    RC.startSim();
+    RC.stepSim(1 / 60);
+    if (!(RC.sim.v > 0)) return "the ride's train did not set off";
+    for (const tr of RC.demo.trains) {
+      if (!(tr.v > 0)) return `${tr.label} did not set off with the others`;
+    }
+
+    // And Pause catches them, including once the main train has finished.
+    RC.pauseSim();
+    if (RC.demoRunning()) return 'Pause did not stop the comparison trains';
+    RC.sim.cars = 4;
+  });
+
+  check('all three demo trains reach the bottom at the same speed', () => {
+    // The whole point: gravity's work depends on the height dropped, not the
+    // route taken, so three very different tracks give one answer.
+    const res = RC.loadPrefab('path-independence');
+    if (!res.ok) return res.why;
+    RC.sim.friction = false;
+    RC.resetSim();
+    runFor(60);
+
+    const speeds = [RC.sim.vGround].concat(RC.demo.trains.map(t => t.vGround));
+    const labels = [RC.demo.mainLabel].concat(RC.demo.trains.map(t => t.label));
+    for (let n = 0; n < speeds.length; n++) {
+      if (speeds[n] === null) return `${labels[n]} never reached the bottom`;
+    }
+    const ideal = Math.sqrt(2 * 9.81 * RC.demo.drop);
+    for (let n = 0; n < speeds.length; n++) {
+      if (Math.abs(speeds[n] - ideal) > 0.2) {
+        return `${labels[n]} arrived at ${speeds[n].toFixed(2)} m/s, ` +
+               `expected about ${ideal.toFixed(2)} (v = sqrt(2gh))`;
+      }
+    }
+    const spread = Math.max.apply(null, speeds) - Math.min.apply(null, speeds);
+    if (spread > 0.1) {
+      return `speeds spread by ${spread.toFixed(2)} m/s: ` +
+             speeds.map((v, n) => `${labels[n]} ${v.toFixed(2)}`).join(', ');
+    }
+  });
+
+  check('the demo trains arrive at different times', () => {
+    // Same speed is not the same journey — the steep route gets there first.
+    RC.loadPrefab('path-independence');
+    RC.sim.friction = false;
+    RC.resetSim();
+    runFor(60);
+    const times = [RC.sim.tGround].concat(RC.demo.trains.map(t => t.tGround));
+    if (times.some(t => t === null)) return 'a train never reached the bottom';
+    const spread = Math.max.apply(null, times) - Math.min.apply(null, times);
+    if (spread < 0.5) {
+      return `arrival times only differ by ${spread.toFixed(2)} s — ` +
+             `the routes are not distinct enough to make the point`;
+    }
+    // The steep route is lane 0, and must be the quickest of the three.
+    if (RC.sim.tGround > Math.min.apply(null, times) + 1e-9) {
+      return `the steep route took ${RC.sim.tGround.toFixed(2)} s, ` +
+             `not the fastest of ${times.map(t => t.toFixed(2)).join(', ')}`;
+    }
+  });
+
+  check('friction makes the long route lose the most', () => {
+    // The sequel lesson: losses follow the LENGTH of the path, not its height,
+    // so with friction on the shallow route arrives slowest.
+    RC.loadPrefab('path-independence');
+    RC.sim.friction = true;
+    RC.sim.mu = 0.02;
+    RC.sim.kDrag = 0.0012;
+    RC.resetSim();
+    runFor(60);
+
+    const steep = RC.sim.vGround;
+    const byLabel = {};
+    for (const t of RC.demo.trains) byLabel[t.label] = t;
+    const shallow = byLabel['Shallow'];
+    if (!shallow) return 'no Shallow route in the demo';
+    if (steep === null || shallow.vGround === null) return 'a train never reached the bottom';
+
+    if (!(shallow.vGround < steep)) {
+      return `with friction on the shallow route (${shallow.vGround.toFixed(2)} m/s) ` +
+             `should arrive slower than the steep one (${steep.toFixed(2)})`;
+    }
+    // The reason it loses more: it spends longer coming down. Compare the
+    // descents, not the totals — the lanes are padded to a common finish line.
+    const shallowDrop = descentOf(shallow.path), steepDrop = descentOf(RC.trackPath());
+    if (!(shallowDrop > steepDrop)) {
+      return `the shallow descent (${shallowDrop.toFixed(0)} m) is not longer than ` +
+             `the steep one (${steepDrop.toFixed(0)} m)`;
+    }
+    RC.sim.friction = false;
+  });
+
+  check('a demo train and the ride run the same physics', () => {
+    // The comparison trains share the ride's gravity and resistance code. Put
+    // one on a copy of the ride's own track and it must agree to the metre.
+    RC.loadPrefab('path-independence');
+    RC.sim.friction = false;
+    RC.resetSim();
+
+    // A comparison train laid on exactly the main track's geometry.
+    const twin = {
+      label: 'twin', colour: '#000',
+      pieces: RC.track.pieces.map(p => ({
+        defId: p.defId, node: Object.assign({}, p.node), lift: false, bank: false
+      })),
+      s: 0, v: 0, time: 0, eThermal: 0, E0: 0, h0: 0,
+      vGround: null, tGround: null, done: false
+    };
+    twin.path = RC.buildPath(twin.pieces);
+    RC.demo.trains.push(twin);
+    RC.resetSim();
+    runFor(60);
+
+    if (twin.vGround === null) return 'the twin never reached the bottom';
+    if (Math.abs(twin.vGround - RC.sim.vGround) > 1e-6) {
+      return `twin reached ${twin.vGround.toFixed(6)} m/s but the ride reached ` +
+             `${RC.sim.vGround.toFixed(6)} — the two are not the same physics`;
+    }
+  });
+
+  check('a demo is testable without a station, and clears when another preset loads', () => {
+    RC.loadPrefab('path-independence');
+    const st = RC.circuitStatus();
+    if (st.kind !== 'demo' || !st.ok) return `demo status was "${st.kind}" (ok ${st.ok})`;
+    // No station: the drive tyres would add energy the demo says came from gravity.
+    if (RC.track.pieces.some(p => RC.pieceDef(p.defId).station)) {
+      return 'the demo track has a station, which would dispatch the train';
+    }
+    RC.resetSim();
+    if (!RC.startSim()) return 'Test refused to run the demo';
+
+    RC.loadPrefab('first-drop');
+    if (RC.demo) return 'the demo survived loading another preset';
+    if (RC.circuitStatus().kind !== 'closed') return 'the next preset did not load cleanly';
+    RC.sim.cars = 4;      // the demo forced it to 1; put it back for later tests
   });
 
   check('the graph mode setter is well behaved', () => {

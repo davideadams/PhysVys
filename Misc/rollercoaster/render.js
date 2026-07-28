@@ -194,11 +194,11 @@
     };
   }
 
-  RC.drawTrack = function (ctx, cam, view, extras) {
-    const path = RC.trackPath();
+  /* Append one path's rails, sleepers, chain dogs and support bents to the
+     depth-sorted list. Pulled out of drawTrack so a demo's comparison tracks
+     can go into the same list and interleave correctly with the main one. */
+  function appendTrack(list, path, cam, cover) {
     const pts = path.pts;
-    const list = [];
-    const cover = coverSorter(cam);
 
     if (pts.length > 1) {
       const frames = pts.map((_, n) => RC.frameAtPoint(pts, n));
@@ -255,6 +255,17 @@
         }
       }
     }
+  }
+
+  RC.drawTrack = function (ctx, cam, view, extras) {
+    const list = [];
+    appendTrack(list, RC.trackPath(), cam, coverSorter(cam));
+
+    // A demo's comparison tracks stand alongside; they carry no cover sorter
+    // of their own, which only matters where one is drawn over its own train.
+    if (RC.demo) {
+      for (const tr of RC.demo.trains) appendTrack(list, tr.path, cam, null);
+    }
 
     for (const e of (extras || [])) list.push(e);
 
@@ -310,7 +321,9 @@
     const lo = [P(1, 1, 0), P(1, -1, 0), P(-1, -1, 0), P(-1, 1, 0)];
     const hi = [P(1, 1, 1), P(1, -1, 1), P(-1, -1, 1), P(-1, 1, 1)];
 
-    const base = d.idx === 0 ? CAR_FRONT : CAR_BODY;
+    // A comparison train is drawn in its own colour throughout, so it can be
+    // told from the others and matched to its row in the demo's table.
+    const base = d.colour ? d.colour : (d.idx === 0 ? CAR_FRONT : CAR_BODY);
 
     // Side faces sorted back-to-front, then the roof on top.
     const faces = [];
@@ -362,6 +375,20 @@
       return out;
     }
 
+    // A demo's comparison trains, each on its own track.
+    if (RC.demo && RC.demoCars) {
+      for (const tr of RC.demo.trains) {
+        const cars = RC.demoCars(tr);
+        for (let n = 0; n < cars.length; n++) {
+          const p = cars[n];
+          out.push({
+            depth: RC.depth(p.x, p.y, p.z, cam.rot) + 0.4,
+            draw: drawCar, p, idx: n, colour: tr.colour
+          });
+        }
+      }
+    }
+
     if (RC.trackPath().pts.length < 2) return out;
     // Cars hanging off the end come back from carStates like any others, so
     // they need no special case here — they are simply drawn past the rails.
@@ -370,7 +397,7 @@
       const p = cars[n];
       out.push({
         depth: RC.depth(p.x, p.y, p.z, cam.rot) + 0.4,
-        draw: drawCar, p, idx: n
+        draw: drawCar, p, idx: n, colour: RC.demo ? RC.demo.mainColour : null
       });
     }
     return out;

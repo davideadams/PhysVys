@@ -454,6 +454,63 @@
   }
   RC.gColour = gColour;
 
+  /* The comparison a demo exists to make: a row per train, and the figure that
+     matters — the speed each reached at the bottom — lined up underneath each
+     other so three different routes can be seen to give one answer. */
+  function demoTable() {
+    const sim = RC.sim;
+    const num = (v, dp, unit) => v === null || v === undefined ? '—' : v.toFixed(dp) + unit;
+
+    // The ride's own train is the first runner; the rest are the demo's.
+    const rows = [{
+      label: RC.demo.mainLabel,
+      colour: RC.demo.mainColour,
+      length: RC.trackPath().total,
+      tGround: sim.tGround,
+      vGround: sim.vGround,
+      keGround: sim.vGround === null ? null
+              : 0.5 * RC.trainMass() * sim.vGround * sim.vGround
+    }];
+    for (const tr of RC.demo.trains) {
+      const st = RC.demoState(tr);
+      rows.push({
+        label: tr.label, colour: tr.colour,
+        length: st.length, tGround: st.tGround,
+        vGround: st.vGround, keGround: st.keGround
+      });
+    }
+
+    let html = `<div class="report-hd">${RC.demo.label}</div>`;
+    html += `<table class="demo-table"><thead><tr>` +
+            `<th>Route</th><th>Track</th><th>Time</th><th>Speed</th><th>E<sub>k</sub></th>` +
+            `</tr></thead><tbody>`;
+    for (const r of rows) {
+      html += `<tr>` +
+              `<td><i class="demo-key" style="background:${r.colour}"></i>${r.label}</td>` +
+              `<td>${num(r.length, 0, ' m')}</td>` +
+              `<td>${num(r.tGround, 1, ' s')}</td>` +
+              `<td>${num(r.vGround, 1, ' m/s')}</td>` +
+              `<td>${r.keGround === null ? '—' : fmt(r.keGround)}</td>` +
+              `</tr>`;
+    }
+    html += `</tbody></table>`;
+
+    // Say plainly whether the speeds agree, and if not, why not.
+    const got = rows.filter(r => r.vGround !== null).map(r => r.vGround);
+    if (got.length === rows.length) {
+      const spread = Math.max.apply(null, got) - Math.min.apply(null, got);
+      const ideal = Math.sqrt(2 * 9.81 * RC.demo.drop);
+      html += spread <= 0.15
+        ? `<p class="report-note">All ${rows.length} reached the bottom at the same speed, ` +
+          `about ${ideal.toFixed(1)}&nbsp;m/s — the &radic;(2gh) for a ${RC.demo.drop}&nbsp;m ` +
+          `drop, whichever way down they came.</p>`
+        : `<p class="report-note">The speeds differ by ${spread.toFixed(1)}&nbsp;m/s. With ` +
+          `friction on they must: the losses follow the LENGTH of each path, not the ` +
+          `height it drops, so the long shallow route gives up the most.</p>`;
+    }
+    return html;
+  }
+
   RC.updateReport = function () {
     const el = document.getElementById('report-body');
     if (!el) return;
@@ -472,6 +529,8 @@
 
     let html = '';
     if (sim.note) html += `<p class="report-note">${sim.note}</p>`;
+
+    if (RC.demo) html += demoTable();
 
     html += `<div class="report-hd">Ride</div>`;
     html += row('Top speed', sim.maxV.toFixed(1) + ' m/s');

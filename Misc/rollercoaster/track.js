@@ -317,6 +317,11 @@
   };
 
   /* ---- the track ------------------------------------------------------ */
+  /* A running demonstration, or null. Holds extra tracks standing in the park
+     next to the editable one, each with its own train, for comparisons the
+     single track cannot make. Set by a prefab, cleared by RC.resetTrack. */
+  RC.demo = null;
+
   RC.track = {
     start: null,     // node the first piece leaves from
     pieces: [],      // [{ defId, node, lift }] — node is the ENTRY node
@@ -333,13 +338,14 @@
      physics runs along the same table so what you see is what is simulated. */
   let pathCache = null, pathCacheVersion = -1;
 
-  RC.trackPath = function () {
-    if (pathCache && pathCacheVersion === RC.version) return pathCache;
-
+  /* Sample any chain of pieces into a path. Kept separate from RC.trackPath so
+     that a comparison track — one a demo puts in the park alongside the track
+     being built — can have a path of its own without going near the editable
+     one or its cache. */
+  RC.buildPath = function (pieces) {
     const pts = [];
     let s = 0, prev = null;
 
-    const pieces = RC.track.pieces;
     for (let pi = 0; pi < pieces.length; pi++) {
       const p = pieces[pi];
       const def = BY_ID.get(p.defId);
@@ -393,7 +399,12 @@
 
     buildFrames(pts);
 
-    pathCache = { pts, total: s };
+    return { pts, total: s };
+  };
+
+  RC.trackPath = function () {
+    if (pathCache && pathCacheVersion === RC.version) return pathCache;
+    pathCache = RC.buildPath(RC.track.pieces);
     pathCacheVersion = RC.version;
     return pathCache;
   };
@@ -610,7 +621,12 @@
   /* Interpolated state at arc position s (metres). Wraps on a closed
      circuit, clamps otherwise. */
   RC.pathAt = function (sQuery, closed) {
-    const path = RC.trackPath();
+    return RC.pathAtIn(RC.trackPath(), sQuery, closed);
+  };
+
+  /* The same lookup against an explicitly given path, so a comparison train
+     can be positioned on its own track. */
+  RC.pathAtIn = function (path, sQuery, closed) {
     const pts = path.pts;
     if (pts.length < 2) return null;
 
@@ -761,6 +777,36 @@
     return true;
   };
 
+  /* Lay out a chain of pieces from a start node WITHOUT touching RC.track —
+     for the comparison tracks a demo stands in the park beside the one being
+     built. Deliberately does not run the collision checks: these tracks are
+     positioned by the preset that knows where it is putting them, and testing
+     them against the editable track's occupancy would be wrong anyway. Slope
+     continuity is still enforced, since a mismatch there is a mistake. */
+  RC.buildChain = function (startNode, ids) {
+    const start = Object.assign({}, startNode);
+    let head = Object.assign({}, startNode);
+    const pieces = [];
+    for (const id of ids) {
+      const def = BY_ID.get(id);
+      if (!def) return { ok: false, why: `No piece called "${id}"` };
+      if (def.gIn !== head.g) {
+        return { ok: false, why: `${id} needs a ${RC.slopeName(def.gIn)} entry, ` +
+                                 `but the chain is ${RC.slopeName(head.g)} there` };
+      }
+      pieces.push({
+        defId: id,
+        node: { i: head.i, j: head.j, dir: head.dir, k: head.k, g: head.g },
+        lift: false, bank: false
+      });
+      head = RC.exitNode(def, head);
+      if (head.k < 0) return { ok: false, why: `${id} would go below ground` };
+      if (head.k > MAX_H) return { ok: false, why: `${id} would go too high` };
+      if (!RC.inBounds(head.i, head.j)) return { ok: false, why: `${id} would leave the park` };
+    }
+    return { ok: true, pieces, start, head };
+  };
+
   RC.undo = function () {
     const t = RC.track;
     if (!t.pieces.length) return false;
@@ -876,6 +922,11 @@
   RC.circuitStatus = function () {
     const t = RC.track;
     if (!t.pieces.length) return { kind: 'empty', label: 'No track' };
+
+    // A demonstration is a straight run down a hill, released from rest: no
+    // station (whose drive tyres would add energy the demo is trying to say
+    // came only from gravity) and no circuit to close.
+    if (RC.demo) return { kind: 'demo', label: RC.demo.label || 'Demonstration', ok: true };
 
     const hasStation = t.pieces.some(p => BY_ID.get(p.defId).station);
     const hasLaunch = t.pieces.some(p => BY_ID.get(p.defId).launch);
@@ -1092,6 +1143,7 @@
   RC.resetTrack = function () {
     const t = RC.track;
     t.pieces = [];
+    RC.demo = null;          // any comparison tracks go with the old layout
     RC.version++;
     // Near the middle of the park, so it's on screen at the default zoom and
     // there's room to build in every direction.

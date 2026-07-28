@@ -241,7 +241,9 @@
 
   function updateRideUI() {
     const sim = RC.sim;
-    const running = sim.state === 'running';
+    // A demo's slower trains keep coming down after the ride's own has
+    // stopped, and the button has to stay a Pause while they do.
+    const running = sim.state === 'running' || (RC.demoRunning && RC.demoRunning());
     btnTest.textContent = running ? '■ Pause' : '▶ Test';
     btnTest.classList.toggle('active', running);
     updateShuttleBtn();
@@ -343,7 +345,9 @@
     const dt = lastT ? (t - lastT) / 1000 : 0;
     lastT = t;
 
-    if (RC.sim.state === 'running') {
+    // Keep stepping while a demo's slower trains are still coming down, even
+    // once the ride's own train has finished.
+    if (RC.sim.state === 'running' || (RC.demoRunning && RC.demoRunning())) {
       RC.stepSim(dt);
       updateRideUI();
       state.dirty = true;

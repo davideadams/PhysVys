@@ -590,6 +590,36 @@ input[type="range"]:disabled { opacity: 0.5; }
 }
 
 /* Shared readout vocabulary, for the energy/report windows. */
+/* A demo's side-by-side comparison of several trains. */
+.demo-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  margin: 0.2rem 0 0.5rem;
+}
+.demo-table th {
+  text-align: right;
+  font-weight: 700;
+  color: var(--muted);
+  padding: 0.15rem 0.25rem;
+  border-bottom: 1px solid var(--chrome-border);
+}
+.demo-table th:first-child, .demo-table td:first-child { text-align: left; }
+.demo-table td {
+  text-align: right;
+  padding: 0.2rem 0.25rem;
+  border-bottom: 1px solid rgba(21, 48, 77, 0.07);
+  font-variant-numeric: tabular-nums;
+}
+.demo-table tr:last-child td { border-bottom: none; }
+.demo-key {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  margin-right: 0.35rem;
+}
+
 .readout-row {
   display: flex;
   justify-content: space-between;

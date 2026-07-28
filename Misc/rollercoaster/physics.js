@@ -92,6 +92,10 @@
      back inside the station. Falls back to clearing the train's own length off
      the start when there's no station (custom tracks, tests). */
   RC.defaultBerth = function () {
+    // A demo's trains are all released from the very top of their hills, so
+    // they start from the same height. Clearing a train's length off the start
+    // here would set this one off lower than the ones it is being compared to.
+    if (RC.demo) return 0;
     const total = RC.trackPath().total;
     const st = RC.stationEndS();
     return Math.min(st > 0 ? st : CAR_SPACING * RC.sim.cars, total);
@@ -289,6 +293,8 @@
     sim.maxV = 0;
     sim.maxG = 0;
     sim.maxZ = 0;
+    sim.vGround = null;      // speed on first reaching ground, for a demo
+    sim.tGround = null;
     sim.warnings = [];
     sim.warnKeys = {};       // key -> index in warnings, so repeats collapse
     sim.warnSeverity = {};   // key -> worst reading seen for that key
@@ -314,8 +320,31 @@
     const cars = RC.carStates();
     const m = RC.trainMass();
     sim.E0 = m * G * meanOf(cars, 'z') * RC.LEVEL_M;   // at rest, so no KE
+    RC.resetDemo();      // comparison trains go back to the top with it
     return sim;
   };
+
+  /* Gravity along the track, plus the resistances, for a train whose cars are
+     at `cars`. Shared by the ride and by a demo's comparison trains, so those
+     are running the same physics rather than a second, subtly different copy
+     of it — which for a demonstration about conservation of energy is rather
+     the point. Heat comes back as a rate; the caller multiplies by its step. */
+  function rollingForces(cars, v, mass) {
+    const slope = meanOf(cars, 'dzds');          // sin of pitch, averaged
+    const cosPitch = Math.sqrt(Math.max(0, 1 - Math.min(1, slope * slope)));
+
+    let a = -G * slope;                          // gravity along the track
+    let heatRate = 0;
+
+    // Resistances always oppose motion.
+    const sim = RC.sim;
+    if (sim.friction && Math.abs(v) > 1e-6) {
+      const aFric = sim.mu * G * cosPitch + sim.kDrag * v * v;
+      a -= Math.sign(v) * aFric;
+      heatRate = mass * aFric * Math.abs(v);
+    }
+    return { a, heatRate };
+  }
 
   /* ---- one physics substep --------------------------------------------- */
   function substep(dt) {
@@ -326,20 +355,9 @@
     const cars = RC.carStates();
     if (!cars.length) return;
 
-    const slope = meanOf(cars, 'dzds');          // sin of pitch, averaged
-    const cosPitch = Math.sqrt(Math.max(0, 1 - Math.min(1, slope * slope)));
-
-    // Gravity along the track.
-    let a = -G * slope;
-
-    // Resistances always oppose motion.
-    if (sim.friction && Math.abs(sim.v) > 1e-6) {
-      const sign = Math.sign(sim.v);
-      const aFric = sim.mu * G * cosPitch + sim.kDrag * sim.v * sim.v;
-      a -= sign * aFric;
-      sim.eThermal += m * aFric * Math.abs(sim.v) * dt;
-    }
-
+    const roll = rollingForces(cars, sim.v, m);
+    const a = roll.a;            // tangential acceleration, for the g-forces below
+    sim.eThermal += roll.heatRate * dt;
     sim.v += a * dt;
 
     // Station dispatch: while the train is still leaving the station on its way
@@ -397,6 +415,13 @@
     const lead = cars[0];
     sim.maxV = Math.max(sim.maxV, Math.abs(sim.v));
     sim.maxZ = Math.max(sim.maxZ, lead.z * RC.LEVEL_M);
+
+    // In a demo, the ride's own train is one of the runners, so it records
+    // its arrival at the bottom the same way the comparison trains do.
+    if (RC.demo && sim.vGround === null && lead.z * RC.LEVEL_M <= 0.001) {
+      sim.vGround = Math.abs(sim.v);
+      sim.tGround = sim.time;
+    }
 
     // G-forces at the front car, where the ride is most extreme.
     const g = RC.gForces(lead, sim.v, a);
@@ -764,6 +789,99 @@
     }
   }
 
+  /* ---- comparison trains ------------------------------------------------
+     A demo can stand extra tracks in the park with a train on each, released
+     together with the ride's own. They are deliberately plain: no station, no
+     lift, no brakes — just a bead on a wire under gravity, so that whatever
+     they show comes from the shape of the track and nothing else.
+
+     Each records the speed its front car had the moment it first reached
+     ground level. That is the figure the whole path-independence demo turns
+     on, and capturing it there rather than reading it live means it survives
+     the run-out afterwards (where friction, if it is on, would eat into it). */
+  RC.resetDemo = function () {
+    if (!RC.demo) return;
+    RC.demo.running = false;      // back at the top, waiting to be released
+    for (const tr of RC.demo.trains) {
+      tr.s = 0;
+      tr.v = 0;
+      tr.time = 0;
+      tr.eThermal = 0;
+      tr.vGround = null;
+      tr.tGround = null;
+      tr.done = false;
+      const cars = demoCars(tr);
+      tr.h0 = cars.length ? meanOf(cars, 'z') * RC.LEVEL_M : 0;
+      tr.E0 = demoMass(tr) * G * tr.h0;
+    }
+  };
+
+  function demoMass(tr) { return RC.sim.cars * CAR_MASS; }
+
+  /* Where a comparison train's cars sit. Same shape as RC.carStates, read off
+     that train's own path. */
+  function demoCars(tr) {
+    const out = [];
+    for (let n = 0; n < RC.sim.cars; n++) {
+      const p = RC.pathAtIn(tr.path, tr.s - n * CAR_SPACING, false);
+      if (p) out.push(p);
+    }
+    return out;
+  }
+  RC.demoCars = demoCars;
+
+  function stepDemoTrain(tr, dt) {
+    if (tr.done) return;
+    const cars = demoCars(tr);
+    if (!cars.length) return;
+    const m = demoMass(tr);
+
+    const roll = rollingForces(cars, tr.v, m);
+    tr.eThermal += roll.heatRate * dt;
+    tr.v += roll.a * dt;
+    tr.s += tr.v * dt;
+    tr.time += dt;
+
+    // First arrival at the bottom: the number the demo exists to show.
+    if (tr.vGround === null && cars[0].z * RC.LEVEL_M <= 0.001) {
+      tr.vGround = Math.abs(tr.v);
+      tr.tGround = tr.time;
+    }
+
+    // Dead-ended either way: stop dead and book what it had as heat, the same
+    // as the ride does at the end of an unfinished track.
+    if (tr.s >= tr.path.total) {
+      tr.eThermal += 0.5 * m * tr.v * tr.v;
+      tr.s = tr.path.total;
+      tr.v = 0;
+      tr.done = true;
+    } else if (tr.s <= 0 && tr.v < 0) {
+      tr.eThermal += 0.5 * m * tr.v * tr.v;
+      tr.s = 0;
+      tr.v = 0;
+      tr.done = true;
+    }
+  }
+
+  /* Live figures for one comparison train, for the demo's table. */
+  RC.demoState = function (tr) {
+    const cars = demoCars(tr);
+    const m = demoMass(tr);
+    const h = cars.length ? meanOf(cars, 'z') * RC.LEVEL_M : 0;
+    const ke = 0.5 * m * tr.v * tr.v;
+    return {
+      h, ke,
+      pe: m * G * h,
+      thermal: tr.eThermal,
+      total: ke + m * G * h + tr.eThermal,
+      supplied: tr.E0,
+      vGround: tr.vGround,
+      tGround: tr.tGround,
+      keGround: tr.vGround === null ? null : 0.5 * m * tr.vGround * tr.vGround,
+      length: tr.path.total
+    };
+  };
+
   /* ---- trace ------------------------------------------------------------
      One sample per frame, not per substep — the graph only needs enough
      points to draw a smooth line, and 240 Hz would fill the cap in seconds. */
@@ -782,16 +900,40 @@
   RC.recordTrace = record;
 
   /* ---- frame ----------------------------------------------------------- */
+  /* Are a demo's comparison trains under way? They outlast the ride's own — the
+     steep route is home long before the shallow one — so the clock has to keep
+     running after the main train has stopped, or the slow ones freeze halfway
+     down and the comparison never completes.
+
+     `running` is what makes that safe. Asking only whether a train is still
+     unfinished would be true the moment the preset loaded, and the comparison
+     trains would set off down the hill on their own without the Test button
+     ever being pressed. */
+  RC.demoRunning = function () {
+    return !!(RC.demo && RC.demo.running && RC.demo.trains.some(t => !t.done));
+  };
+
   RC.stepSim = function (dtFrame) {
     const sim = RC.sim;
-    if (sim.state !== 'running') return false;
+    // The comparison trains are released by the ride's own train setting off,
+    // so every route in — the Test button, the space bar, a test harness —
+    // starts all of them together. It latches, so they carry on down after the
+    // main train has finished its own much shorter run.
+    if (sim.state === 'running' && RC.demo) RC.demo.running = true;
+
+    const going = () => sim.state === 'running' || RC.demoRunning();
+    if (!going()) return false;
+
     let dt = Math.min(MAX_FRAME, Math.max(0, dtFrame));
-    while (dt > 0 && sim.state === 'running') {
+    while (dt > 0 && going()) {
       const step = Math.min(SUBSTEP, dt);
-      substep(step);
+      if (sim.state === 'running') substep(step);
+      // Comparison trains run on the same clock, so they are genuinely
+      // released together with the ride's own train.
+      if (RC.demo) for (const tr of RC.demo.trains) stepDemoTrain(tr, step);
       dt -= step;
     }
-    record();
+    if (sim.state === 'running') record();
     return true;
   };
 
@@ -814,5 +956,8 @@
 
   RC.pauseSim = function () {
     if (RC.sim.state === 'running') RC.sim.state = 'ready';
+    // Not conditional on that: a demo's slow trains are often still coming
+    // down after the ride's own has stopped, and Pause has to catch them too.
+    if (RC.demo) RC.demo.running = false;
   };
 })();
