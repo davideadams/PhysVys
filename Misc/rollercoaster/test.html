@@ -2712,13 +2712,41 @@
     if (html.indexOf('Ada Lovelace') < 0) return 'the student\'s name is missing';
     if (html.indexOf('</html>') < 0) return 'the document is not closed';
 
-    // Every image inlined, so nothing breaks loose when the file is moved.
+    /* The track and the two plots against distance. The energy BARS are
+       deliberately not here: they are the train's energy at the one instant
+       the export was taken, which is a single column of the energy plot and
+       is spelled out in figures in the report besides. */
     const imgs = html.match(/<img[^>]*>/g) || [];
-    if (imgs.length < 4) return `${imgs.length} images, expected the track and three graphs`;
+    if (imgs.length !== 3) {
+      return `${imgs.length} images, expected the track and the two line plots`;
+    }
+    // Every image inlined, so nothing breaks loose when the file is moved.
     for (const tag of imgs) {
       if (tag.indexOf('src="data:image/png;base64,') < 0) return 'an image is not inlined';
     }
     if (/src="(?!data:)/.test(html)) return 'something is loaded from outside the file';
+
+    /* Each plot carries its own key. On screen the legend is beside the
+       canvas; a page a teacher opens on its own has nothing to explain four
+       coloured lines but this. */
+    if ((html.match(/class="key"/g) || []).length !== 2) {
+      return 'the two line plots do not both carry a key';
+    }
+    for (const want of ['Kinetic', 'Potential', 'Total', 'Supplied',
+                        'Vertical g', 'Lateral g']) {
+      if (html.indexOf('>' + want + '</span>') < 0) {
+        return `the key does not name "${want}"`;
+      }
+    }
+    /* Heat is named exactly when there is a heat line to name. Not asserted
+       either way round: even with friction off, a lap that makes it home has
+       heat in it, because the station's drive tyres shed what the train
+       arrived with. */
+    const namesHeat = html.indexOf('>Heat</span>') >= 0;
+    if (namesHeat !== RC.graphHasHeat()) {
+      return namesHeat ? 'the key names a heat line that was never plotted'
+                       : 'a heat line was plotted but the key does not name it';
+    }
 
     // The task a teacher sets is usually about the shape, so it has to be there.
     for (const want of ['Circuit', 'Track length', 'Highest point', 'Loops', 'Turns']) {
@@ -3606,6 +3634,25 @@
     }
     RC.setGraphMode('nonsense');
     if (RC.graphMode() !== 'bars') return 'an unknown mode should fall back to bars';
+  });
+
+  check('heat gets a line on the energy graph once there is heat to plot', () => {
+    /* With friction off and no brakes touched yet there is nothing for a heat
+       trace to do but lie flat along the bottom, so neither the line nor the
+       key that names it should be there. Six seconds in, the train is still
+       on the lift either way — far short of the one brake run — so the only
+       thing that can separate the two cases is the friction switch. */
+    const heatAfter = friction => {
+      RC.loadPrefab('first-drop');
+      RC.sim.cars = 4;
+      RC.sim.friction = friction;
+      RC.resetSim();
+      runFor(6);
+      return RC.graphHasHeat();
+    };
+    if (heatAfter(false)) return 'a frictionless run offered a heat line with no heat in it';
+    if (!heatAfter(true)) return 'friction was on, but no heat line was offered';
+    RC.sim.friction = false;
   });
 
   /* ---- report ---------------------------------------------------------- */

@@ -11,6 +11,7 @@
   const KE = '#e8963c';        // kinetic — warm, it's motion
   const PE = '#4a90d9';        // gravitational potential — height
   const TH = '#a0574a';        // thermal — losses
+  const TOTAL = '#0d9488';     // the three of them added up
   const SUPPLIED = '#15304d';  // the line everything should add up to
 
   const GRID = 'rgba(21, 48, 77, 0.12)';
@@ -163,6 +164,26 @@
      a spike can be read off against the piece that caused it. */
   const VERT_G = '#0d9488';   // vertical g
   const LAT_G = '#c2185b';    // lateral g
+
+  /* What each line plot is drawn in, so anything that has to LABEL one — the
+     exported summary carries its own key, having no app around it — reads the
+     colours off the same list the canvas is painted from and cannot drift out
+     of step with it. The window's own legends are in index.html beside the
+     canvas, where a wrong colour is obvious on sight. */
+  RC.GRAPH_KEY = {
+    energy: [
+      { colour: KE, label: 'Kinetic' },
+      { colour: PE, label: 'Potential' },
+      { colour: TH, label: 'Heat', onlyWithHeat: true },
+      { colour: TOTAL, label: 'Total' },
+      { dashed: true, label: 'Supplied' }
+    ],
+    accel: [
+      { colour: VERT_G, label: 'Vertical g' },
+      { colour: LAT_G, label: 'Lateral g' },
+      { dashed: true, label: '1 g (sitting still)' }
+    ]
+  };
 
   /* Three plots share one window: 'bars' is the train's energy right now,
      'energy' and 'accel' are the whole ride against distance along the track.
@@ -317,6 +338,21 @@
     ctx.fillText(total.toFixed(0) + ' m along the track', padL + plotW / 2, padT + plotH + 4);
   };
 
+  /* Has this ride actually made any heat worth a line of its own?
+
+     With friction off and no brake run there is nothing for a heat trace to
+     do but lie flat along the bottom of the plot, which is one more line to
+     read for no information. Turn friction on — or run through brakes — and
+     it becomes the most interesting line on the graph: the one that only
+     ever goes up, and that explains exactly why the total is sagging away
+     from the supplied line. The same test drives the legend, so the key
+     never names a colour that isn't on the plot. */
+  function tracedHeat(trace) {
+    for (const p of trace) if (p.th > 1) return true;
+    return false;
+  }
+  RC.graphHasHeat = () => tracedHeat(RC.sim.trace);
+
   function drawEnergy(ctx, trace, total, X, padL, padT, plotW, plotH) {
     let top = 0;
     for (const p of trace) top = Math.max(top, p.total, p.supplied);
@@ -341,7 +377,10 @@
     ctx.fillText('kJ', 3, padT - 4);
 
     plotSeries(ctx, trace, 'supplied', X, Y, total, SUPPLIED, 1.5, [4, 3]);
-    plotSeries(ctx, trace, 'total', X, Y, total, '#0d9488', 2);
+    plotSeries(ctx, trace, 'total', X, Y, total, TOTAL, 2);
+    // Heat under the two it is stealing from, so they stay the easiest to
+    // follow — it is a slow climb, they are the ones swapping back and forth.
+    if (tracedHeat(trace)) plotSeries(ctx, trace, 'th', X, Y, total, TH, 1.6);
     plotSeries(ctx, trace, 'pe', X, Y, total, PE, 1.6);
     plotSeries(ctx, trace, 'ke', X, Y, total, KE, 1.6);
 

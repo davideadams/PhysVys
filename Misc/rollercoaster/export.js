@@ -67,7 +67,10 @@
     return c.toDataURL('image/png');
   }
 
-  /* The graph drawing measures the canvas's CSS box, so it has to be in the
+  /* One of the two line plots, by mode — the drawing reads the current mode
+     off RC, so it is set and put back rather than passed in.
+
+     The graph drawing measures the canvas's CSS box, so it has to be in the
      document to have one. Park it off screen for the moment it takes. */
   function graphImage(mode) {
     const c = document.createElement('canvas');
@@ -80,7 +83,7 @@
     try {
       const held = RC.graphMode();
       RC.setGraphMode(mode);
-      if (mode === 'bars') RC.drawEnergyBars(c); else RC.drawEnergyGraph(c);
+      RC.drawEnergyGraph(c);
       RC.setGraphMode(held);
       return c.toDataURL('image/png');
     } finally {
@@ -91,6 +94,19 @@
   /* ---- the numbers ------------------------------------------------------- */
   const esc = s => String(s).replace(/[&<>"]/g, ch =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
+
+  /* A key under each plot. On screen the legend sits beside the canvas; the
+     export is a page read on its own, by someone who was not there when it
+     was made, so four unlabelled coloured lines are worth very little. The
+     colours come from energy.js rather than being written out again here. */
+  function keyFor(which) {
+    const rows = (RC.GRAPH_KEY[which] || [])
+      .filter(r => !r.onlyWithHeat || RC.graphHasHeat());
+    return '<div class="key">' + rows.map(r =>
+      '<span>' + (r.dashed ? '<i class="dashed"></i>'
+                           : `<i style="background:${r.colour}"></i>`) +
+      esc(r.label) + '</span>').join('') + '</div>';
+  }
 
   function row(label, value) {
     return `<tr><th>${label}</th><td>${value}</td></tr>`;
@@ -189,6 +205,11 @@
                      font-variant-numeric: tabular-nums; }
     .demo-key { display: inline-block; width: 9px; height: 9px; border-radius: 2px;
                 margin-right: 6px; }
+    .key { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.8rem;
+           color: #55708d; margin: 2px 0 16px; }
+    .key span { display: inline-flex; align-items: center; gap: 5px; }
+    .key i { width: 16px; height: 3px; border-radius: 2px; }
+    .key i.dashed { height: 0; border-top: 2px dashed #15304d; border-radius: 0; }
     .foot { margin-top: 28px; padding-top: 10px; border-top: 1px solid #d5dee7;
             color: #55708d; font-size: 0.8rem; }
     @media print { body { padding: 0; } h2 { break-after: avoid; } img { break-inside: avoid; } }
@@ -220,13 +241,17 @@
       '<p class="report-warn">The train was never run, so there are no ride figures.</p>' +
       report}</div></div>`;
 
+    /* The two plots against distance, and only those. The bars were here too,
+       but they are a snapshot of the train's energy at the instant the export
+       was taken — a single column of the energy plot, which is already on the
+       page, and every figure in it is already spelled out in the report. */
     if (ran) {
       html += `<h2>Energy as the train goes round</h2>`;
       html += `<img alt="Energy against distance" src="${graphImage('energy')}">`;
+      html += keyFor('energy');
       html += `<h2>What the rider feels</h2>`;
       html += `<img alt="Acceleration against distance" src="${graphImage('accel')}">`;
-      html += `<h2>Energy at the end of the run</h2>`;
-      html += `<img alt="Energy bars" src="${graphImage('bars')}">`;
+      html += keyFor('accel');
     }
 
     html += `<p class="foot">Made with the PhysVys Rollercoaster Builder. ` +

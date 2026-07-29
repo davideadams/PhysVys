@@ -206,6 +206,10 @@
       } else {
         RC.drawEnergyGraph(document.getElementById('graph-line'));
       }
+      // The heat trace comes and goes with the ride, not with the mode, so
+      // its key is settled here rather than in syncGraphMode.
+      const heatKey = document.getElementById('legend-heat');
+      if (heatKey) heatKey.hidden = !RC.graphHasHeat();
       setText('ro-e-v', Math.abs(sim.v).toFixed(1) + ' m/s');
       setText('ro-e-h', e.h.toFixed(2) + ' m');
       setText('ro-e-ke', RC.fmtEnergy(e.ke));
