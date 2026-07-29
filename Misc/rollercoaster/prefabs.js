@@ -127,6 +127,24 @@
       build: []
     },
 
+    /* The same blank slate, but against one edge of the park instead of in the
+       middle of it, so the whole 40 tiles lie ahead of the station rather than
+       half of them being behind it. A layout that wants to run out and come
+       back has the room to; from the middle, the return leg has to fit into
+       whatever is left.
+
+       It has to lay its own station: a preset that names its own start does
+       not get the one RC.resetTrack puts in the middle. Centred on the edge is
+       j = GRID/2, and i = 0 puts the first station tile on the boundary
+       itself, heading +i straight across the park. */
+    'custom-edge': {
+      name: 'Custom (edge)',
+      blurb: 'A station against the middle of one edge, with the whole park ahead of it.',
+      blank: true,
+      start: { i: 0, j: RC.GRID / 2, dir: 0, k: 0, g: 0 },
+      build: rep(3, 'station')
+    },
+
     /* Three trains, three routes down the same 23 m, released together.
        Whatever shape the track is, each arrives at the bottom doing the same
        speed, because gravity's work depends on the height dropped and nothing

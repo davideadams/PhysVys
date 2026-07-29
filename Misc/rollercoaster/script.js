@@ -51,11 +51,34 @@
     state.dirty = true;
   }
 
+  /* Put the track in the middle of the canvas, leaving zoom and rotation
+     alone. The park is 40 tiles — 160 m — across and does not all fit at
+     zoom 1, so a track built against one edge of it sits well off the side of
+     the screen if the view stays centred on the park itself. Centring on the
+     TRACK rather than the park means "where I built" is always what is on
+     screen, wherever in the park that is. */
+  function centreOnTrack() {
+    const pts = RC.trackPath().pts;
+    if (!pts.length) return;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const p of pts) {
+      const q = RC.projWorld(p.x, p.y, p.z, cam.rot);
+      if (q.x < minX) minX = q.x;
+      if (q.x > maxX) maxX = q.x;
+      if (q.y < minY) minY = q.y;
+      if (q.y > maxY) maxY = q.y;
+    }
+    cam.panX = -((minX + maxX) / 2) * cam.zoom;
+    cam.panY = -((minY + maxY) / 2) * cam.zoom;
+  }
+
   function resetView() {
     cam.zoom = 1;
-    cam.panX = 0;
-    cam.panY = 0;
     cam.rot = 0;
+    // Reset means "put my track back in front of me". Resetting the pan to the
+    // middle of the park instead would throw an edge-built track off screen,
+    // which is the opposite of what the button is for.
+    centreOnTrack();
     state.dirty = true;
   }
 
@@ -323,6 +346,29 @@
     state.dirty = true;
   });
 
+  /* Windows open below the top bar, wherever the top bar happens to end.
+
+     The bar wraps to a second row when its buttons will not fit on one, and a
+     window pinned to a fixed 76 px would then be sitting underneath it. What
+     makes it wrap is rarely the browser being resized — it is saving a track,
+     which reveals the Delete button and widens the track list — so a resize
+     listener alone would miss it. A ResizeObserver catches every cause.
+
+     Only the DEFAULT position follows this. Once a window has been dragged or
+     resized, ui.js writes an inline top and that quite rightly wins. */
+  function syncChromeTop() {
+    const bar = document.querySelector('.topbar');
+    if (!bar) return;
+    const bottom = bar.getBoundingClientRect().bottom;
+    document.documentElement.style.setProperty('--chrome-top', Math.round(bottom + 12) + 'px');
+  }
+  if (window.ResizeObserver) {
+    const bar = document.querySelector('.topbar');
+    if (bar) new ResizeObserver(syncChromeTop).observe(bar);
+  }
+  window.addEventListener('resize', syncChromeTop);
+  syncChromeTop();
+
   /* Graph mode: the bar chart of the train's energy now, or one of the two
      line plots along the track. Each mode owns one canvas and one legend. */
   const graphModeBtns = document.querySelectorAll('#graph-modes [data-graph]');
@@ -417,6 +463,10 @@
     suppressAutosave = false;
     RC.resetEnergyScale();
     updateRideUI();
+    // A whole different track has just gone on the screen, so bring it into
+    // view. Only ever called when one is loaded, never while building, so it
+    // cannot yank the view around under someone laying track.
+    centreOnTrack();
     state.dirty = true;
   }
 
@@ -586,6 +636,10 @@
   RC.initControls();
   initTrackList(opening);
   updateRideUI();
+  // Whatever ended up standing — the default ride or a half-built track from
+  // last visit — is what the page should open looking at. A track built
+  // against an edge of the park is nowhere near the middle of it.
+  centreOnTrack();
   resize();
   requestAnimationFrame(frame);
 })();

@@ -1557,6 +1557,58 @@
     }
   });
 
+  check('every blank preset really is blank, and only a station', () => {
+    // A blank slate has to BE one. These are the presets a student starts a
+    // track of their own from, so anything left standing on them is track
+    // they did not build and will have to clear.
+    for (const key of Object.keys(RC.PREFABS)) {
+      if (!RC.PREFABS[key].blank) continue;
+      const res = RC.loadPrefab(key);
+      if (!res.ok) return `"${key}": ${res.why}`;
+      const pieces = RC.track.pieces;
+      if (!pieces.length) return `"${key}" has no station to build from`;
+      for (const p of pieces) {
+        if (!RC.pieceDef(p.defId).station) {
+          return `"${key}" starts with a ${p.defId}, not a bare station`;
+        }
+      }
+      if (!near(RC.track.head.k, 0, 1e-9)) return `"${key}" does not start at ground level`;
+      if (RC.track.head.g !== 0) return `"${key}" does not start level`;
+    }
+  });
+
+  check('the edge preset puts its station on the boundary, centred, facing in', () => {
+    /* The point of it: the whole park lies ahead of the station rather than
+       half of it lying behind. A layout that runs out and comes back needs
+       that room; from the middle, the return leg only gets what is left. */
+    const res = RC.loadPrefab('custom-edge');
+    if (!res.ok) return res.why;
+
+    const s = RC.track.start;
+    if (s.i !== 0) return `starts at i = ${s.i}, not against the boundary`;
+    if (s.j !== RC.GRID / 2) return `starts at j = ${s.j}, not centred on the edge (${RC.GRID / 2})`;
+    if (s.dir !== 0) return `heads ${s.dir}, which is not into the park from that edge`;
+
+    // Every tile of it inside the park, including the one on the boundary.
+    for (const p of RC.track.pieces) {
+      for (const t of RC.pieceTiles(RC.pieceDef(p.defId), p.node)) {
+        if (!RC.inBounds(t.i, t.j)) return `a station tile sits off the park at (${t.i},${t.j})`;
+      }
+    }
+
+    /* And there is somewhere to go from it. A corner either way is the real
+       test: a station jammed into a corner of the park, or facing along an
+       edge rather than into it, would refuse one of them. */
+    const head = RC.track.head;
+    for (const id of ['flat', 'turn-left-wide', 'turn-right-wide']) {
+      const can = RC.canPlace(RC.pieceDef(id), head);
+      if (!can.ok) return `cannot build ${id} out of the station: ${can.why}`;
+    }
+
+    // Nearly the whole park ahead of it, which is the whole point.
+    if (head.i > 4) return `the station already eats ${head.i} tiles of the park`;
+  });
+
   check('the shuttle loop launches out and rolls back to the station', () => {
     const res = RC.loadPrefab('shuttle-loop');
     if (!res.ok) return res.why;

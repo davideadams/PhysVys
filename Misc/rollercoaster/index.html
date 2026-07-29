@@ -71,7 +71,7 @@
 </div>
 
 <!-- Floating windows. Drag by the header; toggled from the top bar. -->
-<section class="window" id="win-build" hidden style="right: 24px; top: 76px; width: 300px; height: calc(100vh - 100px);">
+<section class="window" id="win-build" hidden style="right: 24px; top: var(--chrome-top, 76px); width: 300px; height: calc(100vh - var(--chrome-top, 76px) - 24px);">
   <div class="window-hd">
     <span>Build</span>
     <button class="window-x" type="button" aria-label="Close">×</button>
@@ -134,7 +134,7 @@
   </div>
 </section>
 
-<section class="window" id="win-setup" hidden style="right: 24px; top: 76px; width: 300px;">
+<section class="window" id="win-setup" hidden style="right: 24px; top: var(--chrome-top, 76px); width: 300px;">
   <div class="window-hd">
     <span>Setup — train &amp; losses</span>
     <button class="window-x" type="button" aria-label="Close">×</button>
@@ -221,7 +221,7 @@
 
 <!-- One window, three plots: the bar chart of the train's energy right now, and
      the two line plots of the whole ride against distance along the track. -->
-<section class="window" id="win-graphs" hidden style="left: 24px; top: 76px; width: 420px;">
+<section class="window" id="win-graphs" hidden style="left: 24px; top: var(--chrome-top, 76px); width: 420px;">
   <div class="window-hd">
     <span>Graphs</span>
     <button class="window-x" type="button" aria-label="Close">×</button>
@@ -275,7 +275,8 @@
   </div>
 </section>
 
-<section class="window" id="win-report" hidden style="right: 24px; top: 300px; width: 290px;">
+<!-- Sits below the graphs rather than on top of them, so both can be open. -->
+<section class="window" id="win-report" hidden style="right: 24px; top: calc(var(--chrome-top, 76px) + 224px); width: 290px;">
   <div class="window-hd">
     <span>Ride report</span>
     <button class="window-x" type="button" aria-label="Close">×</button>
@@ -292,7 +293,7 @@
   </div>
 </section>
 
-<section class="window" id="win-about" hidden style="left: 24px; top: 76px; width: 380px;">
+<section class="window" id="win-about" hidden style="left: 24px; top: var(--chrome-top, 76px); width: 380px;">
   <div class="window-hd">
     <span>About this simulation</span>
     <button class="window-x" type="button" aria-label="Close">×</button>

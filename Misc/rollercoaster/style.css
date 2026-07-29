@@ -46,6 +46,14 @@ html, body {
   z-index: 20;
   display: flex;
   align-items: center;
+  /* Cascade to a second row rather than running off the right-hand edge.
+     Saving a track adds the Delete button AND widens the track list to fit
+     the new name, which was enough to push the window buttons off screen on
+     a laptop — the controls simply were not reachable any more. Wrapping is
+     the safety net; the two rules below (a hidden title on anything but a
+     wide monitor, and a capped track list) are what usually stop it being
+     needed. Windows follow the bar down: see --chrome-top. */
+  flex-wrap: wrap;
   gap: 0.5rem;
   padding: 0.4rem 0.5rem;
   border-radius: 14px;
@@ -86,7 +94,8 @@ html, body {
   background: var(--chrome-border);
 }
 
-.tb-spacer { flex: 1 1 auto; }
+/* Collapses to nothing rather than forcing a wrap of its own. */
+.tb-spacer { flex: 1 1 auto; min-width: 0; }
 
 .tb-group { display: flex; gap: 0.25rem; }
 
@@ -135,6 +144,10 @@ html, body {
   color: var(--ink);
   cursor: pointer;
   outline: none;
+  /* A select is as wide as its longest option, so one student typing a long
+     name into Save could stretch the top bar without limit. The full name is
+     still readable in the open list. */
+  max-width: 10rem;
 }
 
 /* ---- status bar ------------------------------------------------------ */
@@ -633,8 +646,15 @@ input[type="range"]:disabled { opacity: 0.5; }
   text-align: right;
 }
 
-@media (max-width: 700px) {
+/* The title is the one thing on the bar that does nothing, so it is the first
+   to go when space is short. Laid out end to end the controls need about
+   1320 px with a track saved; without the title, about 1165 — which is what
+   puts a 1366-wide school laptop back on one row. The back arrow and the
+   browser tab still say where you are. */
+@media (max-width: 1400px) {
   .tb-title { display: none; }
-  .topbar { flex-wrap: wrap; }
+}
+
+@media (max-width: 700px) {
   .window { left: 12px !important; right: 12px; width: auto !important; }
 }
