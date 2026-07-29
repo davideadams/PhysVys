@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rollercoaster Builder — The smallest lift hill</title>
+<style>
+  body { font-family: "Trebuchet MS", "Segoe UI", sans-serif; color: #15304d;
+         margin: 0 auto; padding: 28px; max-width: 900px; background: #fff;
+         line-height: 1.5; }
+  h1 { margin: 0 0 2px; font-size: 1.5rem; }
+  h2 { font-size: 1rem; text-transform: uppercase; letter-spacing: 0.04em;
+       color: #55708d; border-bottom: 1px solid #d5dee7; padding-bottom: 4px;
+       margin: 30px 0 12px; }
+  h3 { font-size: 0.98rem; margin: 18px 0 6px; }
+  .lede { color: #55708d; margin: 0 0 16px; }
+  ol, ul { padding-left: 1.3rem; }
+  li { margin-bottom: 7px; }
+  li ul { margin-top: 6px; }
+  b.ui { font-weight: 700; white-space: nowrap; }
+  .name-row { display: flex; gap: 20px; margin: 0 0 20px; font-size: 0.9rem; }
+  .name-row > div { flex: 1; border-bottom: 1px solid #98a9bb; padding-bottom: 2px;
+                    color: #55708d; }
+
+  .brief { background: #f2f7fb; border-left: 4px solid #0d9488;
+           padding: 12px 16px; margin: 14px 0 18px; }
+  .brief p { margin: 0; font-size: 1.05rem; }
+
+  .note { background: #fbf7ef; border-left: 4px solid #e8963c;
+          padding: 10px 14px; margin: 14px 0; font-size: 0.92rem; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 0.9rem;
+          margin: 10px 0 6px; }
+  th { text-align: left; color: #55708d; font-weight: 600;
+       border-bottom: 1px solid #98a9bb; padding: 5px 8px; }
+  td { border-bottom: 1px solid #d5dee7; padding: 12px 8px; }
+  td:first-child, th:first-child { width: 3.2rem; }
+  .col-h { width: 9rem; }
+  .col-ok { width: 6rem; }
+
+  .fields { border: 1px solid #d5dee7; border-radius: 8px; padding: 12px 16px;
+            margin: 12px 0; background: #fbfdff; }
+  .fields p { margin: 0 0 10px; }
+  .fields p:last-child { margin-bottom: 0; }
+  .rule { display: inline-block; min-width: 5rem; border-bottom: 1px solid #98a9bb; }
+  .rule.long { min-width: 14rem; }
+
+  .write { border: 1px dashed #b7c4d2; border-radius: 8px; height: 4.6rem;
+           margin: 6px 0 16px; }
+  .write.tall { height: 7rem; }
+
+  .q { margin: 0 0 2px; }
+
+  .foot { margin-top: 30px; padding-top: 10px; border-top: 1px solid #d5dee7;
+          color: #55708d; font-size: 0.8rem; }
+
+  @media print {
+    body { padding: 0; max-width: none; }
+    h2 { break-after: avoid; }
+    .brief, .fields, table, .note { break-inside: avoid; }
+    .q, .write { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Rollercoaster Builder</h1>
+<p class="lede">Task: the smallest lift hill</p>
+
+<div class="name-row">
+  <div>Name</div>
+  <div>Class</div>
+  <div>Date</div>
+</div>
+
+<div class="brief">
+  <p><strong>Your job:</strong> build a working coaster circuit with a loop in
+  it, using the <strong>smallest lift hill</strong> you can that still gets the
+  train all the way round and back to the station.</p>
+</div>
+
+<p>Part A walks you through the builder. Do it once, then clear the track and
+start the real task in Part B. You will hand in an exported summary of your
+finished coaster along with this sheet.</p>
+
+<h2>Part A — Learning the builder</h2>
+
+<ol>
+  <li>Open the Rollercoaster Builder. In the top bar, open the
+    <b class="ui">Track</b> list and choose <b class="ui">Custom (blank)</b>.
+    You now have nothing but a short station.</li>
+
+  <li>Press <b class="ui">Build</b> to open the building window. Look for the
+    yellow arrow at the end of the track: that is the <em>build head</em>, and
+    everything you build grows from it.</li>
+
+  <li>The <b class="ui">Direction</b> row chooses whether the next piece goes
+    straight on or turns. The <b class="ui">Slope</b> row chooses the slope you
+    want to be <em>travelling at</em> once the piece is done. Pick one of each,
+    then press <b class="ui">Build this</b>.
+    <ul>
+      <li>You do not have to build the ramps yourself. If you are level and ask
+        for a climb, the builder puts the transition in for you — so to keep
+        climbing, just press <b class="ui">Build this</b> again.</li>
+      <li>Anything the track cannot do from where the arrow is now goes grey,
+        and the reason appears under the piece name.</li>
+    </ul>
+  </li>
+
+  <li><b class="ui">Chain</b>, beside the slope buttons, puts a chain lift on
+    the pieces you build. A chain can only go on track that climbs, so it
+    switches itself off as soon as you stop climbing.</li>
+
+  <li><b class="ui">Special…</b> opens the pieces that are not plain track:
+    <b class="ui">Station</b>, <b class="ui">Brakes</b>,
+    <b class="ui">Launch</b>, and the two <b class="ui">Loop</b> pieces. A loop
+    has to start and finish on level track.</li>
+
+  <li><b class="ui">Backspace</b> removes the last piece.
+    <b class="ui">Clear</b> takes the whole track back to the station.</li>
+
+  <li><b class="ui">◀◀</b> and <b class="ui">▶</b> walk a cursor back and
+    forward through the track you have already built, so you can look at any
+    piece again.</li>
+
+  <li><b class="ui">Finish track</b> tries to join the end of your track back
+    round to the station for you. It will say so if it cannot find a way.</li>
+
+  <li>The bar across the top of the screen shows the track length and whether
+    what you have is a <em>closed circuit</em>, a <em>shuttle</em>, or still
+    <em>open</em>.</li>
+
+  <li><b class="ui">Heights</b> in the top bar labels the track with its height
+    above the ground. The <b class="ui">Build</b> window also shows the height
+    of the build head as you go.</li>
+
+  <li><b class="ui">▶ Test</b> sends the train off (the space bar does the
+    same). <b class="ui">⟲</b> puts it back at the station.</li>
+
+  <li><b class="ui">Save</b> keeps a named copy of your track, so you can come
+    back to it in a later lesson. Use your own name.</li>
+</ol>
+
+<h3>Warm-up</h3>
+<p>Build a small circuit with no loop in it — a climb, a drop, then
+<b class="ui">Finish track</b> — and run it. When it works, press
+<b class="ui">Clear</b> and start the task.</p>
+
+<h2>Part B — The task</h2>
+
+<p>Build a coaster that meets all of these:</p>
+
+<ul>
+  <li>It is a <strong>closed circuit</strong>: the train leaves the station and
+    comes back to it. The status bar has to say so.</li>
+  <li>It has <strong>one loop</strong> in it.</li>
+  <li>The train gets through the loop <strong>without leaving the track</strong>,
+    and makes it all the way home. The <b class="ui">Report</b> window tells you
+    how each run ended.</li>
+  <li>The lift hill is <strong>as small as you can make it</strong> while all of
+    the above is still true.</li>
+</ul>
+
+<div class="note">
+  <strong>Keep it a fair test.</strong> Decide your settings in
+  <b class="ui">Setup</b> before you start, write them in the box below, and do
+  not change them again. Your answer depends on them. Between trials, change the
+  height of the lift hill and as little else as you can.
+</div>
+
+<div class="fields">
+  <p><strong>My settings</strong></p>
+  <p>Number of cars <span class="rule"></span>
+     &nbsp;&nbsp; Friction <span class="rule"></span>
+     &nbsp;&nbsp; Chain lift speed <span class="rule"></span></p>
+  <p>Anything else I changed: <span class="rule long"></span></p>
+</div>
+
+<h3>Trials</h3>
+
+<p>Record every attempt, including the ones that fail — the failures are what
+show you where the limit is.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th class="col-h">Lift hill height (m)</th>
+      <th>What happened</th>
+      <th class="col-ok">Round?</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>1</td><td></td><td></td><td></td></tr>
+    <tr><td>2</td><td></td><td></td><td></td></tr>
+    <tr><td>3</td><td></td><td></td><td></td></tr>
+    <tr><td>4</td><td></td><td></td><td></td></tr>
+    <tr><td>5</td><td></td><td></td><td></td></tr>
+    <tr><td>6</td><td></td><td></td><td></td></tr>
+    <tr><td>7</td><td></td><td></td><td></td></tr>
+    <tr><td>8</td><td></td><td></td><td></td></tr>
+  </tbody>
+</table>
+
+<p>You have finished when you can point to <strong>two</strong> runs: the
+smallest lift hill that got the train round, and one just below it that did
+not.</p>
+
+<div class="fields">
+  <p>Smallest lift hill that worked: <span class="rule"></span> m</p>
+  <p>Largest lift hill that failed: <span class="rule"></span> m
+     &nbsp;&nbsp; — what went wrong: <span class="rule long"></span></p>
+</div>
+
+<h2>Part C — Handing it in</h2>
+
+<ol>
+  <li>Make sure the <strong>last run you did</strong> was a successful one. The
+    report always describes the most recent run.</li>
+  <li>Open the <b class="ui">Report</b> window and press
+    <b class="ui">Export summary</b>.</li>
+  <li>Save the file, name it with your own name, and hand it in together with
+    this sheet.</li>
+</ol>
+
+<h2>Part D — Questions</h2>
+
+<p class="q"><strong>1.</strong> Compare your smallest lift hill with other
+people's. Did everyone get the same height? If not, what was different about
+your coaster, or your settings?</p>
+<div class="write"></div>
+
+<p class="q"><strong>2.</strong> Use <b class="ui">Heights</b> to find how tall
+your loop is, and compare that with the height of your lift hill. What do you
+notice about the two numbers? Why do you think that is?</p>
+<div class="write tall"></div>
+
+<p class="q"><strong>3.</strong> On a run that <em>just</em> made it, was there
+a moment when the train came closest to not getting round? Where was it, and
+what is your evidence? The <b class="ui">Graphs</b> window may help.</p>
+<div class="write tall"></div>
+
+<p class="q"><strong>4.</strong> Real coasters nearly always have their lift
+hill as the highest point of the whole ride. From what you found, why do you
+think that is?</p>
+<div class="write"></div>
+
+<p class="q"><strong>5.</strong> A designer wants the same coaster but with a
+taller loop. What would that mean for the rest of the design?</p>
+<div class="write"></div>
+
+<h2>If you finish early</h2>
+
+<p>For each of these, <strong>write your prediction and your reasoning first</strong>,
+then test it and say whether you were right.</p>
+
+<p class="q"><strong>A.</strong> Put more cars on the train in
+<b class="ui">Setup</b>. Does your smallest lift hill change?</p>
+<div class="write"></div>
+
+<p class="q"><strong>B.</strong> Turn <b class="ui">Friction</b> on. What
+happens to your answer, and why?</p>
+<div class="write"></div>
+
+<p class="q"><strong>C.</strong> Keeping your lift hill exactly as it is, can
+you change anything else about the coaster so that the train gets round the loop
+more comfortably? What did you try, and what happened?</p>
+<div class="write tall"></div>
+
+<p class="foot">PhysVys Rollercoaster Builder. One tile is 4&nbsp;m and one
+height step is 1&nbsp;m; heights are measured from ground level.</p>
+
+</body>
+</html>
