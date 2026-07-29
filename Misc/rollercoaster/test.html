@@ -1940,7 +1940,7 @@
     // Shuttle is a fallback for track that does not close. On a circuit the
     // train goes round, and leaving the setting on must not change that — nor
     // may it read back as a shuttle, which is what the toolbar shows.
-    for (const key of ['first-drop', 'looper', 'big-thunder']) {
+    for (const key of ['first-drop', 'looper', 'gentle-hills']) {
       const res = RC.loadPrefab(key);
       if (!res.ok) return `${key}: ${res.why}`;
       for (const setting of [true, false]) {
@@ -3351,44 +3351,6 @@
     RC.sim.cars = 4;
   });
 
-  check('Big Thunder Mountain closes on its own, with three lifts and a helix', () => {
-    const res = RC.loadPrefab('big-thunder');
-    if (!res.ok) return res.why;
-    // Closed by construction: no call to the auto-close solver.
-    if (!RC.sameNode(RC.track.head, RC.track.start)) {
-      const h = RC.track.head, s = RC.track.start;
-      return `did not close: head (${h.i},${h.j},dir ${h.dir},k ${h.k}) ` +
-             `vs start (${s.i},${s.j},dir ${s.dir},k ${s.k})`;
-    }
-    if (RC.circuitStatus().kind !== 'closed') return 'not a complete circuit';
-
-    // Three separate chain lifts, not one long one.
-    const pieces = RC.track.pieces;
-    let runs = 0;
-    for (let n = 0; n < pieces.length; n++) {
-      if (pieces[n].lift && !(n > 0 && pieces[n - 1].lift)) runs++;
-    }
-    if (runs !== 3) return `${runs} lift hills, expected 3`;
-
-    // The drop curves: at least one banked descending turn.
-    const curving = pieces.filter(p => {
-      const def = RC.pieceDef(p.defId);
-      return def.kind === 'turn' && def.dH < 0 && p.bank;
-    });
-    if (!curving.length) return 'no banked descending turn — the drop does not curve';
-
-    // Every turn on a mine train is banked.
-    for (const p of pieces) {
-      if (RC.pieceDef(p.defId).kind === 'turn' && !p.bank) return 'an unbanked turn';
-    }
-
-    // A mine train, so nothing extreme: the tallest point is a lift, not a plunge.
-    const pts = RC.trackPath().pts;
-    let high = 0;
-    for (const p of pts) high = Math.max(high, p.z);
-    if (high < 14 || high > 22) return `tops out at ${high} m, expected about 18`;
-  });
-
   check('no turn kinks the track where it meets its neighbours', () => {
     // A sloped turn's dH is rounded to a whole level, so a straight ramp would
     // leave it slightly off the grade it joins — invisible on the drawing, but
@@ -3414,26 +3376,6 @@
       return `something bends to a ${r.toFixed(1)} m radius at s = ${where.toFixed(1)} m; ` +
              `the tightest thing here is a 10 m turn`;
     }
-  });
-
-  check('the mine train completes a lap and behaves like one', () => {
-    RC.loadPrefab('big-thunder');
-    RC.sim.cars = 4;
-    RC.sim.friction = false;
-    RC.resetSim();
-    runFor(400);
-    if (RC.sim.state !== 'finished') {
-      return `state "${RC.sim.state}" — s = ${RC.sim.s.toFixed(1)} of ` +
-             `${RC.trackPath().total.toFixed(1)} m, note "${RC.sim.note}"`;
-    }
-    // Three lifts means the motor tops it up three times, so it must have done
-    // more work than the single biggest climb is worth.
-    if (!(RC.sim.eMotor > 0)) return 'the chain lifts did no work';
-    // Modest by design: a mine train, not a hypercoaster.
-    if (RC.sim.maxV > 25) return `top speed ${RC.sim.maxV.toFixed(1)} m/s is too fast for a mine train`;
-    const L = RC.G_LIMITS;
-    if (RC.sim.maxVertG > L.vertExtreme) return `pulls ${RC.sim.maxVertG.toFixed(1)} g vertically`;
-    if (RC.sim.minVertG < L.airtimeHard) return `throws riders out at ${RC.sim.minVertG.toFixed(1)} g`;
   });
 
   /* ---- demonstrations ----------------------------------------------------- */

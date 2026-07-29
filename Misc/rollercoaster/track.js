@@ -67,6 +67,14 @@
      A turn can be sloped, which is how track curves during a drop — and it is
      what makes a helix nothing more special than four of them in a row.
 
+     Four of them in a row is also as much helix as anyone should build. A
+     helix turning through PHI at pitch theta drops r*PHI*sin(theta), so
+     v^2 = 2g*r*PHI*sin(theta) and the lateral v^2/r = 2g*PHI*sin(theta): the
+     radius cancels. A full circle at the shallowest grade here is 5.6 g at
+     the bottom whatever radius it is drawn at, and widening it does nothing
+     at all. A quarter turn on the same grade is 1.4 g. So a curving drop is
+     a quarter or two, and a full 360 is not a design that can be rescued.
+
      The compromise is in dH. Track has to land on whole levels or it leaves
      the grid, but the honest drop through a quarter circle is its horizontal
      arc times the slope, R*(pi/2)*g, which is never a whole number. Each piece
