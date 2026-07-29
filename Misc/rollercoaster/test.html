@@ -1577,36 +1577,43 @@
     }
   });
 
-  check('the edge preset puts its station on the boundary, centred, facing in', () => {
-    /* The point of it: the whole park lies ahead of the station rather than
-       half of it lying behind. A layout that runs out and comes back needs
+  check('the edge preset lays its station along the edge, straddling the middle', () => {
+    /* The point of it: the whole park lies to ONE SIDE of the station rather
+       than being split around it. A layout that runs out and comes back needs
        that room; from the middle, the return leg only gets what is left. */
     const res = RC.loadPrefab('custom-edge');
     if (!res.ok) return res.why;
 
     const s = RC.track.start;
     if (s.i !== 0) return `starts at i = ${s.i}, not against the boundary`;
-    if (s.j !== RC.GRID / 2) return `starts at j = ${s.j}, not centred on the edge (${RC.GRID / 2})`;
-    if (s.dir !== 0) return `heads ${s.dir}, which is not into the park from that edge`;
+    if (s.dir !== 1) return `heads ${s.dir}, which does not run along the i = 0 edge`;
+    // Three tiles from GRID/2 - 1, so the middle one is the middle of the edge.
+    if (s.j !== RC.GRID / 2 - 1) {
+      return `starts at j = ${s.j}, so the station does not straddle the middle of the edge`;
+    }
 
-    // Every tile of it inside the park, including the one on the boundary.
+    // Every tile of it inside the park, including those on the boundary, and
+    // the station has stayed ON the edge rather than wandering off it.
     for (const p of RC.track.pieces) {
       for (const t of RC.pieceTiles(RC.pieceDef(p.defId), p.node)) {
         if (!RC.inBounds(t.i, t.j)) return `a station tile sits off the park at (${t.i},${t.j})`;
+        if (t.i !== 0) return `a station tile has left the edge, at (${t.i},${t.j})`;
       }
     }
 
-    /* And there is somewhere to go from it. A corner either way is the real
-       test: a station jammed into a corner of the park, or facing along an
-       edge rather than into it, would refuse one of them. */
+    /* Which way the park lies is the whole orientation, so pin it from both
+       sides: carrying straight on along the edge works, turning INTO the park
+       works, and turning the other way is off the map and must be refused.
+       Face the station the wrong way and that last one silently flips. */
     const head = RC.track.head;
-    for (const id of ['flat', 'turn-left-wide', 'turn-right-wide']) {
+    if (head.i !== 0) return `the station ran inland, ending at i = ${head.i}`;
+    for (const id of ['flat', 'turn-left-wide', 'turn-left-tight']) {
       const can = RC.canPlace(RC.pieceDef(id), head);
       if (!can.ok) return `cannot build ${id} out of the station: ${can.why}`;
     }
-
-    // Nearly the whole park ahead of it, which is the whole point.
-    if (head.i > 4) return `the station already eats ${head.i} tiles of the park`;
+    if (RC.canPlace(RC.pieceDef('turn-right-wide'), head).ok) {
+      return 'a corner away from the park was allowed — the station faces the wrong way';
+    }
   });
 
   check('the shuttle loop launches out and rolls back to the station', () => {
@@ -2922,6 +2929,40 @@
   });
 
   /* ---- saving a track ----------------------------------------------------- */
+  check('a long track name is shortened for the list, but only for the list', () => {
+    /* Names are stored and loaded whole — the round trip is checked below.
+       This is purely about the width of the track list in the top bar, which
+       a select sizes to its longest entry, and which has no room to spare. */
+    const N = RC.NAME_SHOWN;
+    if (!(N > 0)) return 'no display limit is published';
+
+    if (RC.shortTrackName('Loop the loop') !== 'Loop the loop') {
+      return 'a name that already fits was shortened anyway';
+    }
+    const exact = 'x'.repeat(N);
+    if (RC.shortTrackName(exact) !== exact) return `a name of exactly ${N} was shortened`;
+
+    // The ellipsis counts towards the limit, or the cap is not really the cap.
+    const long = RC.shortTrackName('y'.repeat(N + 20));
+    if (long.length !== N) return `shortened to ${long.length} characters, not ${N}`;
+    if (long.slice(-1) !== '…') return 'a shortened name does not show that it was shortened';
+
+    // Cutting mid-gap must not leave a space dangling before the ellipsis.
+    const spaced = RC.shortTrackName('Dave' + ' '.repeat(N) + 'z');
+    if (/\s…$/.test(spaced)) return `left a space before the ellipsis: "${spaced}"`;
+
+    // Nothing sensible to show is still nothing, not a bare ellipsis.
+    if (RC.shortTrackName('') !== '') return 'an empty name did not stay empty';
+
+    // The longest built-in preset is what the list is already as wide as, so a
+    // student's name must never be allowed to exceed it.
+    const longestPreset = Math.max(...Object.keys(RC.PREFABS).map(k => RC.PREFABS[k].name.length));
+    if (N > longestPreset) {
+      return `names may show ${N} characters but the widest preset is only ${longestPreset}`;
+    }
+  });
+
+
   check('a track survives being written down and read back', () => {
     // Everything a built track is: the piece order, the lift and bank flags,
     // and the geometry they produce.

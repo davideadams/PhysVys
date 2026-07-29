@@ -506,8 +506,12 @@
       mine.label = 'Saved';
       for (const name of names) {
         const opt = document.createElement('option');
+        // The VALUE is the whole name — it is what loads and deletes the
+        // track. Only what is shown is shortened, and the full name is on
+        // hover for anyone whose names collide in the first fifteen.
         opt.value = SAVE_PREFIX + name;
-        opt.textContent = name;
+        opt.textContent = RC.shortTrackName(name);
+        opt.title = name;
         mine.appendChild(opt);
       }
       presetSelect.appendChild(mine);

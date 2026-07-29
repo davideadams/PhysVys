@@ -144,10 +144,6 @@ html, body {
   color: var(--ink);
   cursor: pointer;
   outline: none;
-  /* A select is as wide as its longest option, so one student typing a long
-     name into Save could stretch the top bar without limit. The full name is
-     still readable in the open list. */
-  max-width: 10rem;
 }
 
 /* ---- status bar ------------------------------------------------------ */

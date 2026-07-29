@@ -131,6 +131,23 @@
 
   RC.listSaves = readIndex;
 
+  /* How much of a name a list of tracks shows. A name is stored whole and
+     loaded whole — this is only about the width of the track list in the top
+     bar, which a select sizes to its longest entry. Fifteen because the
+     longest built-in preset name is seventeen characters, so a student's
+     track can never widen the bar beyond what it already is; and because ten
+     cuts most names before they mean anything. The full name is still there
+     on hover, and in the list once it is open. */
+  const NAME_SHOWN = 15;
+  RC.NAME_SHOWN = NAME_SHOWN;
+
+  RC.shortTrackName = function (name) {
+    const s = String(name == null ? '' : name);
+    if (s.length <= NAME_SHOWN) return s;
+    // The ellipsis counts towards the limit, so the cap really is the width.
+    return s.slice(0, NAME_SHOWN - 1).replace(/\s+$/, '') + '…';
+  };
+
   RC.saveTrack = function (name) {
     name = String(name || '').trim();
     if (!name) return { ok: false, why: 'Give the track a name' };

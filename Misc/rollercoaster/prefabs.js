@@ -128,20 +128,25 @@
     },
 
     /* The same blank slate, but against one edge of the park instead of in the
-       middle of it, so the whole 40 tiles lie ahead of the station rather than
-       half of them being behind it. A layout that wants to run out and come
-       back has the room to; from the middle, the return leg has to fit into
-       whatever is left.
+       middle of it, so the whole 40 tiles lie on one side of the station
+       rather than being split around it. A layout that wants to run out and
+       come back has the room to; from the middle, the return leg has to fit
+       into whatever is left.
+
+       The station lies ALONG the edge, not pointing away from it — the same
+       way a real station sits beside the park rather than aiming through the
+       middle of it. So it runs +j down the i = 0 boundary, which puts the
+       whole park to its left and nothing at all to its right. Turning out of
+       the park is correctly impossible; every first move goes inward.
 
        It has to lay its own station: a preset that names its own start does
-       not get the one RC.resetTrack puts in the middle. Centred on the edge is
-       j = GRID/2, and i = 0 puts the first station tile on the boundary
-       itself, heading +i straight across the park. */
+       not get the one RC.resetTrack puts in the middle. Three tiles from
+       GRID/2 - 1 straddle the middle of the edge. */
     'custom-edge': {
       name: 'Custom (edge)',
-      blurb: 'A station against the middle of one edge, with the whole park ahead of it.',
+      blurb: 'A station along the middle of one edge, with the whole park to one side of it.',
       blank: true,
-      start: { i: 0, j: RC.GRID / 2, dir: 0, k: 0, g: 0 },
+      start: { i: 0, j: RC.GRID / 2 - 1, dir: 1, k: 0, g: 0 },
       build: rep(3, 'station')
     },
 
