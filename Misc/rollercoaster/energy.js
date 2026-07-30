@@ -606,6 +606,24 @@
     return `<div class="readout-row"><span>${label}</span><span>${value}</span></div>`;
   }
 
+  /* Name the feature a distance falls on, rather than quoting the distance.
+     Tolerant of a track that has changed under an old figure. */
+  function onFeature(s, nudge) {
+    let f = null;
+    try { f = (s == null) ? null : RC.featureAt(s + (nudge || 0)); } catch (e) { f = null; }
+    return f ? ` <span class="muted">on ${f.label}</span>` : '';
+  }
+
+  /* A radius in words. Which plane the bend is in, and which way, is more use
+     to a builder than the two signed curvatures it comes from. */
+  RC.radiusText = function (kVert, kLat) {
+    const parts = [];
+    const kv = Math.abs(kVert || 0), kl = Math.abs(kLat || 0);
+    if (kv > 1e-4) parts.push(`${(1 / kv).toFixed(0)} m ${kVert < 0 ? 'crest' : 'valley'}`);
+    if (kl > 1e-4) parts.push(`${(1 / kl).toFixed(0)} m turn`);
+    return parts.length ? parts.join(', ') : 'straight';
+  };
+
   /* A plain-English read on how the ride feels, from the g extremes. */
   RC.rideVerdict = function (sim) {
     // A wreck outranks any comment on comfort.
@@ -727,6 +745,56 @@
     return html;
   }
 
+  /* What the SHAPE of the track allows, as opposed to what this particular run
+     did on it. Available before the train has moved, which is the point: a
+     student can check whether the corner they just laid can carry the speed
+     they are about to arrive at, instead of finding out from a warning.
+
+     "Honest to" is the speed at which the first published limit is broken
+     somewhere on the track — see RC.trackGeometry. If the run beat it, that is
+     said plainly, because a ride judged against limits its own pieces cannot
+     meet is the problem this readout exists to make visible. */
+  function geometrySection() {
+    const geo = RC.trackGeometry();
+    const sim = RC.sim;
+    // A park with nothing but level straight track in it has no shape to
+    // report, and three em dashes would say less than nothing.
+    if (geo.crestR === null && geo.valleyR === null && geo.turnR === null) return '';
+    const R = (r, s) => r === null ? '—' : r.toFixed(1) + ' m' + onFeature(s);
+
+    let html = `<div class="report-hd">Shape</div>`;
+    html += row('Tightest crest', R(geo.crestR, geo.crestS));
+    html += row('Tightest valley', R(geo.valleyR, geo.valleyS));
+    html += row('Tightest turn', R(geo.turnR, geo.turnS));
+    if (geo.honestV !== null) {
+      html += row('Within the limits to',
+                  `${geo.honestV.toFixed(1)} m/s <span class="muted">` +
+                  `(${geo.honestWhy})</span>${onFeature(geo.honestS)}`);
+    }
+
+    // The worst jolts this run actually took. A joint the train never reached
+    // has no entry, so an untested corner is silent rather than reassuring.
+    const jolts = RC.worstJolts ? RC.worstJolts(3) : [];
+    if (jolts.length && jolts[0].g > 0.05) {
+      html += `<div class="report-hd">Jolts</div>`;
+      for (const j of jolts) {
+        if (j.g <= 0.05) continue;
+        html += row(`At ${j.v.toFixed(1)} m/s${onFeature(j.s, 0.05)}`,
+                    j.g.toFixed(2) + ' g, all at once');
+      }
+      html += `<p class="report-note">Each piece meets the next with a step in ` +
+              `curvature, so that much force arrives with nothing leading up to ` +
+              `it. Real track eases every joint in and out instead.</p>`;
+    }
+
+    if (geo.honestV !== null && sim.maxV > geo.honestV + 0.05) {
+      html += `<p class="report-warn">This track reached ${sim.maxV.toFixed(1)} m/s ` +
+              `but its shape only stays within the limits to ` +
+              `${geo.honestV.toFixed(1)} m/s.</p>`;
+    }
+    return html;
+  }
+
   /* The report as a string, so it can be written to the page or dropped into an
      exported document without either having to know about the other. */
   RC.reportHTML = function () {
@@ -737,7 +805,8 @@
     if (!sim.time) {
       return row('Track length', RC.trackLength().toFixed(0) + ' m') +
              row('Circuit', st.label) +
-             settingsSection();
+             settingsSection() +
+             geometrySection();
     }
 
     const drift = Math.abs(e.total - e.supplied);
@@ -787,13 +856,9 @@
       }
     }
 
-    // Name the feature each extreme happened on, rather than a distance.
-    const onFeature = s => {
-      let f = null;
-      try { f = (s == null) ? null : RC.featureAt(s); } catch (e) { f = null; }
-      return f ? ` <span class="muted">on ${f.label}</span>` : '';
-    };
     const L = RC.G_LIMITS;
+
+    html += geometrySection();
 
     html += `<div class="report-hd">G-force</div>`;
     html += row('Vertical, greatest',

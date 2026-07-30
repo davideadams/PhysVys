@@ -442,7 +442,10 @@
     const mode = RC.graphMode();
     let vals;
     if (mode === 'accel') {
-      vals = `${p.vg.toFixed(2)} g vert, ${p.lg.toFixed(2)} g lat, ${p.h.toFixed(1)} m`;
+      // The shape as well as the force, since the whole question a g spike
+      // raises is what the track is doing there to cause it.
+      vals = `${p.vg.toFixed(2)} g vert, ${p.lg.toFixed(2)} g lat, ` +
+             `${RC.radiusText(p.kv, p.kl)}`;
     } else if (mode === 'speed') {
       vals = `${p.v.toFixed(1)} m/s, ${p.h.toFixed(1)} m`;
     } else {

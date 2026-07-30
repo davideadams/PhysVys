@@ -928,6 +928,279 @@
     }
   });
 
+  /* ---- curvature and joints ----------------------------------------------
+     The geometry readout: how tightly the track bends in each plane, how much
+     of that arrives in one step at a joint, and the speed the shape stays
+     inside the published limits to.
+
+     Nearly every figure here is derived from TILE_M, LEVEL_M and the grades
+     rather than written down, because phase 3 changes the height profile and
+     the transition lengths and these tests have to move with it — a literal
+     18 m would then be wrong in a way that reads like a physics regression. */
+  section('Curvature');
+
+  /* The curvature a straight transition has at its ENTRY, where its slope is
+     gIn. The height profile is a quadratic, so the slope ramps linearly from
+     gIn to gOut over L tiles and d2z/dx2 is a constant; curvature is that over
+     (1 + z')^1.5, which is why a transition is tightest at its flatter end.
+
+     Written out rather than measured because phase 3 replaces the profile with
+     a quintic, whose peak is exactly 1.5x the constant — so this expression is
+     precisely the thing that has to change, and these checks should fail loudly
+     when it does rather than quietly agreeing with whatever the code does. */
+  const transCurv = def => {
+    const zpp = (def.gOut - def.gIn) * RC.LEVEL_M / (def.L * RC.TILE_M * RC.TILE_M);
+    const zp = def.gIn * RC.LEVEL_M / RC.TILE_M;
+    return zpp / Math.pow(1 + zp * zp, 1.5);
+  };
+
+  /* Track laid high enough that a drop has somewhere to go — RC.resetTrack
+     starts at ground level, where anything descending is refused outright. */
+  function shapeTrack(ids, k) {
+    RC.track.pieces = [];
+    RC.demo = null;                  // no comparison trains standing about
+    RC.track.start = { i: 6, j: 20, dir: 0, k: k == null ? 20 : k, g: 0 };
+    RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
+    for (const id of ids) {
+      const why = RC.canPlace(RC.pieceDef(id), RC.track.head).why;
+      if (!RC.place(id)) return `${id} refused: ${why}`;
+    }
+    return null;
+  }
+
+  check('level straight track curves in neither plane', () => {
+    RC.resetTrack();
+    RC.place('flat');
+    const p = RC.pathAt(RC.TILE_M * 1.5, false);
+    if (!near(p.kVert, 0, 1e-9)) return `vertical curvature is ${p.kVert}`;
+    if (!near(p.kLat, 0, 1e-9)) return `lateral curvature is ${p.kLat}`;
+  });
+
+  check('a turn bends only sideways, by one over its radius', () => {
+    for (const [id, sign] of [['turn-right-wide', 1], ['turn-left-wide', -1]]) {
+      RC.resetTrack();
+      if (!RC.place(id)) return `${id} refused`;
+      const path = RC.trackPath();
+      const turnStart = path.pts.find(p => p.def.kind === 'turn').s;
+      // Mid-arc, clear of the joints at either end.
+      const p = RC.pathAt(turnStart + RC.pieceLength(RC.pieceDef(id)) / 2, false);
+      const want = sign / (2.5 * RC.TILE_M);
+      if (Math.abs(p.kLat - want) > Math.abs(want) * 0.02) {
+        return `${id} reports ${p.kLat.toFixed(5)} sideways, expected ${want.toFixed(5)}`;
+      }
+      if (!near(p.kVert, 0, 1e-6)) return `${id} reports ${p.kVert} vertically on level track`;
+    }
+  });
+
+  check('banking a turn does not change the shape it reports', () => {
+    const sample = banked => {
+      RC.resetTrack();
+      RC.place('turn-right-tight', { bank: banked });
+      const path = RC.trackPath();
+      const turnStart = path.pts.find(p => p.def.kind === 'turn').s;
+      return RC.pathAt(turnStart + RC.pieceLength(RC.pieceDef('turn-right-tight')) / 2, false);
+    };
+    const plain = sample(false), tilted = sample(true);
+    // The rider feels something quite different — that is what banking is for.
+    const gPlain = RC.gForces(plain, 12, 0), gTilt = RC.gForces(tilted, 12, 0);
+    if (near(gPlain.lat, gTilt.lat, 0.05)) return 'banking changed nothing the rider feels';
+    // The track, however, is bent exactly the same way.
+    if (!near(plain.kLat, tilted.kLat, 1e-6)) {
+      return `sideways curvature moved with the bank: ${plain.kLat} vs ${tilted.kLat}`;
+    }
+    if (!near(plain.kVert, tilted.kVert, 1e-6)) {
+      return `vertical curvature moved with the bank: ${plain.kVert} vs ${tilted.kVert}`;
+    }
+  });
+
+  check('a slope transition is a valley going up and a crest going down', () => {
+    const entry = id => {
+      const def = RC.pieceDef(id);
+      const node = { i: 16, j: 19, dir: 0, k: 20, g: def.gIn };
+      // Just inside the entry, where transCurv's (1 + z')^1.5 is evaluated.
+      return { k: RC.curvInside(def, node, 0.002), def };
+    };
+    for (const id of ['flat-to-gentle-up', 'gentle-to-steep-up']) {
+      const { k, def } = entry(id);
+      const want = transCurv(def);
+      if (!(k.vert > 0)) return `${id} reports ${k.vert.toFixed(5)}, expected a valley`;
+      if (Math.abs(k.vert - want) > Math.abs(want) * 0.01) {
+        return `${id} is ${(1 / k.vert).toFixed(2)} m, expected ${(1 / want).toFixed(2)} m`;
+      }
+      if (!near(k.lat, 0, 1e-9)) return `${id} reports ${k.lat} sideways on a straight`;
+    }
+    for (const id of ['flat-to-gentle-down', 'gentle-to-steep-down']) {
+      const { k, def } = entry(id);
+      const want = transCurv(def);
+      if (!(k.vert < 0)) return `${id} reports ${k.vert.toFixed(5)}, expected a crest`;
+      if (Math.abs(k.vert - want) > Math.abs(want) * 0.01) {
+        return `${id} is ${(-1 / k.vert).toFixed(2)} m, expected ${(-1 / want).toFixed(2)} m`;
+      }
+    }
+  });
+
+  check('a bigger grade change over the same length bends harder', () => {
+    /* Deliberately a tripwire. Every transition in the catalogue is one tile
+       long today, so gentle <-> steep changes grade by twice as much in the
+       same distance and comes out tighter. Phase 3 sets transition length FROM
+       the grade change precisely so that they all land on the same curvature —
+       at which point this check should be REWRITTEN as an equality, not
+       deleted, because "every transition is equally tight" is the property the
+       new palette is meant to have. */
+    const mild = Math.abs(transCurv(RC.pieceDef('flat-to-gentle-up')));
+    const harsh = Math.abs(transCurv(RC.pieceDef('gentle-to-steep-up')));
+    if (!(harsh > mild)) {
+      return `gentle-to-steep (${(1 / harsh).toFixed(1)} m) is not tighter than ` +
+             `flat-to-gentle (${(1 / mild).toFixed(1)} m)`;
+    }
+  });
+
+  check('a joint between pieces that agree has no step in it', () => {
+    RC.resetTrack();
+    for (const id of ['flat', 'flat', 'flat']) if (!RC.place(id)) return `${id} refused`;
+    for (const j of RC.jointSteps()) {
+      if (j.dMag > 1e-9) return `a joint between flat pieces steps by ${j.dMag}`;
+    }
+  });
+
+  check('a turn arrives with the whole of its curvature at once', () => {
+    RC.resetTrack();
+    for (const id of ['flat', 'turn-right-wide', 'flat']) {
+      if (!RC.place(id)) return `${id} refused`;
+    }
+    const joints = RC.jointSteps();
+    // Straight -> turn, and turn -> straight: the same step, opposite ways.
+    const into = joints.find(j => RC.pieceDef(RC.track.pieces[j.pi].defId).kind === 'turn');
+    if (!into) return 'no joint found entering the turn';
+    const want = 1 / (2.5 * RC.TILE_M);
+    if (Math.abs(into.dLat - want) > want * 0.02) {
+      return `entering the turn steps ${into.dLat.toFixed(5)} sideways, expected ${want.toFixed(5)}`;
+    }
+    if (!near(into.dVert, 0, 1e-6)) return `it also steps ${into.dVert} vertically`;
+    // And the jolt that delivers goes as v^2, which is the whole lesson.
+    const at10 = RC.jointStepG(into, 10), at20 = RC.jointStepG(into, 20);
+    if (!near(at20 / at10, 4, 1e-6)) return `doubling the speed multiplied the jolt by ${at20 / at10}`;
+  });
+
+  check('a closed circuit counts the joint where it meets itself', () => {
+    RC.resetTrack();
+    if (!RC.completeTrack().ok) return 'could not build a closed circuit';
+    const n = RC.track.pieces.length;
+    if (RC.jointSteps().length !== n) {
+      return `${RC.jointSteps().length} joints for ${n} pieces on a closed circuit, expected ${n}`;
+    }
+    // Open the circuit again and the closing joint goes with it.
+    RC.undo();
+    if (RC.jointSteps().length !== RC.track.pieces.length - 1) {
+      return `${RC.jointSteps().length} joints for ${RC.track.pieces.length} pieces on open track`;
+    }
+  });
+
+  check('the speed the shape allows is the speed the g-forces agree with', () => {
+    const bad = shapeTrack(['flat', 'turn-right-wide', 'flat',
+                            'flat-to-gentle-down', 'gentle-down', 'gentle-down-to-flat']);
+    if (bad) return bad;
+    const geo = RC.trackGeometry();
+    if (geo.honestV === null) return 'no limit speed reported for a track with a turn on it';
+
+    /* The claim under test: below that speed nothing on this track breaks a
+       published limit, and a little above it something does. Checked against
+       RC.gForces — the same function the ride itself is judged by — so the
+       solver cannot agree with itself and be wrong. */
+    const L = RC.G_LIMITS;
+    const broken = v => {
+      for (const p of RC.trackPath().pts) {
+        const g = RC.gForces(p, v, 0);
+        if (g.vert > L.vertHigh || g.vert < L.airtimeGood || Math.abs(g.lat) > L.latHigh) {
+          return { s: p.s, g };
+        }
+      }
+      return null;
+    };
+    const under = broken(geo.honestV * 0.98);
+    if (under) {
+      return `${(geo.honestV * 0.98).toFixed(1)} m/s is inside the stated ` +
+             `${geo.honestV.toFixed(1)}, but gives ${under.g.vert.toFixed(2)} g vert / ` +
+             `${under.g.lat.toFixed(2)} g lat at ${under.s.toFixed(1)} m`;
+    }
+    if (!broken(geo.honestV * 1.05)) {
+      return `nothing broke at 5% over the stated ${geo.honestV.toFixed(1)} m/s`;
+    }
+  });
+
+  check('the tightest radii are reported with the feature that owns them', () => {
+    const bad = shapeTrack(['flat-to-gentle-down', 'gentle-down', 'gentle-down-to-flat',
+                            'turn-right-tight', 'flat']);
+    if (bad) return bad;
+    const geo = RC.trackGeometry();
+    if (geo.crestR === null) return 'a track that drops away from level reports no crest';
+    if (geo.valleyR === null) return 'a track that levels out again reports no valley';
+    if (geo.turnR === null) return 'a track with a turn on it reports no turn radius';
+    const want = 1.5 * RC.TILE_M;
+    if (Math.abs(geo.turnR - want) > want * 0.05) {
+      return `tightest turn is ${geo.turnR.toFixed(2)} m, expected ${want.toFixed(2)}`;
+    }
+    // The crest is the piece that leaves level track, and the valley the one
+    // that rejoins it, so they must land on different parts of the ride.
+    if (!(geo.crestS < geo.valleyS)) {
+      return `crest at ${geo.crestS.toFixed(1)} m is not before the valley at ${geo.valleyS.toFixed(1)} m`;
+    }
+  });
+
+  check('crossing a joint at speed records the jolt it delivered', () => {
+    // A station to be pushed out of, a hill to pick up speed down, then a
+    // corner to slam into.
+    const bad = shapeTrack(['station', 'station', 'station',
+                            'flat-to-gentle-down', 'gentle-down', 'gentle-down',
+                            'gentle-down-to-flat', 'turn-right-tight', 'flat', 'flat']);
+    if (bad) return bad;
+    RC.sim.friction = false;
+    RC.sim.cars = 4;
+    RC.sim.releaseS = null;          // start in the station, not wherever a
+    RC.resetSim();                   // previous check left the release slider
+    runFor(20);
+
+    const jolts = RC.worstJolts();
+    if (!jolts.length) return 'the train crossed several joints and recorded none';
+    const worst = jolts[0];
+    if (!(worst.g > 0.5)) return `worst jolt is only ${worst.g.toFixed(3)} g`;
+
+    /* It belongs to the corner — but to EITHER end of it, and which one is not
+       obvious. Entering has the bigger step, since the curvature swings from
+       the transition's vertical bend straight into the turn's lateral one.
+       Leaving is the bigger jolt anyway, because the train is still speeding up
+       when its front car enters the turn: the rear cars are ten metres back and
+       still on the descent, and the mean slope over the cars is what drives it.
+       By the exit the whole train is level and moving faster, and v^2 more than
+       makes up the smaller step. So the check is that the turn is on one side
+       of the joint, not which side. */
+    const pieces = RC.track.pieces;
+    const isTurn = i => pieces[i] && RC.pieceDef(pieces[i].defId).kind === 'turn';
+    if (!isTurn(worst.joint.pi) && !isTurn(worst.joint.pi - 1)) {
+      const def = RC.pieceDef(pieces[worst.joint.pi].defId);
+      return `the worst jolt was at a joint entering ${def.id}, with no turn either side`;
+    }
+    if (Math.abs(worst.joint.dLat) < Math.abs(worst.joint.dVert)) {
+      return 'the corner stepped more vertically than sideways';
+    }
+    // Recorded where the joint is, not where the train happened to be sampled.
+    if (Math.abs(worst.s - worst.joint.s) > 1e-9) {
+      return `recorded at ${worst.s.toFixed(3)} m for a joint at ${worst.joint.s.toFixed(3)} m`;
+    }
+  });
+
+  check('track that never bends never jolts', () => {
+    RC.resetTrack();
+    for (let n = 0; n < 6; n++) if (!RC.place('flat')) return 'flat refused';
+    RC.sim.friction = false;
+    RC.resetSim(0);
+    runFor(10);
+    for (const j of RC.worstJolts()) {
+      if (j.g > 1e-9) return `a straight track jolted ${j.g} g at ${j.s.toFixed(1)} m`;
+    }
+  });
+
   /* ---- vertical loops ----------------------------------------------------
      The loop is the only piece that inverts the train, which is why the
      orientation frame is parallel-transported rather than rebuilt from the
@@ -3062,7 +3335,7 @@
     if (lines.length < 20) return `only ${lines.length} lines of trace`;
     const head = lines[0].split(',');
     if (head[0] !== 'distance_m') return 'no header row';
-    if (head.length !== 11) return `${head.length} columns, expected 11`;
+    if (head.length !== 13) return `${head.length} columns, expected 13`;
     for (let n = 1; n < lines.length; n++) {
       const cells = lines[n].split(',');
       if (cells.length !== head.length) return `row ${n} has ${cells.length} cells`;
@@ -3917,7 +4190,7 @@
      of place is the hint that it wants adding here. */
   const GROUP_ORDER = [
     'Projection', 'Piece geometry',
-    'Building', 'Collision', 'Path',
+    'Building', 'Collision', 'Path', 'Curvature',
     'Sloped turns', 'Banking', 'Loops',
     'Finish track', 'Build palette', 'Selecting pieces',
     'Physics', 'G-forces', 'Train and losses',

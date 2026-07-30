@@ -166,10 +166,17 @@
   RC.traceCSV = function () {
     const rows = [['distance_m', 'time_s', 'speed_ms', 'height_m',
                    'kinetic_J', 'potential_J', 'heat_J', 'total_J', 'supplied_J',
-                   'vertical_g', 'lateral_g'].join(',')];
+                   'vertical_g', 'lateral_g',
+                   'vertical_curvature_perm', 'lateral_curvature_perm'].join(',')];
+    /* Curvature rather than radius, because straight track has no radius and a
+       column of "Infinity" is no use to a spreadsheet. It also needs more
+       decimals than the energies do: an 18 m radius is 0.056 per metre, which
+       at three places is two significant figures. */
+    const dp3 = n => Math.round(n * 1000) / 1000;
+    const dp6 = n => Math.round((n || 0) * 1e6) / 1e6;
     for (const p of RC.sim.trace) {
       rows.push([p.s, p.t, p.v, p.h, p.ke, p.pe, p.th, p.total, p.supplied, p.vg, p.lg]
-        .map(n => (Math.round(n * 1000) / 1000)).join(','));
+        .map(dp3).concat([dp6(p.kv), dp6(p.kl)]).join(','));
     }
     return rows.join('\n');
   };

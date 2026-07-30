@@ -10,6 +10,7 @@
   const RC = window.RC || (window.RC = {});
 
   const G = 9.81;
+  RC.G = G;                  // track.js reads it for the geometry readout
   const CAR_SPACING = 3.5;   // metres between car centres
   const CAR_MASS = 500;      // kg per car including riders — the default
 
@@ -95,6 +96,11 @@
     E0: 0, eMotor: 0, eThermal: 0,
     maxV: 0, maxG: 0, maxZ: 0,
     g: { vert: 1, lat: 0, long: 0 },
+    // The shape of the track under the front car: curvature in the vertical
+    // plane (crests and valleys) and in the horizontal one (turning), 1/m.
+    kVert: 0, kLat: 0,
+    // The worst jolt taken at each joint, indexed to match RC.jointSteps().
+    jolts: [],
     maxVertG: 1, minVertG: 1, maxLatG: 0,
     // Arc position of each of those extremes, for naming the feature to blame.
     maxVertGs: 0, minVertGs: 0, maxLatGs: 0,
@@ -325,6 +331,9 @@
     sim.warnKeys = {};       // key -> index in warnings, so repeats collapse
     sim.warnSeverity = {};   // key -> worst reading seen for that key
     sim.trace = [];
+    sim.jolts = [];          // indexed by joint; sparse until one is crossed
+    sim.kVert = 0;
+    sim.kLat = 0;
 
     // Seed the g extremes from the train standing still, so an untouched
     // report reads 1.00 g rather than an empty range.
@@ -401,6 +410,37 @@
     state.v += a * dt;
     return ds;
   }
+
+  /* Every joint the front car crossed in this step, and the jolt it took there.
+     Curvature changes in one jump at a joint, so the rider's acceleration
+     changes by dk*v^2 with nothing in between — the thing a real track's
+     easements exist to prevent, and the only part of "jerk" this model can
+     state exactly rather than infer from the sampling rate.
+
+     Kept per joint rather than as a single worst figure: a track can have one
+     awkward corner and be fine everywhere else, and the report should be able
+     to name the joint rather than the ride. */
+  function recordJolts(s0, s1, v) {
+    const sim = RC.sim;
+    const joints = RC.jointSteps();
+    if (!joints.length) return;
+    const lo = Math.min(s0, s1), hi = Math.max(s0, s1);
+    if (hi <= lo) return;
+    for (let n = 0; n < joints.length; n++) {
+      const j = joints[n];
+      if (j.s <= lo || j.s > hi) continue;
+      const jg = j.dMag * v * v / G;
+      const prev = sim.jolts[n];
+      if (!prev || jg > prev.g) sim.jolts[n] = { s: j.s, g: jg, v: Math.abs(v), joint: j };
+    }
+  }
+
+  /* Worst first, holes skipped — joints the train never reached have no entry. */
+  RC.worstJolts = function (n) {
+    const out = RC.sim.jolts.filter(Boolean);
+    out.sort((a, b) => b.g - a.g);
+    return n ? out.slice(0, n) : out;
+  };
 
   /* Bring a train that has finished its ride back to exactly where it set off
      from, the way the real thing does: the station's drive tyres slow it if it
@@ -515,8 +555,12 @@
     const ds = glide(sim, a, dt);
     sim.eThermal += roll.heatPerM * ds;
 
+    const sBefore = sim.s;
     sim.s += ds;
     sim.time += dt;
+    // Before the lap wrap below moves s, so the closing joint is seen where
+    // jointSteps put it: at the far end of the path, not back at zero.
+    if (!sim.overhang) recordJolts(sBefore, sim.s, sim.v);
 
     // Once the train has cleared the berth it has "launched out"; this stops
     // the station dispatch re-grabbing it, and marks a shuttle's outbound leg.
@@ -537,6 +581,9 @@
     // G-forces at the front car, where the ride is most extreme.
     const g = RC.gForces(lead, sim.v, a);
     sim.g = g;
+    // The shape under the front car, for the trace and the hover readout.
+    sim.kVert = lead.kVert || 0;
+    sim.kLat = lead.kLat || 0;
     // Keep WHERE each extreme happened, so the report can name the feature
     // responsible rather than quoting a distance along the track.
     if (g.vert > sim.maxVertG) { sim.maxVertG = g.vert; sim.maxVertGs = lead.s; }
@@ -767,9 +814,16 @@
       const ky = (-dot * fy) / (sp * sp);
       const kz = (-G - dot * fz) / (sp * sp);
 
+      // The same geometry split the track carries, so a car out over the edge
+      // reads back in the same units as one still on the rails. A ballistic arc
+      // stays in one vertical plane, so `r` is its horizontal normal throughout
+      // and stands in where the fall goes vertical and has no heading left.
+      const split = RC.splitCurv([kx, ky, kz], [fx, fy, fz], [r.x, r.y]);
+
       pts.push({
         u, x, y, z, fx, fy, fz, ux, uy, uz,
-        kx, ky, kz, curv: Math.hypot(kx, ky, kz), dzds: fz
+        kx, ky, kz, curv: Math.hypot(kx, ky, kz), dzds: fz,
+        kVert: split.vert, kLat: split.lat
       });
 
       if (z <= 0) break;
@@ -840,6 +894,7 @@
       dzds: mix(a.dzds, b.dzds),
       curv: mix(a.curv, b.curv),
       kx: mix(a.kx, b.kx), ky: mix(a.ky, b.ky), kz: mix(a.kz, b.kz),
+      kVert: mix(a.kVert, b.kVert), kLat: mix(a.kLat, b.kLat),
       bank: 0,
       fx: mix(a.fx, b.fx), fy: mix(a.fy, b.fy), fz: mix(a.fz, b.fz),
       ux: mix(a.ux, b.ux), uy: mix(a.uy, b.uy), uz: mix(a.uz, b.uz),
@@ -993,7 +1048,8 @@
     sim.trace.push({
       s: sim.s, t: sim.time, v: Math.abs(sim.v), h: e.h,
       ke: e.ke, pe: e.pe, th: e.thermal, total: e.total, supplied: e.supplied,
-      vg: sim.g.vert, lg: sim.g.lat
+      vg: sim.g.vert, lg: sim.g.lat,
+      kv: sim.kVert, kl: sim.kLat
     });
   }
   RC.recordTrace = record;

@@ -566,7 +566,67 @@
       pts[n].fx = fx; pts[n].fy = fy; pts[n].fz = fz;
       pts[n].rx = rx; pts[n].ry = ry; pts[n].rz = rz;
       pts[n].ux = ux; pts[n].uy = uy; pts[n].uz = uz;
+
+      /* The geometry readout, kept separate from the frame above because it
+         must not move when a turn is banked or when a loop borrows its own
+         curvature for "up". */
+      const sp = splitCurv([pts[n].kx, pts[n].ky, pts[n].kz], [fx, fy, fz],
+                           rightOfDir(pts[n].piece.node.dir));
+      pts[n].kVert = sp.vert;
+      pts[n].kLat = sp.lat;
     }
+  }
+
+  /* Resolve a curvature vector into the two planes a builder thinks in: the
+     VERTICAL one, which is grade change — crests and valleys — and the
+     HORIZONTAL one, which is turning.
+
+     Both axes come from the WORLD, not from the car. Banking a turn must not
+     change the geometry the track reports, and buildFrames seeds a loop's "up"
+     from its own curvature, so reading the split off the car frame would call
+     every part of a loop a valley. Here "up" is world up made perpendicular to
+     the tangent, which fixes the sign everywhere: +vert is a valley (concave
+     up), −vert a crest, and +lat a right-hand turn, matching def.turn.
+
+     It flips sense as the track passes through vertical, which happens only
+     inside a loop and is not an artefact: past vertical the train is heading
+     backwards and down, and the same bend genuinely becomes crest-like — which
+     is exactly why the upper half of a loop needs speed to hold the train on.
+     Where the tangent is EXACTLY vertical there is no horizontal heading to
+     work from, so the caller's fallback "right" stands in.
+
+     `f` is a unit tangent, `k` a curvature vector, both [x, y, z] in metres. */
+  function splitCurv(k, f, fallbackRight) {
+    // World up, projected perpendicular to the tangent.
+    let ux = -f[2] * f[0], uy = -f[2] * f[1], uz = 1 - f[2] * f[2];
+    const ul = Math.hypot(ux, uy, uz);
+    let rx, ry, rz;
+    if (ul > 1e-6) {
+      ux /= ul; uy /= ul; uz /= ul;
+      rx = uy * f[2] - uz * f[1];      // r = u x f, as in buildFrames
+      ry = uz * f[0] - ux * f[2];
+      rz = ux * f[1] - uy * f[0];
+    } else {
+      // Straight up or down: flatten the caller's "right" into the horizontal
+      // plane, where it is the only axis left that is perpendicular to travel.
+      rx = fallbackRight[0]; ry = fallbackRight[1]; rz = 0;
+      const rl = Math.hypot(rx, ry) || 1;
+      rx /= rl; ry /= rl;
+      ux = f[1] * rz - f[2] * ry;      // u = f x r
+      uy = f[2] * rx - f[0] * rz;
+      uz = f[0] * ry - f[1] * rx;
+    }
+    return {
+      vert: k[0] * ux + k[1] * uy + k[2] * uz,
+      lat: k[0] * rx + k[1] * ry + k[2] * rz
+    };
+  }
+  RC.splitCurv = splitCurv;
+
+  /* The rider's right, in world terms, for a node's entry direction. */
+  function rightOfDir(dir) {
+    const d = D[dir & 3];
+    return [-d[1], d[0]];
   }
 
   /* Curvature vector at b, from its neighbours a and c: the rate of change of
@@ -615,6 +675,139 @@
       else if (sp.kind === 'loop') sp.label = 'L' + (++lN);
     }
     return spans;
+  };
+
+  /* ---- joints and what the shape allows ---------------------------------
+     Where two pieces meet, the curvature changes in one jump. That is not a
+     small thing: the force a rider feels changes by dk*v^2 with no transition
+     at all, so the jerk at a joint is infinite and no real track is built that
+     way — real track eases every joint out to zero curvature and back.
+
+     The STEP is what this model can state exactly. "3.2 g arrives at once
+     entering Turn 1" is a true sentence about this track; "the jerk is 40 g/s"
+     would be a number invented by the sampling rate, which is why there is a
+     jolt readout here and no jerk graph anywhere. */
+  const CURV_EPS = 1e-3;
+
+  /* Curvature just INSIDE a piece, at parameter t. Sampling only within the
+     piece is the whole point: the path's own three-point curvature at a joint
+     straddles both sides and averages away the very step being measured. */
+  function curvInside(def, node, t) {
+    const a = RC.centreline(def, node, t - CURV_EPS);
+    const b = RC.centreline(def, node, t);
+    const c = RC.centreline(def, node, t + CURV_EPS);
+    const k = curvatureVector(a, b, c);
+    let fx = (c.x - a.x) * RC.TILE_M;
+    let fy = (c.y - a.y) * RC.TILE_M;
+    let fz = (c.z - a.z) * RC.LEVEL_M;
+    const fl = Math.hypot(fx, fy, fz) || 1;
+    return splitCurv(k, [fx / fl, fy / fl, fz / fl], rightOfDir(node.dir));
+  }
+  RC.curvInside = curvInside;
+
+  function jointRecord(s, pi, kIn, kOut) {
+    const dVert = kOut.vert - kIn.vert;
+    const dLat = kOut.lat - kIn.lat;
+    return {
+      s, pi,
+      vertIn: kIn.vert, vertOut: kOut.vert,
+      latIn: kIn.lat, latOut: kOut.lat,
+      dVert, dLat,
+      dMag: Math.hypot(dVert, dLat)
+    };
+  }
+
+  let jointCache = null, jointCacheVersion = -1;
+
+  /* Every joint on the track, with the curvature on each side of it. `pi` is
+     the piece the train is entering. */
+  RC.jointSteps = function () {
+    if (jointCache && jointCacheVersion === RC.version) return jointCache;
+    const pieces = RC.track.pieces;
+    const out = [];
+    const at = (pi, t) => {
+      const p = pieces[pi];
+      return curvInside(BY_ID.get(p.defId), p.node, t);
+    };
+    if (pieces.length > 1) {
+      const spans = RC.pieceSpans();
+      for (let pi = 1; pi < pieces.length; pi++) {
+        out.push(jointRecord(spans[pi].s0, pi, at(pi - 1, 1 - CURV_EPS), at(pi, CURV_EPS)));
+      }
+      // On a closed circuit the last piece runs into the first, and the train
+      // crosses that joint at speed like any other. Recorded at the far end of
+      // the path, so it is passed before the lap counter wraps s back to zero.
+      if (sameNode(RC.track.head, RC.track.start)) {
+        out.push(jointRecord(RC.trackPath().total, 0,
+                             at(pieces.length - 1, 1 - CURV_EPS), at(0, CURV_EPS)));
+      }
+    }
+    jointCache = out;
+    jointCacheVersion = RC.version;
+    return out;
+  };
+
+  /* The jolt a joint delivers to a train crossing it at v, in g. */
+  RC.jointStepG = function (joint, v) {
+    return joint.dMag * v * v / (RC.G || 9.81);
+  };
+
+  /* What the track's SHAPE allows, before any train has run on it.
+
+     Every limit in RC.G_LIMITS is a bound on v^2, because the centripetal term
+     is the only speed-dependent part of what a rider feels: each axis reads
+     A + B*v^2, where A is what they feel standing still on that piece of track
+     and B comes from the curvature. So the speed at which a point of track
+     first breaks a published limit is solved, not searched for, and the
+     smallest of those over the whole track is the speed the track is honest to.
+
+     That number is the whole point of the geometry work — a catalogue that lets
+     a student reach speeds its own pieces cannot carry is a catalogue that
+     judges them against limits it never gave them the means to meet. */
+  RC.trackGeometry = function () {
+    const pts = RC.trackPath().pts;
+    const L = RC.G_LIMITS;
+    const g = RC.G || 9.81;
+    const out = {
+      crestR: null, crestS: null,      // tightest radius of each kind, in metres
+      valleyR: null, valleyS: null,
+      turnR: null, turnS: null,
+      honestV: null, honestS: null, honestWhy: null
+    };
+    if (!pts.length || !L) return out;
+
+    const tighter = (r, key) => out[key + 'R'] === null || r < out[key + 'R'];
+
+    for (const p of pts) {
+      const kv = p.kVert || 0, kl = p.kLat || 0;
+      if (kv < -1e-9 && tighter(-1 / kv, 'crest')) { out.crestR = -1 / kv; out.crestS = p.s; }
+      if (kv > 1e-9 && tighter(1 / kv, 'valley')) { out.valleyR = 1 / kv; out.valleyS = p.s; }
+      if (Math.abs(kl) > 1e-9 && tighter(1 / Math.abs(kl), 'turn')) {
+        out.turnR = 1 / Math.abs(kl); out.turnS = p.s;
+      }
+
+      // Resolved on the CAR's axes, banking and all, because that is what the
+      // rider feels and what the g limits are written against.
+      const Bv = (p.kx * p.ux + p.ky * p.uy + p.kz * p.uz) / g, Av = p.uz;
+      const Bl = (p.kx * p.rx + p.ky * p.ry + p.kz * p.rz) / g, Al = p.rz;
+      const cap = (num, den, why) => {
+        if (Math.abs(den) < 1e-12) return;
+        const v2 = num / den;
+        // A negative bound means the limit is broken standing still, which only
+        // a loop can manage — there it is a MINIMUM speed, not a maximum, and
+        // the ride report's own g warnings are the place for it.
+        if (!(v2 >= 0)) return;
+        const v = Math.sqrt(v2);
+        if (out.honestV === null || v < out.honestV) {
+          out.honestV = v; out.honestS = p.s; out.honestWhy = why;
+        }
+      };
+      if (Bv > 0) cap(L.vertHigh - Av, Bv, 'vertical');
+      else if (Bv < 0) cap(L.airtimeGood - Av, Bv, 'airtime');
+      if (Bl > 0) cap(L.latHigh - Al, Bl, 'sideways');
+      else if (Bl < 0) cap(-L.latHigh - Al, Bl, 'sideways');
+    }
+    return out;
   };
 
   /* ---- named features ---------------------------------------------------
@@ -736,6 +929,8 @@
       z: mix(a.z, b.z),
       dzds: mix(a.dzds, b.dzds),
       curv: mix(a.curv, b.curv),
+      kVert: mix(a.kVert, b.kVert),
+      kLat: mix(a.kLat, b.kLat),
       kx: mix(a.kx, b.kx),
       ky: mix(a.ky, b.ky),
       kz: mix(a.kz, b.kz),

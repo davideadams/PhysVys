@@ -1,6 +1,6 @@
 # Geometry refactor: honest track at a workable scale
 
-Status: **Phase 1 done. Phases 2 to 6 not started.** The numbers below are
+Status: **Phases 1 and 2 done. Phases 3 to 6 not started.** The numbers below are
 calculated but only cross-checked by hand — the sim is its own test rig, so
 expect to verify rather than trust. Phase 1 needed three corrections that the
 arithmetic had not predicted; they are recorded under it as a warning about how
@@ -131,16 +131,91 @@ the pattern to follow in later phases:
   and its paired tilt threshold come off `gentleSin()` / `gentleCos()`.
 - The loop footprint assertion reads `def.L` rather than `4`.
 
-## Phase 2 — curvature and transition-step readout
+## Phase 2 — curvature and transition-step readout — **DONE**
 
-Do this **before** phases 3 onward so they are measured rather than asserted.
+Built so that phases 3 onward are measured rather than asserted. Nothing about
+the track changed; this phase only made the track's shape legible.
 
-Expose, per piece and per trace sample, the local radius of curvature in both
-planes, and the **step** in g at each joint. The step is exactly computable in
-this model and is the thing jerk is a proxy for: "Turn 2 slams 4.1 g on
-instantly" is well defined here and is the real lesson about easements.
+### What it added
 
-Useful on its own in the report, next to the existing g warnings.
+**`RC.splitCurv`** resolves a curvature vector into the two planes a builder
+thinks in — vertical (crests and valleys, signed: + is a valley) and horizontal
+(turning, signed to match `def.turn`). Both axes come from the WORLD, not the car
+frame, so banking a turn does not move the geometry it reports and a loop's
+curvature-seeded "up" does not call every part of a loop a valley. Every path
+point carries `kVert` / `kLat`; `pathAt` interpolates them; the overhang
+computes them too, so a car out over the edge reads back in the same units.
+
+**`RC.jointSteps()`** — the step at every joint, via `curvInside`, which samples
+only WITHIN a piece. That is the crux: the path's own three-point curvature at a
+joint straddles both sides and averages away the very step being measured.
+Closed circuits get the joint where the last piece meets the first, recorded at
+the far end of the path so it is crossed before the lap counter wraps `s`.
+
+**`RC.trackGeometry()`** — tightest crest, valley and turn radius, each with the
+arc position that owns it, plus the speed the shape stays inside the limits to.
+That last one is solved rather than searched: every limit in `G_LIMITS` is a
+bound on `v^2`, because the centripetal term is the only speed-dependent part of
+what a rider feels. Each axis reads `A + B*v^2` with `A` what the rider feels
+standing still there and `B` from the curvature, so
+
+```
+B > 0:  v^2 <= (limit_max - A) / B        B < 0:  v^2 <= (limit_min - A) / B
+```
+
+and the smallest bound over the whole track is the answer. A negative bound
+means the limit is broken standing still, which only a loop manages — there it
+is a MINIMUM speed and belongs to the ride warnings, not here.
+
+**`RC.worstJolts()`** — `physics.js` records, per joint, the worst `dk*v^2/g` the
+front car took crossing it.
+
+**Report**: a "Shape" section (radii, each named by feature, and "Within the
+limits to X m/s (sideways) on Turn 1"), a "Jolts" list of the worst three, and a
+warning when the run beat the speed its own shape allows. Suppressed entirely on
+track with no curvature anywhere. The accel graph's hover readout now says what
+the track is doing; the CSV gained two curvature columns (curvature, not radius —
+straight track has no radius and a column of `Infinity` is no use to a
+spreadsheet).
+
+### Deliberately not done
+
+**No jerk threshold was invented.** The open question below still stands: no
+trustworthy coaster comfort figure was found. So the jolt readout is a
+measurement with a plain-English note, not a pass/fail. The one warning added is
+the honest-speed comparison, which cites limits that *are* published.
+
+### Two things worth knowing before phase 3
+
+**A transition's curvature is not `z''`.** It is `z'' / (1 + z'^2)^1.5`, and the
+difference is not small: `gentle <-> steep` has `z''` of 1/9 per metre but a real
+radius of **10.5 m**, because it enters at a grade of 1 in 3. That is why the
+table above says 10.5 and not 9. Any phase-3 arithmetic that works in `z''` and
+quotes the answer as a radius will be wrong by up to 17% on the steep pieces, and
+wrong in the flattering direction.
+
+**The worst jolt on a corner can be at its EXIT.** Found as a test failure. A
+turn's entry step is bigger (the curvature swings from the transition's vertical
+bend straight into the turn's lateral one), but the train is still accelerating
+when its front car enters: the rear cars are ten metres back and still on the
+descent, and the mean slope over the cars is what drives it. By the exit the
+whole train is level and moving faster, and `v^2` more than makes up the smaller
+step. Any reasoning about which joint on a feature is worst has to carry the
+train's length, not just its geometry.
+
+### Tests
+
+Twelve new checks in a **Curvature** group, placed after Path. The expected
+figures are derived from `TILE_M`, `LEVEL_M` and the grades rather than written
+down — including a `transCurv()` helper that spells out the quadratic profile's
+curvature in full, which is exactly the expression phase 3 has to change.
+
+One is a deliberate tripwire: *"a bigger grade change over the same length bends
+harder"*. Every transition is one tile long today, so `gentle <-> steep` comes
+out tighter. Phase 3 sets length FROM grade change precisely so they all land on
+the same curvature — at which point that check should be **rewritten as an
+equality, not deleted**, because "every transition is equally tight" is the
+property the new palette is meant to have.
 
 ## Phase 3 — quintic profile AND longer transitions, together
 
@@ -395,11 +470,16 @@ students have recorded stop matching.
 
 ## Suggested order
 
-Phase 1 is **done** and was a strict improvement with no breakage. Phase 2 next,
-because it makes everything after it measurable and is useful in the report
-regardless. Phase 3 is the breaking change and wants its two halves shipped
-together — and note it lengthens the track again, so `DEFAULT_MU` and the preset
-energy budgets need rechecking with it. Phases 4 to 6 are the real work and want
-the whole suite green before starting.
+Phases 1 and 2 are **done**, both with no breakage: phase 1 was a strict
+improvement, phase 2 changed no geometry at all. **Phase 3 is next**, is the
+breaking change, and wants its two halves shipped together — and note it
+lengthens the track again, so `DEFAULT_MU` and the preset energy budgets need
+rechecking with it. Phases 4 to 6 are the real work and want the whole suite
+green before starting.
 
-Suite is at **154 checks**, all passing, as of the end of phase 1.
+Phase 2's readout is now the tool for the rest of it. Before committing to the
+quintic, load each preset and read the Shape section: it gives the speed the
+current catalogue is honest to and the speed the ride actually reaches, which is
+the gap the whole refactor exists to close, measured rather than argued.
+
+Suite is at **166 checks**, all passing, as of the end of phase 2.
