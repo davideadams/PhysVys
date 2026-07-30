@@ -11,7 +11,7 @@
 
   const G = 9.81;
   const CAR_SPACING = 3.5;   // metres between car centres
-  const CAR_MASS = 500;      // kg per car including riders
+  const CAR_MASS = 500;      // kg per car including riders — the default
 
   const SUBSTEP = 1 / 240;   // s — fixed physics step
   const MAX_FRAME = 0.1;     // s — ignore huge gaps after a tab switch
@@ -60,6 +60,7 @@
     wrecked: false,      // destroyed: all its energy has gone to heat
 
     cars: 4,
+    carMass: CAR_MASS,   // kg each, riders included — see RC.trainMass
     releaseS: null,      // metres along the track, or null for the station
     liftSpeed: 4.0,      // m/s — chain lift
     brakeSpeed: 3.0,     // m/s — brake run target
@@ -90,7 +91,13 @@
     note: ''
   };
 
-  RC.trainMass = () => RC.sim.cars * CAR_MASS;
+  /* Mass and LENGTH are separate controls on purpose. Adding cars does both —
+     it makes the train heavier and it spreads it further along the track — and
+     the length genuinely changes the physics, because the driving force uses
+     the mean slope under the cars. So a student answering "does mass matter?"
+     by dragging the car count is moving two variables at once and cannot get a
+     clean answer. Mass per car moves only the one. */
+  RC.trainMass = () => RC.sim.cars * RC.sim.carMass;
   RC.CAR_SPACING = CAR_SPACING;
 
   /* Where the front car parks by default: the station exit, so the train sits
@@ -894,7 +901,7 @@
     }
   };
 
-  function demoMass(tr) { return RC.sim.cars * CAR_MASS; }
+  function demoMass(tr) { return RC.trainMass(); }
 
   /* Where a comparison train's cars sit. Same shape as RC.carStates, read off
      that train's own path. */

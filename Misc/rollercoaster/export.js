@@ -81,10 +81,16 @@
     c.style.height = GRAPH_H + 'px';
     document.body.appendChild(c);
     try {
-      const held = RC.graphMode();
+      /* Always against distance, whatever the student happens to be looking
+         at. A teacher comparing two submissions needs the same axes on both,
+         and distance is the one that does not depend on how long the run
+         lasted. Put back afterwards so exporting does not change the view. */
+      const heldMode = RC.graphMode(), heldAxis = RC.graphAxis();
       RC.setGraphMode(mode);
+      RC.setGraphAxis('s');
       RC.drawEnergyGraph(c);
-      RC.setGraphMode(held);
+      RC.setGraphMode(heldMode);
+      RC.setGraphAxis(heldAxis);
       return c.toDataURL('image/png');
     } finally {
       document.body.removeChild(c);

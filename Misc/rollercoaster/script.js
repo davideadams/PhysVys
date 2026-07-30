@@ -233,6 +233,7 @@
       // its key is settled here rather than in syncGraphMode.
       const heatKey = document.getElementById('legend-heat');
       if (heatKey) heatKey.hidden = !RC.graphHasHeat();
+      showGraphPick();
       setText('ro-e-v', Math.abs(sim.v).toFixed(1) + ' m/s');
       setText('ro-e-h', e.h.toFixed(2) + ' m');
       setText('ro-e-ke', RC.fmtEnergy(e.ke));
@@ -373,18 +374,25 @@
      line plots along the track. Each mode owns one canvas and one legend. */
   const graphModeBtns = document.querySelectorAll('#graph-modes [data-graph]');
 
+  const graphAxisBtns = document.querySelectorAll('#graph-axes [data-axis]');
+
   function syncGraphMode() {
     const mode = RC.graphMode();
+    const axis = RC.graphAxis();
     graphModeBtns.forEach(b => b.classList.toggle('active', b.dataset.graph === mode));
+    graphAxisBtns.forEach(b => b.classList.toggle('active', b.dataset.axis === axis));
     const show = (id, on) => {
       const el = document.getElementById(id);
       if (el) el.hidden = !on;
     };
     show('graph-bars', mode === 'bars');
     show('graph-line', mode !== 'bars');
+    // The bars are a snapshot of now, so they have no axis to choose.
+    show('graph-axes', mode !== 'bars');
     show('legend-bars', mode === 'bars');
     show('legend-energy', mode === 'energy');
     show('legend-accel', mode === 'accel');
+    // Speed is a single line against a labelled axis, so it needs no key.
   }
 
   graphModeBtns.forEach(btn => {
@@ -394,6 +402,55 @@
       updateEnergyPanels();
     });
   });
+
+  graphAxisBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      RC.setGraphAxis(btn.dataset.axis);
+      syncGraphMode();
+      updateEnergyPanels();
+    });
+  });
+
+  /* Pointing at the line plot reads off the values there. The crosshair is
+     drawn by energy.js as part of the plot, which then publishes the sample it
+     landed on; this turns that into words. Without it the only way to ask
+     "what was the speed at 40 m" was to open the exported CSV. */
+  const graphLine = document.getElementById('graph-line');
+  if (graphLine) {
+    graphLine.addEventListener('mousemove', e => {
+      // fit() draws in CSS pixels, so an offset needs no scaling.
+      RC.setGraphCursor(e.offsetX);
+      updateEnergyPanels();
+    });
+    graphLine.addEventListener('mouseleave', () => {
+      RC.setGraphCursor(null);
+      updateEnergyPanels();
+    });
+  }
+
+  function showGraphPick() {
+    const row = document.getElementById('graph-pick-row');
+    if (!row) return;
+    const p = RC.graphCursor;
+    row.hidden = !p;
+    if (!p) return;
+    const at = RC.graphAxis() === 's'
+      ? `At ${p.s.toFixed(1)} m (${p.t.toFixed(1)} s)`
+      : `At ${p.t.toFixed(1)} s (${p.s.toFixed(1)} m)`;
+    setText('graph-pick-at', at);
+    // Whatever the plot on show is about, plus height, which every mode needs.
+    const mode = RC.graphMode();
+    let vals;
+    if (mode === 'accel') {
+      vals = `${p.vg.toFixed(2)} g vert, ${p.lg.toFixed(2)} g lat, ${p.h.toFixed(1)} m`;
+    } else if (mode === 'speed') {
+      vals = `${p.v.toFixed(1)} m/s, ${p.h.toFixed(1)} m`;
+    } else {
+      vals = `${RC.fmtEnergy(p.ke)} kinetic, ${RC.fmtEnergy(p.pe)} potential, ` +
+             `${p.v.toFixed(1)} m/s, ${p.h.toFixed(1)} m`;
+    }
+    setText('graph-pick-vals', vals);
+  }
 
   /* Keep the working track for next time, a moment after the last edit rather
      than on every one — building a lift hill is a rapid burst of clicks, and

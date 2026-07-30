@@ -12,6 +12,17 @@
     .anyfail { background: #fde2e2; color: #7a1f1f; border: 1px solid #c62828; }
     ul { list-style: none; padding: 0; margin: 0; }
     li { padding: 0.35rem 0.6rem; border-bottom: 1px solid rgba(21,48,77,0.1); font-size: 0.88rem; }
+    .group {
+      display: flex; align-items: baseline; justify-content: space-between; gap: 1rem;
+      margin-top: 1.1rem; padding: 0.3rem 0.6rem;
+      background: #e7eef7; border-bottom: 1px solid #98a9bb;
+      font-weight: 700; font-size: 0.82rem;
+      text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    li.group:first-child { margin-top: 0; }
+    .group-bad { background: #fde2e2; color: #7a1f1f; }
+    .tally { font-weight: 600; font-size: 0.76rem; letter-spacing: 0; text-transform: none; color: #55708d; }
+    .group-bad .tally { color: #7a1f1f; }
     .pass::before { content: "PASS"; color: #0d9488; font-weight: 700; margin-right: 0.6rem; }
     .fail::before { content: "FAIL"; color: #c62828; font-weight: 700; margin-right: 0.6rem; }
     .fail { background: #fff4f4; }
@@ -76,18 +87,26 @@
   const results = [];
   const EPS = 1e-9;
 
+  /* Which part of the sim a check belongs to. The file was already divided
+     into sections by comment; this makes that division real, so the report can
+     print it and a failure says WHERE it is before the name has been read.
+     Set once at the top of each run of checks — a comment and a category that
+     could disagree would be worse than neither. */
+  let group = 'General';
+  function section(name) { group = name; }
+
   function check(name, fn) {
     try {
       const problem = fn();
-      results.push({ name, ok: !problem, detail: problem || '' });
+      results.push({ group, name, ok: !problem, detail: problem || '' });
     } catch (err) {
-      results.push({ name, ok: false, detail: err.message + '\n' + err.stack });
+      results.push({ group, name, ok: false, detail: err.message + '\n' + err.stack });
     }
   }
 
   const near = (a, b, eps) => Math.abs(a - b) <= (eps || 1e-9);
 
-  /* ---- projection ---------------------------------------------------- */
+  section('Projection');
   check('rot / unrot round-trip, all rotations, continuous coords', () => {
     for (let r = 0; r < 4; r++) {
       for (let i = 0; i <= RC.GRID; i += 2.5) {
@@ -137,6 +156,7 @@
      The critical invariant: a piece's declared exit node must sit exactly
      where its drawn centreline ends. If these drift, track looks connected
      but the physics path has gaps in it. */
+  section('Piece geometry');
   check('exit node matches centreline end, every piece, every direction', () => {
     for (const def of RC.PIECES) {
       for (let dir = 0; dir < 4; dir++) {
@@ -217,7 +237,7 @@
     }
   });
 
-  /* ---- building -------------------------------------------------------- */
+  section('Building');
   check('four same-radius turns return to the starting node', () => {
     for (const id of ['turn-left-tight', 'turn-right-tight', 'turn-left-wide', 'turn-right-wide']) {
       RC.track.pieces = [];
@@ -313,6 +333,7 @@
   /* ---- collision -------------------------------------------------------
      The risk here is false positives: a collision rule that is too eager
      silently refuses ordinary shapes and makes the builder feel broken. */
+  section('Collision');
   check('an S-bend is allowed (adjacent turns are not a collision)', () => {
     RC.resetTrack();
     if (!RC.place('turn-right-tight')) return 'first turn refused';
@@ -376,7 +397,7 @@
     }
   });
 
-  /* ---- arc-length path -------------------------------------------------- */
+  section('Path');
   check('path is continuous and its length matches the pieces', () => {
     RC.resetTrack();
     for (const id of ['flat', 'flat-to-gentle-up', 'gentle-up', 'gentle-up-to-flat', 'turn-right-wide']) {
@@ -461,6 +482,7 @@
     return m;
   }
 
+  section('Build palette');
   check('slope pairs resolve to exactly one piece each', () => {
     const m = straightMap();
     if (m.dupe) return `two pieces claim "${m.dupe}": ${m.a} and ${m.b}`;
@@ -505,7 +527,7 @@
     if (seen[2] !== 6) return `third build left slope ${seen[2]}, expected to hold steep`;
   });
 
-  /* ---- finish track ----------------------------------------------------- */
+  section('Finish track');
   check('finish track closes a circuit from the bare station', () => {
     RC.resetTrack();
     const res = RC.completeTrack();
@@ -623,6 +645,7 @@
     return false;
   }
 
+  section('Physics');
   check('energy is conserved on a frictionless run', () => {
     const err = buildTestCircuit();
     if (err) return err;
@@ -796,7 +819,7 @@
     }
   });
 
-  /* ---- g-forces --------------------------------------------------------- */
+  section('G-forces');
   check('standing still on level track is 1 g vertical and nothing else', () => {
     RC.resetTrack();
     const p = RC.pathAt(6, false);
@@ -879,6 +902,7 @@
     return RC.trackPath();
   }
 
+  section('Loops');
   check('a loop advances four tiles and one to the side, level at both ends', () => {
     for (const id of ['loop-left', 'loop-right']) {
       const def = RC.pieceDef(id);
@@ -1203,7 +1227,7 @@
     }
   });
 
-  /* ---- banking ----------------------------------------------------------- */
+  section('Banking');
   function bankedTurnSample(id, banked, sOffset) {
     RC.resetTrack();
     RC.place(id, { bank: banked });
@@ -1520,6 +1544,7 @@
   /* ---- prefabs -----------------------------------------------------------
      A prefab that doesn't close is the worst kind of bug here: the page loads
      looking fine and Test silently refuses. */
+  section('Presets');
   check('every prefab builds; closed ones close, shuttles are testable shuttles', () => {
     for (const key of Object.keys(RC.PREFABS)) {
       // A blank preset is deliberately just a station: nothing to close or
@@ -2058,8 +2083,13 @@
   });
 
   check('the default prefab completes a lap with friction on, not just off', () => {
-    // A ride that only works with the losses switched off is a poor advert for
-    // a sim about losses. It used to die a metre short of the station.
+    /* A ride that only works with the losses switched off is a poor advert for
+       a sim about losses. It used to die a metre short of the station.
+
+       Only the DEFAULT mu is asserted, deliberately. Wind it up past about
+       0.03 and the train stalls on the first turn after the lift — that is
+       the lesson, not a fault: a lift hill sized for one set of losses does
+       not survive being given more. Do not "fix" it by lengthening the lift. */
     RC.loadPrefab('first-drop');
     RC.sim.cars = 4;
     RC.sim.friction = true;
@@ -2238,7 +2268,7 @@
     }
   });
 
-  /* ---- train and losses -------------------------------------------------- */
+  section('Train and losses');
   check('the release point decides where the train starts', () => {
     RC.loadPrefab('first-drop');
     RC.sim.releaseS = 40;
@@ -2390,6 +2420,71 @@
     }
   });
 
+  check('mass per car changes the mass and nothing else about the ride', () => {
+    /* The reason this control exists. The car count changes mass AND the
+       train's length, and the length is real physics — the driving force uses
+       the mean slope under the cars — so a student answering "does mass
+       matter?" with the car count is moving two variables. Mass per car has to
+       move exactly one: the whole ride must come out identical, metre for
+       metre, with every energy simply scaled.
+
+       A whole lap of the default ride, so the lift, the drops, the brake run
+       and the station are all in it. If mass leaked into any of them, this is
+       where it would show. */
+    const runAt = kg => {
+      RC.loadPrefab('first-drop');
+      RC.sim.cars = 4;
+      RC.sim.carMass = kg;
+      RC.sim.friction = true;      // friction is per unit mass too; prove it
+      RC.sim.mu = 0.02;
+      RC.sim.kDrag = 0.0012;
+      RC.resetSim();
+      runFor(400);
+      const e = RC.energy();
+      return {
+        mass: RC.trainMass(),
+        state: RC.sim.state,
+        time: RC.sim.time,
+        maxV: RC.sim.maxV,
+        maxZ: RC.sim.maxZ,
+        maxVertG: RC.sim.maxVertG,
+        motor: e.motor,
+        thermal: e.thermal
+      };
+    };
+    const light = runAt(400);
+    const heavy = runAt(1200);
+    RC.sim.carMass = 500;
+    RC.sim.friction = false;
+
+    if (!near(heavy.mass, light.mass * 3, 1e-9)) {
+      return `tripling the car mass gave ${heavy.mass} kg against ${light.mass}`;
+    }
+    if (light.state !== 'finished' || heavy.state !== 'finished') {
+      return `states "${light.state}" and "${heavy.state}" — both should finish`;
+    }
+
+    // Identical ride: same speeds, same heights, same forces, same duration.
+    const same = (a, b, tol, what) =>
+      Math.abs(a - b) <= tol * Math.max(1, Math.abs(a)) ? null
+        : `${what} changed with mass: ${a.toFixed(3)} against ${b.toFixed(3)}`;
+    for (const bad of [
+      same(light.maxV, heavy.maxV, 0.001, 'top speed'),
+      same(light.maxZ, heavy.maxZ, 0.001, 'highest point'),
+      same(light.maxVertG, heavy.maxVertG, 0.001, 'peak vertical g'),
+      same(light.time, heavy.time, 0.005, 'ride time')
+    ]) if (bad) return bad;
+
+    // And every energy simply three times bigger, losses included.
+    for (const [what, a, b] of [['motor work', light.motor, heavy.motor],
+                                ['heat', light.thermal, heavy.thermal]]) {
+      if (!(a > 0)) return `no ${what} to compare`;
+      if (Math.abs(b - a * 3) / (a * 3) > 0.005) {
+        return `${what} did not triple with the mass: ${a.toFixed(0)} J -> ${b.toFixed(0)} J`;
+      }
+    }
+  });
+
   check('friction with both losses zeroed matches a frictionless run', () => {
     // Guards the friction plumbing: if the toggle did anything beyond
     // applying mu and kDrag, this would drift apart.
@@ -2460,7 +2555,7 @@
     }
   });
 
-  /* ---- selecting existing pieces ----------------------------------------- */
+  section('Selecting pieces');
   check('selecting a piece lights up its type in the build menu', () => {
     RC.resetTrack();
     if (!RC.place('flat-to-gentle-up', { lift: true })) return 'lift piece refused';
@@ -2538,7 +2633,7 @@
     if (RC.pickPiece(5, 5, cam, view) !== null) return 'a corner click picked a piece';
   });
 
-  /* ---- graph overlay ----------------------------------------------------- */
+  section('Graph overlay');
   check('piece spans number turns and loops in build order', () => {
     RC.resetTrack();
     for (const id of ['flat', 'turn-right-wide', 'flat', 'turn-left-tight',
@@ -2758,7 +2853,7 @@
     }
   });
 
-  /* ---- exporting for marking ---------------------------------------------- */
+  section('Exporting');
   check('the exported summary carries the track, the report and the graphs', () => {
     RC.loadPrefab('looper');
     RC.sim.cars = 4;
@@ -2834,8 +2929,12 @@
 
     let html = RC.reportHTML();
     if (html.indexOf('Settings') < 0) return 'no settings section';
+    /* Length, mass per car and total, all three. Mass and length are separate
+       controls, so "1.50 t" on its own would not distinguish three 500 kg cars
+       from one of a tonne and a half — and those do not ride the same. */
     if (html.indexOf('3 cars') < 0) return 'the train length is missing';
-    if (html.indexOf('1.5 t') < 0) return 'the train mass is missing';
+    if (html.indexOf('500 kg') < 0) return 'the mass per car is missing';
+    if (html.indexOf('1.50 t') < 0) return 'the total train mass is missing';
     if (html.indexOf('the station') < 0) return 'the release point is missing';
     if (!/Friction<\/span><span>off/.test(html.replace(/\s+/g, ''))) {
       return 'friction is not recorded as off';
@@ -2928,7 +3027,7 @@
     if (!res.why) return 'refused without saying why';
   });
 
-  /* ---- saving a track ----------------------------------------------------- */
+  section('Saving');
   check('a long track name is shortened for the list, but only for the list', () => {
     /* Names are stored and loaded whole — the round trip is checked below.
        This is purely about the width of the track list in the top bar, which
@@ -3097,7 +3196,7 @@
     }
   });
 
-  /* ---- sloped turns ------------------------------------------------------- */
+  section('Sloped turns');
   const TURN_BASES = ['turn-left-tight', 'turn-left-wide', 'turn-right-wide', 'turn-right-tight'];
   const TURN_GRADES = [['-gentle-down', -2], ['-steep-down', -6],
                        ['-gentle-up', 2], ['-steep-up', 6]];
@@ -3471,7 +3570,7 @@
     }
   });
 
-  /* ---- demonstrations ----------------------------------------------------- */
+  section('Demonstrations');
   check('the path-independence demo builds three tracks dropping the same height', () => {
     const res = RC.loadPrefab('path-independence');
     if (!res.ok) return res.why;
@@ -3661,14 +3760,66 @@
     RC.sim.cars = 4;      // the demo forced it to 1; put it back for later tests
   });
 
+  // These trail the demonstrations in the file but are nothing to do with them.
+  section('Graph modes');
   check('the graph mode setter is well behaved', () => {
-    // Three plots share the one window: the live bars and the two line plots.
-    for (const m of ['accel', 'energy', 'bars']) {
+    // Four plots share the one window: the live bars and three line plots.
+    for (const m of ['accel', 'energy', 'speed', 'bars']) {
       RC.setGraphMode(m);
       if (RC.graphMode() !== m) return `did not switch to ${m}`;
     }
     RC.setGraphMode('nonsense');
     if (RC.graphMode() !== 'bars') return 'an unknown mode should fall back to bars';
+  });
+
+  check('the graph axis setter is well behaved, and every mode has a key', () => {
+    for (const a of ['t', 's']) {
+      RC.setGraphAxis(a);
+      if (RC.graphAxis() !== a) return `did not switch to the ${a} axis`;
+    }
+    RC.setGraphAxis('nonsense');
+    if (RC.graphAxis() !== 's') return 'an unknown axis should fall back to distance';
+
+    /* Every line mode needs an entry in GRAPH_KEY, even an empty one — the
+       export builds its key off this, and a missing mode there would export a
+       graph with no key rather than failing noisily. */
+    for (const m of ['energy', 'accel', 'speed']) {
+      if (!Array.isArray(RC.GRAPH_KEY[m])) return `no key defined for the ${m} plot`;
+    }
+    // The acceleration key names the limit shading, since the plot draws it.
+    if (!RC.GRAPH_KEY.accel.some(r => /limit/i.test(r.label))) {
+      return 'the acceleration plot shades the g limits but the key does not say so';
+    }
+  });
+
+  check('both axes plot the same run, and the trace carries what each needs', () => {
+    /* The time axis is not a second copy of the data — it is the same trace
+       read down a different column. So what has to hold is that both columns
+       are there, both advance, and time never goes backwards even where
+       distance does (a shuttle retraces the track; the clock does not). */
+    RC.loadPrefab('shuttle-loop');
+    RC.sim.cars = 2;
+    RC.sim.friction = false;
+    RC.resetSim();
+    runFor(120);
+
+    const tr = RC.sim.trace;
+    if (tr.length < 50) return `only ${tr.length} samples to plot`;
+    for (const p of tr) {
+      for (const k of ['s', 't', 'v', 'h']) {
+        if (!Number.isFinite(p[k])) return `a sample has a non-finite ${k}`;
+      }
+    }
+    for (let n = 1; n < tr.length; n++) {
+      if (tr[n].t < tr[n - 1].t - 1e-9) return `time went backwards at sample ${n}`;
+    }
+    if (!(tr[tr.length - 1].t > tr[0].t)) return 'the clock never advanced';
+    // And this really is a track the train goes back along, or the check above
+    // proves nothing.
+    if (!tr.some((p, n) => n > 0 && p.s < tr[n - 1].s - 1e-9)) {
+      return 'the shuttle never retraced its track, so nothing was tested';
+    }
+    RC.sim.cars = 4;
   });
 
   check('heat gets a line on the energy graph once there is heat to plot', () => {
@@ -3691,38 +3842,97 @@
   });
 
   /* ---- report ---------------------------------------------------------- */
-  const ul = document.getElementById('results');
+  /* The order the report reads in — deliberately NOT the order the file is in,
+     which is just the order things came to be written.
+
+     It runs roughly by what depends on what: the projection under everything,
+     then the track model, the shapes built out of it, the editor that lays
+     them, the train that runs over them, what the ride reports, and finally
+     the things standing around the outside. Read that way the first failing
+     group is usually the cause and the ones below it the fallout — break the
+     piece geometry and physics fails too, but physics is not the bug.
+
+     A group missing from this list still reports, at the end, where being out
+     of place is the hint that it wants adding here. */
+  const GROUP_ORDER = [
+    'Projection', 'Piece geometry',
+    'Building', 'Collision', 'Path',
+    'Sloped turns', 'Banking', 'Loops',
+    'Finish track', 'Build palette', 'Selecting pieces',
+    'Physics', 'G-forces', 'Train and losses',
+    'Graph overlay', 'Graph modes', 'Exporting',
+    'Presets', 'Demonstrations', 'Saving'
+  ];
+
+  /* Keyed by name rather than by run, so a group split across two places in
+     the file still comes out as one heading. */
+  const groups = new Map();
   let failed = 0;
   for (const r of results) {
     if (!r.ok) failed++;
-    const li = document.createElement('li');
-    li.className = r.ok ? 'pass' : 'fail';
-    li.textContent = r.name;
-    if (!r.ok) {
-      const d = document.createElement('span');
-      d.className = 'detail';
-      d.textContent = r.detail;
-      li.appendChild(d);
-    }
-    ul.appendChild(li);
+    if (!groups.has(r.group)) groups.set(r.group, []);
+    groups.get(r.group).push(r);
   }
+
+  const rank = name => {
+    const at = GROUP_ORDER.indexOf(name);
+    return at < 0 ? GROUP_ORDER.length : at;
+  };
+  const ordered = [...groups.entries()].sort((a, b) => rank(a[0]) - rank(b[0]));
+
+  const ul = document.getElementById('results');
+  for (const [name, rows] of ordered) {
+    const bad = rows.filter(r => !r.ok).length;
+
+    const hd = document.createElement('li');
+    hd.className = 'group' + (bad ? ' group-bad' : '');
+    const label = document.createElement('span');
+    label.textContent = name;
+    const tally = document.createElement('span');
+    tally.className = 'tally';
+    tally.textContent = bad ? `${bad} of ${rows.length} failed` : `${rows.length} passed`;
+    hd.appendChild(label);
+    hd.appendChild(tally);
+    ul.appendChild(hd);
+
+    for (const r of rows) {
+      const li = document.createElement('li');
+      li.className = r.ok ? 'pass' : 'fail';
+      li.textContent = r.name;
+      if (!r.ok) {
+        const d = document.createElement('span');
+        d.className = 'detail';
+        d.textContent = r.detail;
+        li.appendChild(d);
+      }
+      ul.appendChild(li);
+    }
+  }
+
   const sum = document.getElementById('summary');
   sum.className = failed ? 'anyfail' : 'allpass';
+  const across = `${results.length} checks in ${groups.size} groups`;
   sum.textContent = failed
-    ? `${failed} of ${results.length} checks FAILED`
-    : `All ${results.length} checks passed`;
+    ? `${failed} of ${across} FAILED`
+    : `All ${across} passed`;
 
   /* A copyable block naming every failing check and its detail, so the
      results can be pasted straight back into the conversation. */
   if (failed) {
+    /* In the report's order, not the file's, so the first failure pasted back
+       is the one most likely to be the cause rather than whichever happened to
+       be written first. The group goes in too: on its own, "FAIL: a loop
+       actually goes over the top" says a good deal less than "[Loops] ..." */
     const lines = [`Rollercoaster self-test: ${failed} of ${results.length} checks FAILED`, ''];
-    for (const r of results) {
-      if (r.ok) continue;
-      lines.push(`FAIL: ${r.name}`);
-      if (r.detail) {
-        for (const dl of String(r.detail).split('\n')) lines.push('    ' + dl);
+    for (const [, rows] of ordered) {
+      for (const r of rows) {
+        if (r.ok) continue;
+        lines.push(`FAIL [${r.group}]: ${r.name}`);
+        if (r.detail) {
+          for (const dl of String(r.detail).split('\n')) lines.push('    ' + dl);
+        }
+        lines.push('');
       }
-      lines.push('');
     }
     const text = lines.join('\n').trimEnd();
 

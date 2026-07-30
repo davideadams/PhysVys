@@ -181,35 +181,63 @@
     accel: [
       { colour: VERT_G, label: 'Vertical g' },
       { colour: LAT_G, label: 'Lateral g' },
-      { dashed: true, label: '1 g (sitting still)' }
-    ]
+      { dashed: true, label: '1 g (sitting still)' },
+      { colour: 'rgba(198,40,40,0.35)', label: 'Beyond real limits' }
+    ],
+    // One line and a labelled axis needs no key.
+    speed: []
   };
 
-  /* Three plots share one window: 'bars' is the train's energy right now,
-     'energy' and 'accel' are the whole ride against distance along the track.
-     Anything unrecognised falls back to the bars, which is what the window
-     opens on. */
-  const GRAPH_MODES = ['bars', 'energy', 'accel'];
+  /* Four plots share one window: 'bars' is the train's energy right now; the
+     other three plot the whole ride. Anything unrecognised falls back to the
+     bars, which is what the window opens on. */
+  const GRAPH_MODES = ['bars', 'energy', 'accel', 'speed'];
   let graphMode = 'bars';
   RC.setGraphMode = function (m) {
     graphMode = GRAPH_MODES.indexOf(m) >= 0 ? m : 'bars';
   };
   RC.graphMode = () => graphMode;
 
-  /* Draw one trace series as a polyline, breaking where a lap wraps past the
-     start line rather than streaking back across the plot. */
-  function plotSeries(ctx, trace, key, X, Y, total, colour, width, dash) {
+  /* Which way the line plots run. Distance answers "where on the track does
+     this happen"; time answers "how long does it last", and the two are not
+     the same shape at all — a crest the train crawls over is narrow against
+     distance and wide against time. Only the time axis gives a speed plot the
+     shape of the v-t graph a student is taught to read. The trace has recorded
+     both all along, so this costs nothing but the axis itself. */
+  const GRAPH_AXES = ['s', 't'];
+  let graphAxis = 's';
+  RC.setGraphAxis = function (a) {
+    graphAxis = GRAPH_AXES.indexOf(a) >= 0 ? a : 's';
+  };
+  RC.graphAxis = () => graphAxis;
+
+  /* Sample indices where a lap wraps past the start line. Against distance the
+     line would streak back across the plot from right to left, so the polyline
+     is broken there. Against time nothing ever goes backwards and there is
+     nothing to break — which is also why a shuttle's return leg must not be
+     broken here: it retraces the track legitimately, and only a jump of half a
+     lap or more is a wrap. */
+  function lapBreaks(trace, total) {
+    const at = new Set();
+    if (graphAxis !== 's' || !(total > 0)) return at;
+    for (let n = 1; n < trace.length; n++) {
+      if (trace[n].s < trace[n - 1].s - total * 0.5) at.add(n);
+    }
+    return at;
+  }
+
+  function plotSeries(ctx, trace, key, xOf, Y, breaks, colour, width, dash) {
     ctx.strokeStyle = colour;
     ctx.lineWidth = width;
     ctx.setLineDash(dash || []);
     ctx.beginPath();
-    let started = false, prevS = null;
-    for (const p of trace) {
-      const x = X(p.s), y = Y(p[key]);
-      if (started && prevS !== null && p.s < prevS - total * 0.5) started = false;
+    let started = false;
+    for (let n = 0; n < trace.length; n++) {
+      const p = trace[n];
+      if (breaks.has(n)) started = false;
+      const x = xOf(p), y = Y(p[key]);
       if (!started) { ctx.moveTo(x, y); started = true; }
       else ctx.lineTo(x, y);
-      prevS = p.s;
     }
     ctx.stroke();
     ctx.setLineDash([]);
@@ -231,16 +259,48 @@
   };
   RC.FEATURE_COLOURS = FEATURE_COLOURS;
 
-  /* Shaded bands behind the plot, one per named feature. */
-  function drawFeatureBands(ctx, X, padT, plotH) {
-    let feats;
-    try { feats = RC.features(); } catch (e) { return; }
+  /* Which feature the train was in, sample by sample, collapsed into runs.
+
+     Taken from where the train actually WAS rather than from the track's own
+     distance intervals. Against distance the two agree; against time a
+     distance interval has no one place to sit, since a lap can visit the same
+     turn twice at two different times. So the bands have to come from the
+     trace for the time axis, and one code path is worth more than two. It also
+     stops the plot shading track the train never reached, which a run that
+     crashed halfway used to do.
+
+     Cached on the trace length and track version: during a run the trace grows
+     by a sample a frame so this is recomputed anyway, but once the train has
+     stopped it settles and the featureAt scan stops repeating. */
+  let bandCache = null, bandKey = '';
+  function traceBands(trace) {
+    const key = trace.length + ':' + RC.version;
+    if (bandCache && bandKey === key) return bandCache;
+    const runs = [];
+    let cur = null;
+    for (let n = 0; n < trace.length; n++) {
+      let f = null;
+      try { f = RC.featureAt(trace[n].s); } catch (e) { f = null; }
+      const id = f && f.label ? f.type + ' ' + f.label : '';
+      if (!cur || cur.id !== id) {
+        cur = { id, type: f && f.type, label: f && f.label, from: n, to: n };
+        runs.push(cur);
+      } else {
+        cur.to = n;
+      }
+    }
+    bandCache = runs.filter(b => b.id);
+    bandKey = key;
+    return bandCache;
+  }
+
+  /* Shaded bands behind the plot, one per stretch of named feature. */
+  function drawFeatureBands(ctx, trace, bands, xOf, padT, plotH) {
     ctx.save();
-    for (const f of feats) {
-      if (!f.label) continue;
-      const c = FEATURE_COLOURS[f.type];
+    for (const b of bands) {
+      const c = FEATURE_COLOURS[b.type];
       if (!c) continue;
-      const x0 = X(f.s0), x1 = X(f.s1);
+      const x0 = xOf(trace[b.from]), x1 = xOf(trace[b.to]);
       if (x1 - x0 < 0.5) continue;
       ctx.fillStyle = c.band;
       ctx.fillRect(x0, padT, x1 - x0, plotH);
@@ -259,29 +319,67 @@
 
   /* Name tabs along the top, drawn over the traces. Labels are dropped where
      the band is too narrow to hold one rather than overprinting a neighbour. */
-  function drawFeatureLabels(ctx, X, padT) {
-    let feats;
-    try { feats = RC.features(); } catch (e) { return; }
+  function drawFeatureLabels(ctx, trace, bands, xOf, padT) {
     ctx.save();
     ctx.font = 'bold 9px "Trebuchet MS", "Segoe UI", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     let lastRight = -Infinity;
-    for (const f of feats) {
-      if (!f.label) continue;
-      const c = FEATURE_COLOURS[f.type];
+    for (const b of bands) {
+      const c = FEATURE_COLOURS[b.type];
       if (!c) continue;
-      const x0 = X(f.s0), x1 = X(f.s1);
-      const w = ctx.measureText(f.label).width + 7;
+      const x0 = xOf(trace[b.from]), x1 = xOf(trace[b.to]);
+      const w = ctx.measureText(b.label).width + 7;
       if (x1 - x0 < w * 0.55) continue;        // too narrow to name
-      const x = Math.max(x0 + w / 2, Math.min(x1 - w / 2, X(f.sMid)));
+      const x = Math.max(x0 + w / 2, Math.min(x1 - w / 2, (x0 + x1) / 2));
       if (x - w / 2 < lastRight + 1) continue; // would collide with the last tab
       lastRight = x + w / 2;
       ctx.fillStyle = c.tab;
       ctx.fillRect(x - w / 2, padT, w, 12);
       ctx.fillStyle = '#fff';
-      ctx.fillText(f.label, x, padT + 2);
+      ctx.fillText(b.label, x, padT + 2);
     }
+    ctx.restore();
+  }
+
+  /* A crosshair wherever the reader is pointing, and the sample under it
+     published for the readout beside the graph. Without it the only way to ask
+     "how fast was it at 40 m" was to open the exported CSV.
+
+     Pointer position comes in as a CSS pixel along the canvas — fit() sets the
+     transform to the device ratio, so drawing coordinates are CSS pixels and
+     an offsetX needs no conversion. */
+  let cursorX = null;
+  RC.graphCursor = null;
+  RC.setGraphCursor = function (x) {
+    cursorX = (x == null || !isFinite(x)) ? null : x;
+    if (cursorX === null) RC.graphCursor = null;
+  };
+
+  function drawCursor(ctx, trace, xOf, padL, padT, plotW, plotH) {
+    RC.graphCursor = null;
+    if (cursorX === null || cursorX < padL || cursorX > padL + plotW) return;
+
+    /* Nearest sample by x. On a distance plot of a completed lap two samples
+       share an x — the way out and the way home — and this takes whichever is
+       nearer, then the earlier of equals. Against time every x is unique. */
+    let best = null, bestD = Infinity;
+    for (const p of trace) {
+      const d = Math.abs(xOf(p) - cursorX);
+      if (d < bestD) { bestD = d; best = p; }
+    }
+    if (!best) return;
+    RC.graphCursor = best;
+
+    const x = Math.round(xOf(best)) + 0.5;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(21,48,77,0.55)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 2]);
+    ctx.beginPath();
+    ctx.moveTo(x, padT);
+    ctx.lineTo(x, padT + plotH);
+    ctx.stroke();
     ctx.restore();
   }
 
@@ -295,7 +393,6 @@
     const padL = 36, padR = 8, padT = 14, padB = 24;
     const plotW = w - padL - padR;
     const plotH = h - padT - padB;
-    const X = s => padL + plotW * Math.min(1, Math.max(0, s / total));
 
     if (!trace.length || total <= 0) {
       ctx.strokeStyle = AXIS;
@@ -313,16 +410,28 @@
       return;
     }
 
+    /* The axis. Distance spans the whole track whether or not the train got
+       round it, so two runs of the same track are directly comparable; time
+       spans however long this run has lasted, which is all there is to span. */
+    const tEnd = trace[trace.length - 1].t;
+    const span = graphAxis === 's' ? total : Math.max(tEnd, 0.001);
+    const xOf = p => padL + plotW * Math.min(1, Math.max(0, p[graphAxis] / span));
+
+    const bands = traceBands(trace);
+    const breaks = lapBreaks(trace, total);
+
     // Feature bands go down first so the traces read on top of them.
-    drawFeatureBands(ctx, X, padT, plotH);
+    drawFeatureBands(ctx, trace, bands, xOf, padT, plotH);
 
-    if (graphMode === 'accel') drawAccel(ctx, trace, total, X, padL, padT, plotW, plotH);
-    else drawEnergy(ctx, trace, total, X, padL, padT, plotW, plotH);
+    const args = [ctx, trace, xOf, breaks, padL, padT, plotW, plotH];
+    if (graphMode === 'accel') drawAccel.apply(null, args);
+    else if (graphMode === 'speed') drawSpeed.apply(null, args);
+    else drawEnergy.apply(null, args);
 
-    drawFeatureLabels(ctx, X, padT);
+    drawFeatureLabels(ctx, trace, bands, xOf, padT);
 
     // Where the train is now.
-    const xNow = X(trace[trace.length - 1].s);
+    const xNow = xOf(trace[trace.length - 1]);
     ctx.strokeStyle = 'rgba(21,48,77,0.35)';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -330,12 +439,17 @@
     ctx.lineTo(xNow, padT + plotH);
     ctx.stroke();
 
+    drawCursor(ctx, trace, xOf, padL, padT, plotW, plotH);
+
     ctx.fillStyle = LABEL;
     ctx.font = FONT;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     ctx.fillText('0', padL, padT + plotH + 4);
-    ctx.fillText(total.toFixed(0) + ' m along the track', padL + plotW / 2, padT + plotH + 4);
+    ctx.fillText(graphAxis === 's'
+      ? total.toFixed(0) + ' m along the track'
+      : tEnd.toFixed(1) + ' s since it set off',
+      padL + plotW / 2, padT + plotH + 4);
   };
 
   /* Has this ride actually made any heat worth a line of its own?
@@ -353,47 +467,78 @@
   }
   RC.graphHasHeat = () => tracedHeat(RC.sim.trace);
 
-  function drawEnergy(ctx, trace, total, X, padL, padT, plotW, plotH) {
-    let top = 0;
-    for (const p of trace) top = Math.max(top, p.total, p.supplied);
-    top = Math.max(top * 1.1, 1);
-    const Y = j => padT + plotH * (1 - j / top);
-
-    ctx.strokeStyle = GRID;
-    ctx.fillStyle = LABEL;
+  /* Gridlines with a labelled value at each, and the unit in the top-left
+     corner. Shared by all three line plots so their furniture matches. */
+  function drawScale(ctx, Y, values, label, padL, padT, plotW, fmtV, zeroAt) {
     ctx.font = FONT;
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
-    for (let n = 0; n <= 4; n++) {
-      const j = top * n / 4;
-      const yy = Math.round(Y(j)) + 0.5;
+    for (const v of values) {
+      const yy = Math.round(Y(v)) + 0.5;
+      ctx.strokeStyle = (zeroAt && v === 0) ? 'rgba(21,48,77,0.3)' : GRID;
+      ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(padL, yy);
       ctx.lineTo(padL + plotW, yy);
       ctx.stroke();
-      ctx.fillText(kJ(j).toFixed(0), padL - 5, yy);
+      ctx.fillStyle = LABEL;
+      ctx.fillText(fmtV(v), padL - 5, yy);
     }
     ctx.textAlign = 'left';
-    ctx.fillText('kJ', 3, padT - 4);
+    ctx.fillStyle = LABEL;
+    ctx.fillText(label, 3, padT - 4);
+  }
 
-    plotSeries(ctx, trace, 'supplied', X, Y, total, SUPPLIED, 1.5, [4, 3]);
-    plotSeries(ctx, trace, 'total', X, Y, total, TOTAL, 2);
-    // Heat under the two it is stealing from, so they stay the easiest to
-    // follow — it is a slow climb, they are the ones swapping back and forth.
-    if (tracedHeat(trace)) plotSeries(ctx, trace, 'th', X, Y, total, TH, 1.6);
-    plotSeries(ctx, trace, 'pe', X, Y, total, PE, 1.6);
-    plotSeries(ctx, trace, 'ke', X, Y, total, KE, 1.6);
-
+  function drawAxes(ctx, padL, padT, plotW, plotH, withBase) {
     ctx.strokeStyle = AXIS;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(padL + 0.5, padT);
     ctx.lineTo(padL + 0.5, padT + plotH + 0.5);
-    ctx.lineTo(padL + plotW, padT + plotH + 0.5);
+    if (withBase) ctx.lineTo(padL + plotW, padT + plotH + 0.5);
     ctx.stroke();
   }
 
-  function drawAccel(ctx, trace, total, X, padL, padT, plotW, plotH) {
+  function drawEnergy(ctx, trace, xOf, breaks, padL, padT, plotW, plotH) {
+    let top = 0;
+    for (const p of trace) top = Math.max(top, p.total, p.supplied);
+    top = Math.max(top * 1.1, 1);
+    const Y = j => padT + plotH * (1 - j / top);
+
+    const marks = [];
+    for (let n = 0; n <= 4; n++) marks.push(top * n / 4);
+    drawScale(ctx, Y, marks, 'kJ', padL, padT, plotW, v => kJ(v).toFixed(0), false);
+
+    plotSeries(ctx, trace, 'supplied', xOf, Y, breaks, SUPPLIED, 1.5, [4, 3]);
+    plotSeries(ctx, trace, 'total', xOf, Y, breaks, TOTAL, 2);
+    // Heat under the two it is stealing from, so they stay the easiest to
+    // follow — it is a slow climb, they are the ones swapping back and forth.
+    if (tracedHeat(trace)) plotSeries(ctx, trace, 'th', xOf, Y, breaks, TH, 1.6);
+    plotSeries(ctx, trace, 'pe', xOf, Y, breaks, PE, 1.6);
+    plotSeries(ctx, trace, 'ke', xOf, Y, breaks, KE, 1.6);
+
+    drawAxes(ctx, padL, padT, plotW, plotH, true);
+  }
+
+  /* Speed on its own. Kinetic energy is what the physics turns on, but "how
+     fast is it going here" is the question students actually ask, and it was
+     only ever available as a live number or a column of the exported CSV.
+     Against time this is the v-t graph off the syllabus. */
+  function drawSpeed(ctx, trace, xOf, breaks, padL, padT, plotW, plotH) {
+    let top = 1;
+    for (const p of trace) top = Math.max(top, p.v);
+    top = Math.max(top * 1.1, 1);
+    const Y = v => padT + plotH * (1 - v / top);
+
+    const marks = [];
+    for (let n = 0; n <= 4; n++) marks.push(top * n / 4);
+    drawScale(ctx, Y, marks, 'm/s', padL, padT, plotW, v => v.toFixed(0), false);
+
+    plotSeries(ctx, trace, 'v', xOf, Y, breaks, KE, 2);
+    drawAxes(ctx, padL, padT, plotW, plotH, true);
+  }
+
+  function drawAccel(ctx, trace, xOf, breaks, padL, padT, plotW, plotH) {
     // Range always spans 0..1 g (weightless to sitting still) plus the data,
     // so the 1 g reference line is meaningful and airtime shows below zero.
     let lo = -0.5, hi = 1.4;
@@ -405,45 +550,55 @@
     hi = Math.ceil(hi * 2) / 2;
     const Y = g => padT + plotH * (1 - (g - lo) / (hi - lo));
 
+    /* The envelope a real ride has to stay inside, from RC.G_LIMITS — the same
+       figures the report judges the track against. It used to say so only in
+       words, which left a student reading "4.8 g on Turn 2 is more than a real
+       coaster is allowed" while looking at a plot that gave no hint where the
+       line was.
+
+       Drawn only where it falls inside the plot. Forcing 5 g into range would
+       squash every ordinary ride into the bottom of the box to make room for a
+       limit it never goes near. */
+    const L = RC.G_LIMITS;
+    const shade = (from, to) => {
+      const a = Math.min(Math.max(from, lo), hi);
+      const b = Math.min(Math.max(to, lo), hi);
+      if (b - a < 1e-9) return;
+      ctx.fillStyle = 'rgba(198,40,40,0.10)';
+      ctx.fillRect(padL, Y(b), plotW, Y(a) - Y(b));
+    };
+    shade(L.vertHigh, hi);          // pressed into the seat harder than allowed
+    shade(lo, L.airtimeGood);       // thrown out of it harder than allowed
+
     // Gridline at every whole g.
-    ctx.font = FONT;
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
-    for (let g = Math.ceil(lo); g <= Math.floor(hi); g++) {
+    const marks = [];
+    for (let g = Math.ceil(lo); g <= Math.floor(hi); g++) marks.push(g);
+    drawScale(ctx, Y, marks, 'g', padL, padT, plotW, v => v.toFixed(0), true);
+
+    // Dashed reference at 1 g — what a rider feels sitting still.
+    const dashAt = (g, colour) => {
+      if (g < lo || g > hi) return;
       const yy = Math.round(Y(g)) + 0.5;
-      ctx.strokeStyle = (g === 0) ? 'rgba(21,48,77,0.3)' : GRID;
+      ctx.strokeStyle = colour;
       ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
       ctx.beginPath();
       ctx.moveTo(padL, yy);
       ctx.lineTo(padL + plotW, yy);
       ctx.stroke();
-      ctx.fillStyle = LABEL;
-      ctx.fillText(g.toFixed(0), padL - 5, yy);
-    }
+      ctx.setLineDash([]);
+    };
+    dashAt(1, 'rgba(21,48,77,0.28)');
+    // Sideways has its own, much lower, limit — and a band would be read as
+    // applying to the vertical trace, so it gets lines in its own colour.
+    dashAt(L.latHigh, 'rgba(194,24,91,0.38)');
+    dashAt(-L.latHigh, 'rgba(194,24,91,0.38)');
 
-    // Dashed reference at 1 g — what a rider feels sitting still.
-    const y1 = Math.round(Y(1)) + 0.5;
-    ctx.strokeStyle = 'rgba(21,48,77,0.28)';
-    ctx.setLineDash([3, 3]);
-    ctx.beginPath();
-    ctx.moveTo(padL, y1);
-    ctx.lineTo(padL + plotW, y1);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    plotSeries(ctx, trace, 'vg', xOf, Y, breaks, VERT_G, 1.8);
+    plotSeries(ctx, trace, 'lg', xOf, Y, breaks, LAT_G, 1.8);
 
-    ctx.textAlign = 'left';
-    ctx.fillStyle = LABEL;
-    ctx.fillText('g', 3, padT - 4);
-
-    plotSeries(ctx, trace, 'vg', X, Y, total, VERT_G, 1.8);
-    plotSeries(ctx, trace, 'lg', X, Y, total, LAT_G, 1.8);
-
-    ctx.strokeStyle = AXIS;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(padL + 0.5, padT);
-    ctx.lineTo(padL + 0.5, padT + plotH + 0.5);
-    ctx.stroke();
+    // No baseline: zero g is a gridline inside the plot, not the floor of it.
+    drawAxes(ctx, padL, padT, plotW, plotH, false);
   }
 
   /* ---- ride report ------------------------------------------------------- */
@@ -554,8 +709,11 @@
     }
 
     let html = `<div class="report-hd">Settings</div>`;
-    html += row('Train', `${sim.cars} ${sim.cars === 1 ? 'car' : 'cars'}, ` +
-                         `${(RC.trainMass() / 1000).toFixed(1)} t`);
+    // Mass and length both, since either can be changed on its own and either
+    // changes the ride. A report that only said "2.0 t" would not distinguish
+    // four 500 kg cars from two of a tonne, which do not ride the same.
+    html += row('Train', `${sim.cars} ${sim.cars === 1 ? 'car' : 'cars'} at ` +
+                         `${sim.carMass} kg, ${(RC.trainMass() / 1000).toFixed(2)} t`);
     html += row('Released from', sim.releaseS == null
       ? 'the station' : sim.releaseS.toFixed(1) + ' m along');
     html += row('Friction', sim.friction ? 'on' : 'off');

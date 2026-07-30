@@ -142,11 +142,23 @@
   <div class="window-body">
 
     <div class="control-group">
-      <label>Cars <span class="muted">each 500 kg with riders</span></label>
+      <label>Cars <span class="muted">how long the train is</span></label>
       <div class="slider-row">
         <input type="range" id="sl-cars" min="1" max="8" step="1" value="4">
         <input type="number" id="val-cars" class="num-input" min="1" max="8" step="1" value="4">
         <span class="slider-unit">cars</span>
+      </div>
+      <div class="readout-row"><span>Train length</span><span id="ro-train-len">—</span></div>
+    </div>
+
+    <!-- Mass is its own control because adding cars also lengthens the train,
+         and the length changes the physics on its own. -->
+    <div class="control-group">
+      <label>Mass per car <span class="muted">riders included</span></label>
+      <div class="slider-row">
+        <input type="range" id="sl-carmass" min="100" max="1500" step="50" value="500">
+        <input type="number" id="val-carmass" class="num-input" min="100" max="1500" step="50" value="500">
+        <span class="slider-unit">kg</span>
       </div>
       <div class="readout-row"><span>Train mass</span><span id="ro-train-mass">—</span></div>
     </div>
@@ -227,10 +239,18 @@
     <button class="window-x" type="button" aria-label="Close">×</button>
   </div>
   <div class="window-body">
-    <div class="auto-row" id="graph-modes" style="margin-bottom:0.5rem">
+    <div class="auto-row" id="graph-modes" style="margin-bottom:0.35rem">
       <button class="pal-wide active" data-graph="bars" type="button">Energy bars</button>
       <button class="pal-wide" data-graph="energy" type="button">Energy line</button>
       <button class="pal-wide" data-graph="accel" type="button">Acceleration</button>
+      <button class="pal-wide" data-graph="speed" type="button">Speed</button>
+    </div>
+
+    <!-- Which way the line plots run. Hidden on the bars, which are a snapshot
+         of now and have no axis to choose. -->
+    <div class="auto-row" id="graph-axes" style="margin-bottom:0.5rem" hidden>
+      <button class="pal-wide active" data-axis="s" type="button">vs distance</button>
+      <button class="pal-wide" data-axis="t" type="button">vs time</button>
     </div>
 
     <canvas id="graph-bars" class="mini-canvas" style="height: 200px;"></canvas>
@@ -253,6 +273,13 @@
       <span><i style="background:#0d9488"></i>Vertical g</span>
       <span><i style="background:#c2185b"></i>Lateral g</span>
       <span><i class="dashed"></i>1 g (sitting still)</span>
+      <span><i style="background:rgba(198,40,40,0.35)"></i>Beyond real limits</span>
+    </div>
+
+    <!-- Values under the pointer, so a finished run can be interrogated
+         instead of only watched. Filled by script.js from RC.graphCursor. -->
+    <div class="readout-row" id="graph-pick-row" hidden>
+      <span id="graph-pick-at">—</span><span id="graph-pick-vals">—</span>
     </div>
 
     <!-- The train's live state, useful whichever plot is on screen. -->

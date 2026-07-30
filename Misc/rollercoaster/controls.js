@@ -11,6 +11,10 @@
      `live` controls stay meaningful mid-run; the rest force a reset. */
   const CONTROLS = [
     { id: 'cars', min: 1, max: 8, step: 1, dp: 0, get: () => RC.sim.cars, set: v => { RC.sim.cars = Math.round(v); } },
+    // Separate from the car count so mass can be changed on its own: adding
+    // cars also lengthens the train, which changes the physics in its own
+    // right. See RC.trainMass.
+    { id: 'carmass', min: 100, max: 1500, step: 50, dp: 0, get: () => RC.sim.carMass, set: v => { RC.sim.carMass = v; } },
     { id: 'release', min: 0, max: 100, step: 0.5, dp: 1, get: () => releaseValue(), set: v => { RC.sim.releaseS = v; } },
     { id: 'lift', min: 1, max: 12, step: 0.5, dp: 1, get: () => RC.sim.liftSpeed, set: v => { RC.sim.liftSpeed = v; } },
     { id: 'brake', min: 0, max: 12, step: 0.5, dp: 1, get: () => RC.sim.brakeSpeed, set: v => { RC.sim.brakeSpeed = v; } },
@@ -65,7 +69,15 @@
   function syncDerived() {
     const mass = RC.trainMass();
     const massEl = document.getElementById('ro-train-mass');
-    if (massEl) massEl.textContent = (mass / 1000).toFixed(1) + ' t';
+    if (massEl) massEl.textContent = (mass / 1000).toFixed(2) + ' t';
+
+    // The other half of what the car count does, spelled out beside it: the
+    // cars are spread this far along the track, which is why a long train
+    // crests a hill differently from a short one.
+    const lenEl = document.getElementById('ro-train-len');
+    if (lenEl) {
+      lenEl.textContent = ((RC.sim.cars - 1) * RC.CAR_SPACING).toFixed(1) + ' m';
+    }
 
     const p = RC.pathAt(RC.sim.s, RC.isClosed());
     const hEl = document.getElementById('ro-release-h');
