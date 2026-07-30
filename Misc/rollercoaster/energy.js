@@ -779,7 +779,12 @@
       html += `<div class="report-hd">Jolts</div>`;
       for (const j of jolts) {
         if (j.g <= 0.05) continue;
-        html += row(`At ${j.v.toFixed(1)} m/s${onFeature(j.s, 0.05)}`,
+        // Plain track is deliberately unnamed, so a jolt on it would otherwise
+        // say only how fast the train was going — no use to someone trying to
+        // find the joint. Fall back to the distance, which always locates it.
+        const where = onFeature(j.s, 0.05) ||
+                      ` <span class="muted">at ${j.s.toFixed(0)} m</span>`;
+        html += row(`At ${j.v.toFixed(1)} m/s${where}`,
                     j.g.toFixed(2) + ' g, all at once');
       }
       html += `<p class="report-note">Each piece meets the next with a step in ` +

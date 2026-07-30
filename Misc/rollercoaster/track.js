@@ -1426,6 +1426,8 @@
     const t = RC.track;
     t.pieces = [];
     RC.demo = null;          // any comparison tracks go with the old layout
+    // ...and with them the car count a demo borrowed to run point masses.
+    RC.returnDemoCars && RC.returnDemoCars();
     RC.version++;
     // Near the middle of the park, so it's on screen at the default zoom and
     // there's room to build in every direction.

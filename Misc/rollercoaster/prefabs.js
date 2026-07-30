@@ -169,7 +169,7 @@
              'Different routes, different times, identical speed at the bottom.',
       demo: {
         label: 'Path independence',
-        cars: 1,             // a point mass, so the demo is about the path alone
+        cars: 1,             // point masses, so the demo is about the path alone
         drop: 23,
         lanes: [
           {
@@ -275,9 +275,33 @@
       mainColour: main.colour,
       trains
     };
-    if (d.cars) RC.sim.cars = d.cars;
+    if (d.cars) borrowCars(d.cars);
     return { ok: true, demo: true, closed: false, shuttle: false };
   }
+
+  /* A demo runs every train as a point mass, and the comparison trains take
+     their length from RC.sim.cars like the ride's own does — so setting up a
+     demo means reaching into the train the student configured.
+
+     BORROWING it, not taking it. It used to be taken: load the path-independence
+     demo, then load any other preset, and the ride stayed on one car with
+     nothing to say why. The car count is a control the student owns, and a
+     demonstration is a visit, not a handover. RC.resetTrack gives it back,
+     which covers loading another preset, clearing the park, and anything else
+     that puts the demo away. */
+  let carsBeforeDemo = null;
+
+  function borrowCars(n) {
+    if (carsBeforeDemo === null) carsBeforeDemo = RC.sim.cars;
+    RC.sim.cars = n;
+  }
+
+  RC.returnDemoCars = function () {
+    if (carsBeforeDemo === null) return false;
+    RC.sim.cars = carsBeforeDemo;
+    carsBeforeDemo = null;
+    return true;
+  };
 
   RC.loadPrefab = function (key) {
     const prefab = RC.PREFABS[key];

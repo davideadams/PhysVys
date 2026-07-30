@@ -4091,7 +4091,37 @@
     RC.loadPrefab('first-drop');
     if (RC.demo) return 'the demo survived loading another preset';
     if (RC.circuitStatus().kind !== 'closed') return 'the next preset did not load cleanly';
-    RC.sim.cars = 4;      // the demo forced it to 1; put it back for later tests
+  });
+
+  check('a demo gives the train back the way it found it', () => {
+    /* The demo runs point masses, and its comparison trains take their length
+       from RC.sim.cars, so loading one has to reach into the student's train.
+       It used to keep it: load this demo, load anything else, and the ride was
+       silently stuck on one car. This check used to be the workaround for that
+       — a line putting the count back so later checks were not run on a
+       one-car train. */
+    RC.sim.cars = 6;
+    RC.loadPrefab('path-independence');
+    if (RC.sim.cars !== 1) return `the demo ran ${RC.sim.cars} cars, expected point masses`;
+
+    RC.loadPrefab('first-drop');
+    if (RC.sim.cars !== 6) return `the train came back with ${RC.sim.cars} cars, not the 6 it had`;
+
+    // Clearing the park puts it back too, not just loading another preset.
+    RC.sim.cars = 3;
+    RC.loadPrefab('path-independence');
+    RC.resetTrack();
+    if (RC.sim.cars !== 3) return `after clearing, the train has ${RC.sim.cars} cars, not 3`;
+
+    // And a second demo in a row borrows from the student, not from the first
+    // demo — otherwise the count it hands back is 1.
+    RC.sim.cars = 5;
+    RC.loadPrefab('path-independence');
+    RC.loadPrefab('path-independence');
+    RC.loadPrefab('first-drop');
+    if (RC.sim.cars !== 5) return `two demos running gave back ${RC.sim.cars} cars, not 5`;
+
+    RC.sim.cars = 4;
   });
 
   // These trail the demonstrations in the file but are nothing to do with them.

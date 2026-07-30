@@ -203,6 +203,62 @@ whole train is level and moving faster, and `v^2` more than makes up the smaller
 step. Any reasoning about which joint on a feature is worst has to carry the
 train's length, not just its geometry.
 
+### What it measured — read this before planning phases 3 to 6
+
+Taken from the four presets with the readout itself. **These numbers replace the
+guesses in "Why" above**, which were computed by hand for a generic 20 m/s.
+
+| preset | tightest crest | tightest turn | within limits to | worst jolt |
+| --- | --- | --- | --- | --- |
+| First Drop | 18.1 m | 15.0 m | **14.9 m/s** (sideways) | 1.76 g |
+| Gentle Hills | 18.0 m | 9.0 m | **11.5 m/s** (sideways) | 1.80 g |
+| Looper | 2.5 m (loop) | 9.0 m | **9.7 m/s** (vertical) | **5.27 g** |
+| Shuttle Loop | 2.5 m (loop) | 11.0 m | **9.7 m/s** (vertical) | — |
+
+First Drop reaches 18.2 m/s against 14.9; Looper reaches 17.1 against 9.7.
+
+**No preset is limited by a slope transition.** Every crest and valley is 18 m,
+which allows `sqrt(2.1 * 9.81 * 18)` = 19.3 m/s — above every figure in the
+column. Sustained g is bound by turns and loops, i.e. by phases 4 and 6.
+
+**But the jolts say the opposite, and they are why phase 3 stays.** First Drop's
+three worst are all vertical transitions — back the curvature out with
+`dk = g * 9.81 / v^2`:
+
+| reported | dk | which piece |
+| --- | --- | --- |
+| 1.76 g at 17.6 m/s | 0.0557 | 18.0 m — `flat <-> gentle` at its flat end |
+| 1.36 g at 16.8 m/s | 0.0473 | 21.1 m — the same piece at its gentle end |
+| 1.53 g at 13.2 m/s | 0.0862 | the `gentle <-> steep` family |
+
+A quintic matches curvature at both ends, so it meets constant-grade track at
+`k = 0` on both sides and **the step becomes exactly zero, not merely smaller**.
+All three rows vanish. That is a better argument than the one made below under
+phase 3: at the PAIRED length the quintic wins on peak radius too (24 m against
+today's 18), so "its entire value is smooth onset, not peak g" undersells it.
+
+Gentle Hills (1.80 g, three times) and Looper (5.27 g) are lateral — phase 4.
+
+**Free win available now, needing no geometry work at all.** Banking is already
+implemented and no preset uses it. A 45 degree bank tilts the rider's axes, so
+the lateral allowance becomes `1.5 + sin 45` = 2.21 g against a curvature
+reduced by `cos 45`:
+
+| turn | unbanked | banked 45 |
+| --- | --- | --- |
+| tight, 9 m | 11.5 m/s | **16.6 m/s** |
+| wide, 15 m | 14.9 m/s | **21.4 m/s** |
+
+Vertical at that speed is 2.9 g, well inside. Banking the preset turns closes
+most of the honesty gap on First Drop and Gentle Hills today.
+
+**Caveat on the readout, which applies wherever it is quoted.** "Within the
+limits to X" is a UNIFORM speed: what one speed the whole shape tolerates
+everywhere. That is right for turns and transitions, where the train arrives at
+whatever speed it arrives at. It is pessimistic for a loop, which is
+deliberately shaped so the tight part is where the train is slowest. The loop
+figures are still damning, but they overstate.
+
 ### Tests
 
 Twelve new checks in a **Curvature** group, placed after Path. The expected
@@ -471,15 +527,27 @@ students have recorded stop matching.
 ## Suggested order
 
 Phases 1 and 2 are **done**, both with no breakage: phase 1 was a strict
-improvement, phase 2 changed no geometry at all. **Phase 3 is next**, is the
-breaking change, and wants its two halves shipped together — and note it
+improvement, phase 2 changed no geometry at all.
+
+**Revised by phase 2's measurements — ship 3 and 6 TOGETHER, then 4, then 5.**
+
+The original order had 6 last, on the assumption its loop retune was a small
+tidy-up. It is not. `LOOP_R` 7 -> 10 m puts `2R` = 20 m inside a 3-tile 18 m
+footprint, so `LOOP_LEN` has to go to 4 — which moves exit nodes and breaks
+saves, exactly as phase 3 does. Doing them together buys **one `FORMAT` bump, one
+preset rebuild, one stale-save banner** instead of two of each. Note the pair
 lengthens the track again, so `DEFAULT_MU` and the preset energy budgets need
-rechecking with it. Phases 4 to 6 are the real work and want the whole suite
-green before starting.
+rechecking with it.
 
-Phase 2's readout is now the tool for the rest of it. Before committing to the
-quintic, load each preset and read the Shape section: it gives the speed the
-current catalogue is honest to and the speed the ride actually reaches, which is
-the gap the whole refactor exists to close, measured rather than argued.
+That bundle also fixes the two worst measured defects at once: every vertical
+jolt goes to exactly zero, and Looper stops being a contradiction. A 7 m
+teardrop needs about 14.5 m/s at the bottom to hold its 2.45 m top, and the shape
+only tolerates 9.7 — **there is no speed at which that loop both stays on and
+stays legal.**
 
-Suite is at **166 checks**, all passing, as of the end of phase 2.
+Phase 4 follows because it is save-safe (`T` stays the grid parameter,
+`exitNode` is untouched), zeroes the lateral jolts, and is a prerequisite for 5.
+
+Independent of all of it: **bank the preset turns**, which needs no new code.
+
+Suite is at **167 checks**, all passing, as of the end of phase 2.
