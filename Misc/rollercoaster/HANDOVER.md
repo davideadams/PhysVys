@@ -43,9 +43,9 @@ These were chosen explicitly by the teacher. Treat them as fixed.
 | Train controls | **All four**: car count / mass, lift-hill speed, drag-to-place start position, brake pieces. |
 | Circuit rules | **Both** closed circuits *and* out-and-back shuttle tracks with a launch. |
 | Art style | **Chunky RCT1-flavoured, drawn procedurally on canvas.** Not true pixel art (asset burden), not clean flat vector (not game-like enough). Teacher has seen and approved it. |
-| Construction UI | **RCT's model, not a flat palette.** Orthogonal Direction / Slope / Roll rows, a preview, and an explicit *Build this*. Slope buttons choose the slope you want to be **travelling at**, and the transition piece is inserted for you. Icons are vector, drawn at the true geometry (turn arcs use the real radii; slope arrows the real 27° and 56°). |
+| Construction UI | **RCT's model, not a flat palette.** Orthogonal Direction / Slope / Roll rows, a preview, and an explicit *Build this*. Slope buttons choose the slope you want to be **travelling at**, and the transition piece is inserted for you. Icons are vector, drawn at the true geometry (turn arcs use the real radii; slope arrows the real 18° and 45°, which must be redrawn if the tile scale moves). |
 | Banking | **One angle, 45°, turns only.** The lesson is the comparison with a flat turn, not realism. |
-| Scale | **1 tile = 4 m square, 1 height step = 1 m.** Confirmed after being offered a 2 m step. Gives a 40 m lift hill at 40 steps and a realistic ~100 km/h top speed. |
+| Scale | **1 tile = 6 m square, 1 height step = 1 m.** Was 4 m; raised because vertical curvature goes as 1/TILE_M², so the change multiplies every grade transition's radius by 2.25 and brings the mildest transition back inside the g limits the report judges against. Also softens the grades to 18° and 45°. Grades are levels *per tile* and so unchanged; the park became 240 m and the drawing is unaffected (TW/TH are pixels per tile). See TODO.md. |
 | Page layout | **Full-bleed canvas.** The standard two-column PhysVys sim shell was explicitly rejected here: "the other PhysVys sims were a bit of a mislead there". Minimalist UI — view controls across the top, graph/table as toggleable overlay windows, grid and ride canvas taking most of the page. |
 
 ---
@@ -177,9 +177,9 @@ Three separate things read it, which is why it's worth guarding:
 - **G-forces** — the specific force is projected onto the triad. This is why
   banking needed no changes to the force maths at all.
 
-It is computed in **metres**, not in mixed tile/level coordinates. A tile is 4 m
+It is computed in **metres**, not in mixed tile/level coordinates. A tile is 6 m
 across and a level is 1 m tall, so computing the tangent in raw coordinates would
-flatten every pitch angle by a factor of four — cars would tilt, just visibly too
+flatten every pitch angle by a factor of six — cars would tilt, just visibly too
 little, which reads as a styling choice rather than a bug.
 
 Sign convention, verified by test: a right turn from heading `+i` curves towards

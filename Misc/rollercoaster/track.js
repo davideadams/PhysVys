@@ -8,8 +8,10 @@
   RC.DIRS = D;
 
   /* Slope is measured in height levels per tile, signed by travel direction.
-     One tile is 4 m and one level is 1 m, so GENTLE is atan(2/4) = 27 deg and
-     STEEP is atan(6/4) = 56 deg. Both plausible for a real coaster. */
+     One tile is 6 m and one level is 1 m, so GENTLE is atan(2/6) = 18 deg and
+     STEEP is atan(6/6) = 45 deg. Both squarely realistic — 45 is a classic
+     first-drop angle. The grades are in levels PER TILE, so they are unchanged
+     by the tile scale; only the angle they work out to moves. */
   const FLAT = 0, GENTLE = 2, STEEP = 6;
   const MAX_H = 60;
   RC.MAX_H = MAX_H;
@@ -145,7 +147,15 @@
      r(phi) = A + B cos phi          A = R(1+a)/2,  B = R(1-a)/2
      u(phi) = A sin phi + B(phi/2 + sin 2phi / 4)
      w(phi) = A(1 - cos phi) + B sin^2 phi / 2      peaks at w(pi) = R(1+a) */
-  const LOOP_LEN = 4;      // tiles advanced
+  /* Tiles advanced. Three, not four, since the tile became 6 m: the teardrop's
+     own forward reach is B*pi, about 7.2 m, and loopDrift has to smear whatever
+     the footprint asks for beyond that across the bottom of the loop. Four tiles
+     of 6 m meant smearing 16.9 m instead of the 8.9 m it was tuned for, which
+     stretched the bottom enough that the top stopped being the tightest part of
+     the shape — it stopped being a teardrop. Three tiles asks for 10.8 m, close
+     to the original. Growing LOOP_R to 10 m would fix it more thoroughly by
+     making the shape itself reach further; that is TODO.md phase 6. */
+  const LOOP_LEN = 3;      // tiles advanced
   const LOOP_LAT = 1;      // tiles sideways
   const LOOP_R = 7;        // metres — the bottom radius of curvature
   const LOOP_A = 0.35;     // top radius = LOOP_A * R; the teardrop's pointiness
@@ -900,21 +910,25 @@
        - A loop IN SITU (track after it) simply caps there, since growing its
          footprint would move its exit and shift everything downstream.
 
-     A footprint of L tiles holds a loop up to radius 2L metres (its horizontal
-     excursion is about 2R m = R/2 tiles, so it fits when R/2 <= L). So the
-     default L = 4 holds up to R = 8; beyond that the footprint must grow. */
+     A loop's horizontal excursion is about 2R metres, so a footprint of L tiles
+     holds it when 2R <= L * TILE_M, i.e. up to R = L * TILE_M / 2.
+
+     That conversion used to be written `2 * L`, which is the same number only
+     while a tile is 4 m — it was multiplying tiles as though they were metres.
+     At 6 m tiles it under-capped badly enough to clamp the default 7 m loop
+     down to 6 m. Both directions now go through TILE_M. */
   const LOOP_R_MIN = 5, LOOP_R_MAX = 12, LOOP_R_STEP = 1;
   RC.LOOP_R_MIN = LOOP_R_MIN;
   RC.LOOP_R_MAX = LOOP_R_MAX;
   RC.LOOP_R_STEP = LOOP_R_STEP;
 
-  /* Smallest footprint (tiles) that holds a loop of radius R. */
+  /* Smallest footprint (tiles) that holds a loop of radius R metres. */
   function loopFootprintFor(R, def) {
-    return Math.max(def.L, Math.ceil(R / 2));
+    return Math.max(def.L, Math.ceil(2 * R / RC.TILE_M));
   }
-  /* Largest radius a fixed footprint of L tiles can hold. */
+  /* Largest radius (metres) a fixed footprint of L tiles can hold. */
   function loopMaxRForFootprint(L) {
-    return Math.min(LOOP_R_MAX, 2 * L);
+    return Math.min(LOOP_R_MAX, L * RC.TILE_M / 2);
   }
 
   RC.loopR = function (pieceIndex) {

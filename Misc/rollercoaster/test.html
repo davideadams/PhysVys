@@ -106,6 +106,37 @@
 
   const near = (a, b, eps) => Math.abs(a - b) <= (eps || 1e-9);
 
+  /* Release points in TILES, not metres. Several tests need the train to start
+     on a CONSTANT grade, past the entry transition — and a literal distance in
+     metres stops meaning that the moment the tile scale changes. 1.5 tiles is
+     comfortably past a one-tile transition whatever a tile is worth. */
+  const tiles = n => n * RC.TILE_M;
+
+  /* Unit tangent components on a constant GENTLE grade, so a test can say
+     "clearly sloped" without writing down a number that the tile scale
+     invalidates — at 4 m tiles the gentle grade was 0.447 of vertical, at 6 m
+     it is 0.316, and a literal 0.4 threshold silently stops matching. */
+  const gentleSin = () => {
+    const rise = RC.SLOPE.GENTLE * RC.LEVEL_M;
+    return rise / Math.hypot(RC.TILE_M, rise);
+  };
+  const gentleCos = () => {
+    const rise = RC.SLOPE.GENTLE * RC.LEVEL_M;
+    return RC.TILE_M / Math.hypot(RC.TILE_M, rise);
+  };
+
+  /* Release by HEIGHT, for the few tests tuned to a specific drop rather than a
+     specific place. Returns the first distance at which the track has fallen to
+     `h` metres, which on a descent is exact and unambiguous. */
+  function releaseAtHeight(h) {
+    const total = RC.trackPath().total;
+    for (let s = 0; s <= total; s += 0.05) {
+      const p = RC.pathAt(s, false);
+      if (p && p.z * RC.LEVEL_M <= h) return s;
+    }
+    return 0;
+  }
+
   section('Projection');
   check('rot / unrot round-trip, all rotations, continuous coords', () => {
     for (let r = 0; r < 4; r++) {
@@ -651,7 +682,9 @@
     if (err) return err;
     RC.sim.cars = 3;
     RC.sim.friction = false;
-    RC.resetSim(13);          // lead car onto the lift, or nothing ever moves
+    // Lead car just onto the lift, or nothing ever moves. Read off the station
+    // rather than given in metres, which the tile scale would invalidate.
+    RC.resetSim(RC.stationEndS() + 1);
     const e0 = RC.energy();
     runFor(8);
     const e = RC.energy();
@@ -668,7 +701,7 @@
     if (err) return err;
     RC.sim.cars = 3;
     RC.sim.friction = true;
-    RC.resetSim(13);
+    RC.resetSim(RC.stationEndS() + 1);
     runFor(8);
     const e = RC.energy();
     const drift = Math.abs(e.total - e.supplied);
@@ -693,11 +726,14 @@
     RC.sim.friction = false;
     // Start past the transition piece, on constant gentle-down, so the
     // comparison against a = g*sin(theta) is against a constant slope.
-    RC.resetSim(5);
+    RC.resetSim(tiles(1.5));
     runFor(1.5);
     if (RC.sim.v <= 0) return `speed is ${RC.sim.v.toFixed(2)} m/s, expected positive`;
-    // Gentle is 2 levels per 4 m tile, so sin(theta) = 2/sqrt(4^2 + 2^2).
-    const expected = 9.81 * (2 / Math.sqrt(4 * 4 + 2 * 2)) * 1.5;
+    // Gentle is GENTLE levels of rise per tile of run, so sin(theta) is that
+    // rise over the hypotenuse. Derived, not written out, so the tile scale can
+    // move without silently changing what this asserts.
+    const rise = RC.SLOPE.GENTLE * RC.LEVEL_M;
+    const expected = 9.81 * (rise / Math.hypot(RC.TILE_M, rise)) * 1.5;
     if (Math.abs(RC.sim.v - expected) / expected > 0.25) {
       return `after 1.5 s v = ${RC.sim.v.toFixed(2)} m/s, expected roughly ${expected.toFixed(2)}`;
     }
@@ -719,7 +755,7 @@
     // Release ON the constant grade, not at s=0: the entry there is level, so
     // a train released at the very start barely accelerates and ΔPE is a few
     // centimetres of noise rather than a real energy exchange.
-    RC.resetSim(6);
+    RC.resetSim(tiles(1.5));
     const start = RC.energy();
     runFor(2);                // stop short of the end, which would zero v
     const end = RC.energy();
@@ -768,7 +804,7 @@
     RC.sim.friction = false;
     // Released partway down, so it can never climb back to s = 0 and trip
     // the end-of-track stop instead of oscillating in the dip.
-    RC.resetSim(6);
+    RC.resetSim(tiles(1.5));
     runFor(30);
     if (RC.sim.maxZ * 1 > 20) return 'train somehow climbed the hill';
     if (RC.sim.reversals < 2) {
@@ -837,9 +873,11 @@
     for (const id of ['flat-to-gentle-down', 'gentle-down', 'gentle-down']) {
       if (!RC.place(id)) return `${id} refused`;
     }
-    const p = RC.pathAt(6.5, false);          // on the constant gentle grade
-    const sinT = 2 / Math.sqrt(4 * 4 + 2 * 2);
-    const cosT = 4 / Math.sqrt(4 * 4 + 2 * 2);
+    const p = RC.pathAt(tiles(1.5), false);   // on the constant gentle grade
+    const rise = RC.SLOPE.GENTLE * RC.LEVEL_M;
+    const hyp = Math.hypot(RC.TILE_M, rise);
+    const sinT = rise / hyp;
+    const cosT = RC.TILE_M / hyp;
     if (!near(Math.abs(p.dzds), sinT, 1e-3)) {
       return `expected to be on the gentle grade, dzds = ${p.dzds.toFixed(4)}`;
     }
@@ -863,7 +901,7 @@
     if (p.def.kind !== 'turn') return 'sample landed off the turn';
 
     const v = 10;
-    const R = 1.5 * RC.TILE_M;                 // tight turn radius, 6 m
+    const R = 1.5 * RC.TILE_M;                 // tight turn radius, 9 m
     const expect = v * v / (R * 9.81);
     const g = RC.gForces(p, v, 0);
 
@@ -903,7 +941,7 @@
   }
 
   section('Loops');
-  check('a loop advances four tiles and one to the side, level at both ends', () => {
+  check('a loop advances its own length and one to the side, level at both ends', () => {
     for (const id of ['loop-left', 'loop-right']) {
       const def = RC.pieceDef(id);
       for (let dir = 0; dir < 4; dir++) {
@@ -916,8 +954,12 @@
         const d = RC.DIRS[dir];
         const along = (exit.i - node.i) * d[0] + (exit.j - node.j) * d[1];
         const across = Math.abs((exit.i - node.i) * d[1] - (exit.j - node.j) * d[0]);
-        if (along !== 4) return `${id} dir ${dir}: advanced ${along} tiles, expected 4`;
-        if (across !== 1) return `${id} dir ${dir}: moved ${across} tiles sideways, expected 1`;
+        // Read off the definition rather than written out: the footprint is
+        // tuned against the tile size, so a literal stops being the answer.
+        if (along !== def.L) return `${id} dir ${dir}: advanced ${along} tiles, expected ${def.L}`;
+        if (across !== def.lat) {
+          return `${id} dir ${dir}: moved ${across} tiles sideways, expected ${def.lat}`;
+        }
 
         // And the drawn centreline has to end where the node says it does.
         const end = RC.centreline(def, node, 1);
@@ -1311,7 +1353,7 @@
 
   check('at the ideal speed a 45 degree bank cancels lateral g entirely', () => {
     // tan(theta) = v^2 / (r g), so at 45 degrees the ideal speed is v = sqrt(r g).
-    const R = 1.5 * RC.TILE_M;                  // tight turn, 6 m
+    const R = 1.5 * RC.TILE_M;                  // tight turn, 9 m
     const vIdeal = Math.sqrt(R * 9.81 * Math.tan(RC.BANK_ANGLE));
     const g = RC.gForces(bankedTurnSample('turn-right-tight', true), vIdeal, 0);
 
@@ -1411,7 +1453,7 @@
     if (err) return err;
     RC.sim.cars = 3;
     RC.sim.friction = true;
-    RC.resetSim(13);
+    RC.resetSim(RC.stationEndS() + 1);
     if (RC.sim.trace.length !== 0) return 'trace was not cleared on reset';
     runFor(8);
 
@@ -1438,7 +1480,7 @@
     if (err) return err;
     RC.sim.cars = 3;
     RC.sim.friction = true;
-    RC.resetSim(13);
+    RC.resetSim(RC.stationEndS() + 1);
     runFor(8);
     const tr = RC.sim.trace;
     for (let n = 1; n < tr.length; n++) {
@@ -1527,10 +1569,15 @@
       if (fr.r.z !== 0) return `r should stay horizontal, got z=${fr.r.z} at s=${s}`;
       if (fr.u.z <= 0) return `u should point upwards, got z=${fr.u.z} at s=${s}`;
 
-      // On the gentle slope the car must actually be tilted.
-      if (Math.abs(fr.f.z) > 0.4) {
+      /* On the gentle slope the car must actually be tilted. Both thresholds
+         come off the grade: "clearly sloped" is most of the way to the gentle
+         tangent, and "tilted enough" is halfway between dead level and the
+         gentle cosine. */
+      if (Math.abs(fr.f.z) > gentleSin() * 0.8) {
         sawPitch = true;
-        if (fr.u.z > 0.95) return `car is not tilted at s=${s}: u.z=${fr.u.z.toFixed(4)}`;
+        if (fr.u.z > (1 + gentleCos()) / 2) {
+          return `car is not tilted at s=${s}: u.z=${fr.u.z.toFixed(4)}`;
+        }
       }
       if (Math.abs(fr.f.z) < 1e-6) {
         sawFlat = true;
@@ -1817,9 +1864,12 @@
     }
     RC.sim.cars = 1;
     RC.sim.friction = false;
-    // Released on the constant grade (s = 0 is level, so a train there never
-    // gets going) at about 11.2 m, with the loop's base at 1 m.
-    RC.resetSim(6);
+    /* Released by HEIGHT, because this test is tuned to a drop rather than to a
+       place: the loop's base is at 1 m and its top at 10.45 m, and 10.2 m is the
+       narrow band that gets the train over the top too slowly to hold on. Given
+       as a distance it would move with the tile scale and the train would
+       quietly start high enough to make the loop. */
+    RC.resetSim(releaseAtHeight(10.2));
     runFor(30);
 
     if (RC.sim.state !== 'crashed') {
@@ -2093,7 +2143,9 @@
     RC.loadPrefab('first-drop');
     RC.sim.cars = 4;
     RC.sim.friction = true;
-    RC.sim.mu = 0.02;
+    // The shipped default, not a literal — the point is that the ride works at
+    // the settings a student first sees.
+    RC.sim.mu = RC.DEFAULT_MU;
     RC.sim.kDrag = 0.0012;
     RC.resetSim();
     runFor(400);
@@ -2436,7 +2488,7 @@
       RC.sim.cars = 4;
       RC.sim.carMass = kg;
       RC.sim.friction = true;      // friction is per unit mass too; prove it
-      RC.sim.mu = 0.02;
+      RC.sim.mu = RC.DEFAULT_MU;
       RC.sim.kDrag = 0.0012;
       RC.resetSim();
       runFor(400);
@@ -2500,7 +2552,9 @@
     };
     const off = runWith(false, 0.02, 0.0012);
     const zeroed = runWith(true, 0, 0);
-    RC.sim.mu = 0.02;
+    // The shipped default, not a literal — the point is that the ride works at
+    // the settings a student first sees.
+    RC.sim.mu = RC.DEFAULT_MU;
     RC.sim.kDrag = 0.0012;
     RC.sim.friction = false;
 
@@ -2524,7 +2578,7 @@
     };
     const light = runMu(0.005);
     const heavy = runMu(0.05);
-    RC.sim.mu = 0.02;
+    RC.sim.mu = RC.DEFAULT_MU;      // put the default back for later tests
     RC.sim.friction = false;
 
     if (!(heavy.th > light.th)) {
@@ -2753,7 +2807,7 @@
     }
     RC.sim.cars = 1;
     RC.sim.friction = false;
-    RC.resetSim(6);
+    RC.resetSim(tiles(1.5));
     runFor(60);
 
     const sideways = RC.sim.warnings.filter(w => /sideways/i.test(w));
@@ -2784,7 +2838,7 @@
     }
     RC.sim.cars = 1;
     RC.sim.friction = false;
-    RC.resetSim(6);
+    RC.resetSim(tiles(1.5));
     runFor(60);
 
     const sideways = RC.sim.warnings.filter(w => /sideways/i.test(w));
@@ -2837,7 +2891,7 @@
 
     RC.sim.cars = 1;
     RC.sim.friction = false;
-    RC.resetSim(6);                          // released on the grade, at rest
+    RC.resetSim(tiles(1.5));                 // released on the grade, at rest
     runFor(60);
 
     // The largest lateral g in the whole run should fall within the turn's
@@ -3563,10 +3617,15 @@
     for (let n = 1; n < pts.length - 1; n++) {
       if (pts[n].curv > worst) { worst = pts[n].curv; where = pts[n].s; }
     }
+    /* Nothing here should bend tighter than the 2.5-tile turn itself, so the
+       bar comes off the piece rather than being written out in metres — at 4 m
+       tiles that turn was 10 m and at 6 m it is 15 m. A little slack for the
+       sampling, which rounds the corner very slightly. */
+    const turnR = 2.5 * RC.TILE_M;
     const r = worst > 1e-9 ? 1 / worst : Infinity;
-    if (r < 8) {
+    if (r < turnR * 0.8) {
       return `something bends to a ${r.toFixed(1)} m radius at s = ${where.toFixed(1)} m; ` +
-             `the tightest thing here is a 10 m turn`;
+             `the tightest thing here is the ${turnR} m turn`;
     }
   });
 
@@ -3689,7 +3748,9 @@
     // so with friction on the shallow route arrives slowest.
     RC.loadPrefab('path-independence');
     RC.sim.friction = true;
-    RC.sim.mu = 0.02;
+    // The shipped default, not a literal — the point is that the ride works at
+    // the settings a student first sees.
+    RC.sim.mu = RC.DEFAULT_MU;
     RC.sim.kDrag = 0.0012;
     RC.resetSim();
     runFor(60);

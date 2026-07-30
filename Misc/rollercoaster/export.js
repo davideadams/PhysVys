@@ -261,7 +261,7 @@
     }
 
     html += `<p class="foot">Made with the PhysVys Rollercoaster Builder. ` +
-            `One tile is 4&nbsp;m and one height step is 1&nbsp;m; heights are ` +
+            `One tile is 6&nbsp;m and one height step is 1&nbsp;m; heights are ` +
             `measured from ground level.</p>`;
     html += '\n</body>\n</html>\n';
     return html;

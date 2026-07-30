@@ -4,7 +4,19 @@
   const RC = window.RC || (window.RC = {});
 
   const GRID = 40;      // tiles per side (160 m square)
-  const TILE_M = 4;     // metres per tile
+  /* Metres per tile. Six, not four, and the reason is worth knowing: vertical
+     curvature goes as 1/TILE_M^2, so this one number multiplies every grade
+     transition's radius by 2.25. At four metres the mildest transition in the
+     catalogue pulled 6.1 g in a valley and −4.1 g over a crest at 20 m/s,
+     against limits of 5.0 and −1.5 — the track a student could build broke the
+     rules the report judged them by. It also softens the grades to 18.4 and 45
+     degrees, both more realistic than the 26.6 and 56.3 they replace.
+
+     Nothing about the GRID changes: TW and TH below are pixels per tile, so the
+     park draws identically and only the labels and the physics move. Piece
+     lengths are in tiles and heights in levels, so no piece changes shape and
+     saved tracks still close. See TODO.md. */
+  const TILE_M = 6;     // metres per tile
   const LEVEL_M = 1;    // metres per height level
   const TW = 64;        // tile width in px at zoom 1
   const TH = 32;        // tile height in px at zoom 1 (2:1 isometric)

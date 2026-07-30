@@ -13,6 +13,20 @@
   const CAR_SPACING = 3.5;   // metres between car centres
   const CAR_MASS = 500;      // kg per car including riders — the default
 
+  /* Rolling resistance, and the one free parameter in the loss model — unlike
+     the drag constant below it is not derived from anything, it was picked so
+     that losses are VISIBLE over a ride in a sim about losses.
+
+     It came down from 0.02 when the tile went from 4 m to 6 m. Rolling
+     resistance is a force times a distance, so a track 1.5x longer in metres
+     loses 1.5x more at the same coefficient — and the shallower grades raise
+     cos(pitch), which takes a little more again. At 0.02 the default ride no
+     longer made it home, which is a poor advert for the defaults. Scaling by
+     the same 1.5 restores the energy budget and lands nearer real steel-on-steel
+     figures (0.005 to 0.01) than 0.02 was, so it costs no honesty. */
+  const DEFAULT_MU = 0.013;
+  RC.DEFAULT_MU = DEFAULT_MU;
+
   const SUBSTEP = 1 / 240;   // s — fixed physics step
   const MAX_FRAME = 0.1;     // s — ignore huge gaps after a tab switch
   const STATION_BRAKE = 5;      // m/s^2 once the lap is done
@@ -72,7 +86,7 @@
     shuttleMode: true,
 
     friction: false,
-    mu: 0.02,            // rolling resistance
+    mu: DEFAULT_MU,      // rolling resistance
     // Air drag per unit mass, so the deceleration is kDrag * v^2. This is
     // half.rho.Cd.A / m: about 0.5 * 1.2 * 1.0 * 4 m^2 / 2000 kg for a
     // four-car train.

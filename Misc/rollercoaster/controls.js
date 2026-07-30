@@ -19,7 +19,7 @@
     { id: 'lift', min: 1, max: 12, step: 0.5, dp: 1, get: () => RC.sim.liftSpeed, set: v => { RC.sim.liftSpeed = v; } },
     { id: 'brake', min: 0, max: 12, step: 0.5, dp: 1, get: () => RC.sim.brakeSpeed, set: v => { RC.sim.brakeSpeed = v; } },
     { id: 'launch', min: 5, max: 40, step: 1, dp: 0, get: () => RC.sim.launchSpeed, set: v => { RC.sim.launchSpeed = v; } },
-    { id: 'mu', min: 0, max: 0.06, step: 0.002, dp: 3, get: () => RC.sim.mu, set: v => { RC.sim.mu = v; } },
+    { id: 'mu', min: 0, max: 0.06, step: 0.001, dp: 3, get: () => RC.sim.mu, set: v => { RC.sim.mu = v; } },
     { id: 'drag', min: 0, max: 0.005, step: 0.0002, dp: 4, get: () => RC.sim.kDrag, set: v => { RC.sim.kDrag = v; } }
   ];
 

@@ -8,9 +8,10 @@
    - The turn icons use the same arc geometry as the pieces they build. Tight
      turns sweep a full 90 degrees at a small radius; wide turns sweep 45 at a
      large one, so the wider turn visibly bends less over the same distance.
-   - The slope icons are drawn at the real angles: gentle is atan(2/4) = 27
-     degrees and steep is atan(6/4) = 56, matching the 2 and 6 levels per tile
-     the track model uses. The icon is a scale drawing of the thing it builds. */
+   - The slope icons are drawn at the real angles: gentle is atan(2/6) = 18
+     degrees and steep is atan(6/6) = 45, matching the 2 and 6 levels per tile
+     the track model uses against a 6 m tile. The icon is a scale drawing of the
+     thing it builds, so it has to be redrawn if TILE_M ever moves again. */
 (function () {
   const RC = window.RC || (window.RC = {});
 
@@ -52,24 +53,24 @@
       head('21 12 L15.8 9 L15.8 15')
     ),
 
-    // 1 in 2: gentle, 27 degrees.
+    // 1 in 3: gentle, 18 degrees.
     'slope-gentle-up': svg(
-      `<path d="M4 16.5 L16.4 10.3"/>` +
-      head('20.6 8.2 L17.7 12.9 L15.1 7.7')
+      `<path d="M4 14 L16 10"/>` +
+      head('20.2 8.6 L17.9 12.4 L16 6.9')
     ),
     'slope-gentle-down': svg(
-      `<path d="M4 7.5 L16.4 13.7"/>` +
-      head('20.6 15.8 L15.1 16.3 L17.7 11.1')
+      `<path d="M4 10 L16 14"/>` +
+      head('20.2 15.4 L17.9 11.6 L16 17.1')
     ),
 
-    // 3 in 2: steep, 56 degrees.
+    // 1 in 1: steep, 45 degrees.
     'slope-steep-up': svg(
-      `<path d="M7 19 L14.4 7.9"/>` +
-      head('17 4 L16.9 9.6 L11.9 6.2')
+      `<path d="M6.5 16.5 L15.5 7.5"/>` +
+      head('18.6 4.4 L18.3 8.8 L14.2 4.7')
     ),
     'slope-steep-down': svg(
-      `<path d="M7 5 L14.4 16.1"/>` +
-      head('17 20 L11.9 17.8 L16.9 14.4')
+      `<path d="M6.5 7.5 L15.5 16.5"/>` +
+      head('18.6 19.6 L18.3 15.2 L14.2 19.3')
     ),
 
     /* ---- special pieces -------------------------------------------------- */
