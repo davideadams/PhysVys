@@ -20,7 +20,15 @@
   const INDEX_KEY = 'physvys.rc.saves';
   const SAVE_KEY = 'physvys.rc.save.';
   const AUTO_KEY = 'physvys.rc.autosave';
-  const FORMAT = 1;
+  /* Bumped to 2 when transitions stopped being one tile long. A save is a list
+     of piece ids replayed through today's geometry, which is normally the point
+     — correct a piece's shape and old tracks come back correct. But this change
+     moved where each piece ENDS, so a replayed track advances further than it
+     did, stops closing, and eventually walks off the park. applyTrackData would
+     refuse it on the bounds check, which is graceful but says "lands outside the
+     park" about a track that used to fit perfectly well. The version number
+     makes it say the true thing instead. */
+  const FORMAT = 2;
 
   /* ---- storage, if we have any ------------------------------------------ */
   let store = null, probed = false;
@@ -198,6 +206,38 @@
     const data = readJSON(AUTO_KEY);
     if (!data) return { ok: false, why: 'Nothing was left unfinished' };
     return RC.applyTrackData(data);
+  };
+
+  /* ---- saves from an older version --------------------------------------
+     Which stored tracks were written by a format this build can no longer
+     replay. Returns names, with the autosave listed as null, so a student who
+     comes back to a track they spent a lesson on is told what happened to it
+     rather than finding an empty park.
+
+     Deliberately does NOT delete anything. Work disappearing without consent is
+     worse than work that will not open, and a student may want to know the name
+     of what they lost even if nothing can be done for it. */
+  RC.staleSaves = function () {
+    if (!storage()) return [];
+    const out = [];
+    const auto = readJSON(AUTO_KEY);
+    if (auto && auto.v !== FORMAT) out.push(null);
+    for (const name of readIndex()) {
+      const data = readJSON(SAVE_KEY + name);
+      if (data && data.v !== FORMAT) out.push(name);
+    }
+    return out;
+  };
+
+  /* Throw away exactly the stale ones, leaving anything still readable alone.
+     Only ever called from a button the student pressed. */
+  RC.dropStaleSaves = function () {
+    const stale = RC.staleSaves();
+    for (const name of stale) {
+      if (name === null) RC.clearAutosave();
+      else RC.deleteSave(name);
+    }
+    return stale.length;
   };
 
   RC.clearAutosave = function () {

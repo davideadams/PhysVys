@@ -6,9 +6,11 @@
 
    Closed presets list only their interesting part and set `finish: true`; the
    loader then calls RC.completeTrack (the same A* the "Finish track" button
-   uses) to join the layout back to the station. That guarantees closure
-   without hand-solving the arithmetic. `first-drop` is the exception — it is
-   hand-closed and its shape is checked by test.html.
+   uses) to join the layout back to the station. That guarantees closure without
+   hand-solving the arithmetic, which matters more than it used to: a piece's
+   length now follows from its grade change, so hand-closed geometry has to be
+   re-solved every time the grade ladder moves, and a preset that quietly stops
+   closing turns itself into a shuttle and throws the train off the end.
 
    A shuttle preset sets `shuttle: true`: it is an OPEN out-and-back (launch,
    loop, spike, roll back through the loop to the station), not a circuit. */
@@ -21,50 +23,90 @@
   /* Demo lanes are plain lists of piece ids rather than build steps. */
   const repId = (n, id) => new Array(n).fill(id);
 
-  const GENTLE = RC.SLOPE.GENTLE, STEEP = RC.SLOPE.STEEP;
+  const GENTLE = RC.SLOPE.GENTLE, MEDIUM = RC.SLOPE.MEDIUM, STEEP = RC.SLOPE.STEEP;
+
+  /* Heights below are quoted in METRES, which is what the comments mean and
+     what a reader can check against the ride. A level is half a metre, so a
+     medium tile climbing 4 levels gains 2 m. */
+  const M = 1 / RC.LEVEL_M;      // levels per metre
 
   RC.PREFABS = {
+    /* Every layout here is a rough rectangle: three sides laid by hand, then
+       RC.completeTrack fills the last corner. Closing them by hand instead
+       would be tighter, but a transition is now as long as its grade change, so
+       every leg's length is set by the heights it has to reach — and a preset
+       that has to be re-solved by hand whenever a piece changes shape is a
+       preset that quietly stops closing. The solver only ever gets a short hop
+       to find, which is the one thing it is reliably good at. */
     'first-drop': {
       name: 'First Drop',
-      blurb: 'Chain lift, then three drops and two airtime hills back to the station.',
+      blurb: 'Chain lift, a long drop, then two airtime hills back to the station.',
       /* Height profile, in metres:
-         0 --lift--> 16 --drop--> 2 --hill--> 10 --drop--> 4 --hill--> 8 --drop--> 0
-         Three drops and two hills rather than one long descent, so potential and
-         kinetic energy trade back and forth five times. Each hill is lower than
-         the last — it has to be, since the train never climbs higher than it
-         started. */
-      build: [].concat(
-        [{ id: 'flat-to-gentle-up', lift: true }],
-        rep(7, 'gentle-up', { lift: true }),
-        [{ id: 'gentle-up-to-flat', lift: true }],
-        [{ id: 'flat' }],
-        [{ id: 'turn-right-wide' }],
-        [{ id: 'flat-to-gentle-down' }],
-        rep(6, 'gentle-down'),
-        [{ id: 'gentle-down-to-flat' }],
-        [{ id: 'flat-to-gentle-up' }],
-        rep(3, 'gentle-up'),
-        [{ id: 'gentle-up-to-flat' }],
-        [{ id: 'turn-right-wide', bank: true }],
-        [{ id: 'flat-to-gentle-down' }],
-        rep(2, 'gentle-down'),
-        [{ id: 'gentle-down-to-flat' }],
-        [{ id: 'flat-to-gentle-up' }, { id: 'gentle-up' }, { id: 'gentle-up-to-flat' }],
-        rep(6, 'flat'),
-        [{ id: 'turn-right-wide', bank: true }],
-        [{ id: 'flat-to-gentle-down' }],
-        rep(3, 'gentle-down'),
-        [{ id: 'gentle-down-to-flat' }],
-        /* One brake piece, not two. Two took the train down to a walk with a
-           whole banked turn still to travel, and with friction on it died a
-           metre short of the station — a ride that worked only because losses
-           were switched off is not much of a demonstration of losses.
+         0 --lift--> 20 --> 10 --> 0 --> 10 --> 0 --hill--> 1 --> 0
 
-           The piece it gave up is replaced by plain track, not deleted. This
-           circuit is closed by hand and every piece is a tile of it: dropping
-           one left the head a tile short of the station, which quietly turned
-           the ride into a shuttle and sent the train off the end. */
+         THE CORNERS ARE AT HEIGHT AND THE HILLS ARE AT THE BOTTOM, and that is
+         the whole shape of the ride rather than a detail of it.
+
+         A 15 m corner is 1.5 g sideways at 14.8 m/s, which is the limit the
+         report judges a student by, and banking does not rescue a corner taken
+         faster: the bank ramps in over the first quarter of the piece while the
+         curvature arrives in full at the joint, so the ENTRY of a banked turn
+         is an unbanked turn. (Phase 4's spiral easements fix that by tying bank
+         to curvature; until then it is a real constraint on layout.) 14.8 m/s
+         is 11 m of drop, so every corner here sits 10 m up, where the train has
+         used most of its height and is slow.
+
+         Airtime wants the opposite. A crest bends at about 24 m, so it only
+         lifts a rider out of their seat above sqrt(gR) = 15.4 m/s — and a train
+         is slowest at the top of a hill. So the hill goes at the BOTTOM, low
+         and late, where the train still has nearly the whole 20 m in it: 1 m
+         high, crossed at about 17 m/s, worth around -0.2 g.
+
+         Everything worth height is on MEDIUM (18.4 deg, 2 m a tile). Gentle is
+         half that now and would take twice the park to climb the same hill.
+
+         Closed BY HAND, unlike the others, because the brake has to finish
+         within a turn of the station: braking to 3 m/s and then asking the
+         train to cross whatever length of filler the solver happens to choose
+         is asking it to valley short of home. The station is three tiles, so
+         the two legs across the park differ by three and the two along it
+         match. */
+      build: [].concat(
+        // Side 1 (+i), 12 tiles: lift to 20 m.
+        [{ id: 'flat-to-gentle-up', lift: true }],
+        [{ id: 'gentle-to-medium-up', lift: true }],
+        rep(8, 'medium-up', { lift: true }),
+        [{ id: 'medium-to-gentle-up', lift: true }],
+        [{ id: 'gentle-up-to-flat', lift: true }],
+        // Taken at chain speed, so it needs nothing.
+        [{ id: 'turn-right-wide' }],
+        // Side 2 (+j), 14 tiles: halfway down, to 10 m.
+        [{ id: 'flat-to-gentle-down' }, { id: 'gentle-to-medium-down' }],
+        rep(3, 'medium-down'),
+        [{ id: 'medium-to-gentle-down' }, { id: 'gentle-down-to-flat' }],
         rep(7, 'flat'),
+        [{ id: 'turn-right-wide', bank: true }],
+        // Side 3 (-i), 15 tiles: down to the ground and straight back up to 10,
+        // which is the valley that makes the ride and the reason the next
+        // corner is slow enough to take.
+        [{ id: 'flat-to-gentle-down' }, { id: 'gentle-to-medium-down' }],
+        rep(3, 'medium-down'),
+        [{ id: 'medium-to-gentle-down' }, { id: 'gentle-down-to-flat' }],
+        [{ id: 'flat' }],
+        [{ id: 'flat-to-gentle-up' }, { id: 'gentle-to-medium-up' }],
+        rep(3, 'medium-up'),
+        [{ id: 'medium-to-gentle-up' }, { id: 'gentle-up-to-flat' }],
+        [{ id: 'turn-right-wide', bank: true }],
+        /* Side 4 (-j), 14 tiles: down to the ground, over the airtime hill, and
+           home. One brake piece, not two — two took the train down to a walk
+           with a whole banked turn still to travel, and with friction on it
+           died a metre short of the station. */
+        [{ id: 'flat-to-gentle-down' }, { id: 'gentle-to-medium-down' }],
+        rep(3, 'medium-down'),
+        [{ id: 'medium-to-gentle-down' }, { id: 'gentle-down-to-flat' }],
+        [{ id: 'flat-to-gentle-up' }, { id: 'gentle-up-to-flat' }],
+        [{ id: 'flat-to-gentle-down' }, { id: 'gentle-down-to-flat' }],
+        rep(2, 'flat'),
         [{ id: 'brake' }],
         [{ id: 'turn-right-wide' }]
       )
@@ -74,49 +116,64 @@
       name: 'Gentle Hills',
       blurb: 'A tame family ride — a modest lift and a couple of small hills, no big forces.',
       finish: true,
+      /* The only preset that stays on GENTLE throughout — 9.5 degrees, a metre
+         of climb a tile. It is the shallowest thing the palette offers and the
+         whole character of the ride. */
       build: [].concat(
-        // Lift to 6 m.
+        // Side 1 (+i): lift to 6 m.
         [{ id: 'flat-to-gentle-up', lift: true }],
-        rep(2, 'gentle-up', { lift: true }),
+        rep(5, 'gentle-up', { lift: true }),
         [{ id: 'gentle-up-to-flat', lift: true }],
-        [{ id: 'flat' }],
-        // Drop back to the ground, a low hill, and back to the ground so the
-        // auto-close solver only has to navigate home on the flat.
+        [{ id: 'turn-right-wide' }],
+        // Side 2 (+j): down to the ground, over a low hill, back to the ground.
         [{ id: 'flat-to-gentle-down' }],
-        rep(2, 'gentle-down'),
+        rep(5, 'gentle-down'),
         [{ id: 'gentle-down-to-flat' }],
-        [{ id: 'flat-to-gentle-up' }, { id: 'gentle-up-to-flat' }],
-        [{ id: 'flat-to-gentle-down' }, { id: 'gentle-down-to-flat' }]
+        // A 2 m hill, which needs only three tiles at this grade.
+        [{ id: 'flat-to-gentle-up' }, { id: 'gentle-up' }, { id: 'gentle-up-to-flat' }],
+        [{ id: 'flat-to-gentle-down' }, { id: 'gentle-down' }, { id: 'gentle-down-to-flat' }],
+        [{ id: 'turn-right-wide' }],
+        // Side 3 (-i): back across, and round toward the station.
+        rep(9, 'flat'),
+        [{ id: 'turn-right-wide' }],
+        rep(12, 'flat')
       )
     },
 
     'looper': {
       name: 'Looper',
-      blurb: 'A lift and a drop feed a vertical loop, then the track curves back to the station.',
+      blurb: 'A lift and a long drop feed a vertical loop, then the track curves back to the station.',
       finish: true,
-      /* Laid out as a rough rectangle that turns back toward the station, so
-         the auto-close solver only has a short final corner to fill rather than
-         a whole U-turn-and-return from far out (which it couldn't find). */
+      /* Its own station, in a corner of the park, because this one needs the
+         room. The loop is 13.5 m tall and needs about 17.3 m/s at the bottom to
+         hold the train through the top, which is an 18 m drop before losses —
+         so the lift and the drop alone are 22 tiles before anything else is
+         laid. From the middle of the park that runs out of room; from a corner
+         it does not. */
+      start: { i: 2, j: 6, dir: 0, k: 0, g: 0 },
       build: [].concat(
-        // Side 1 (+i): lift to 14 m.
+        rep(3, 'station'),
+        // Side 1 (+i): lift to 18 m, on medium.
         [{ id: 'flat-to-gentle-up', lift: true }],
-        rep(6, 'gentle-up', { lift: true }),
+        [{ id: 'gentle-to-medium-up', lift: true }],
+        rep(7, 'medium-up', { lift: true }),
+        [{ id: 'medium-to-gentle-up', lift: true }],
         [{ id: 'gentle-up-to-flat', lift: true }],
-        rep(2, 'flat'),
+        [{ id: 'flat' }],
         [{ id: 'turn-right-wide' }],
-        // Side 2 (+j): drop to the ground, level off, and take the loop fast.
-        [{ id: 'flat-to-gentle-down' }],
-        rep(6, 'gentle-down'),
-        [{ id: 'gentle-down-to-flat' }],
+        // Side 2 (+j): the whole 18 m back down, then straight into the loop.
+        [{ id: 'flat-to-gentle-down' }, { id: 'gentle-to-medium-down' }],
+        rep(7, 'medium-down'),
+        [{ id: 'medium-to-gentle-down' }, { id: 'gentle-down-to-flat' }],
         [{ id: 'flat' }],
         [{ id: 'loop-right' }],
         rep(2, 'flat'),
         [{ id: 'turn-right-wide' }],
         // Side 3 (-i): back across.
-        rep(12, 'flat'),
+        rep(10, 'flat'),
         [{ id: 'turn-right-wide' }],
         // Side 4 (-j): part way home; the solver closes the last corner.
-        rep(6, 'flat')
+        rep(16, 'flat')
       )
     },
 
@@ -150,46 +207,59 @@
       build: rep(3, 'station')
     },
 
-    /* Three trains, three routes down the same 23 m, released together.
+    /* Three trains, three routes down the same 24 m, released together.
        Whatever shape the track is, each arrives at the bottom doing the same
        speed, because gravity's work depends on the height dropped and nothing
        else. They arrive at very different TIMES, which is the other half of
        the point — and switching friction on breaks the match, because losses
        go with the length of the path rather than the height of it.
 
-       Heights below are in levels (= metres), all from 23 down to 0:
-         Steep    -6 -6 -6 -4 -1                       over 5 tiles
-         Shallow  -2 x11, -1                           over 12 tiles
-         Varied   -6 -4 -2 -1  0  0 -1 -4 -4 -1        over 10 tiles
+       22 m, and the figure is not free to choose. Every lane must total the
+       same drop out of whole levels, and a lane that walks the grade ladder
+       down to flat picks up the ladder's own transitions on the way: a steep
+       lane sheds 16 + 3 + 1 levels getting back to level, a medium one 3 + 1.
+       Those differ in PARITY, so a lane starting steep and a lane starting
+       gentle can never total the same number of levels however much constant
+       grade either is given. Starting the shallow lane on MEDIUM fixes it, and
+       is no loss — medium is 18.4 degrees, which is what "gentle" meant before
+       the ladder gained a rung below it.
+
+       Heights below are in levels (0.5 m each), all from 44 down to 0:
+         Steep    -12 x2, -16, -3, -1              over 6 tiles
+         Shallow  -4 x10, -3, -1                   over 12 tiles
+         Varied   -12, -16, -4 x2, -3, -2 x2, -1   over 9 tiles
        Each is padded with level track to the same finish line, so the trains
        end up side by side, still moving, at matching speeds. */
     'path-independence': {
       name: 'Path independence',
-      blurb: 'Three trains race 23 m down a steep, a shallow and a varied track. ' +
+      blurb: 'Three trains race 22 m down a steep, a shallow and a varied track. ' +
              'Different routes, different times, identical speed at the bottom.',
       demo: {
         label: 'Path independence',
         cars: 1,             // point masses, so the demo is about the path alone
-        drop: 23,
+        drop: 22 * M,
         lanes: [
           {
             label: 'Steep', colour: '#cf3a2f', j: 12, g: -STEEP,
-            ids: repId(3, 'steep-down')
-              .concat(['steep-to-gentle-down', 'gentle-down-to-flat'])
-              .concat(repId(15, 'flat'))
+            ids: repId(2, 'steep-down')
+              .concat(['steep-to-medium-down', 'medium-to-gentle-down',
+                       'gentle-down-to-flat'])
+              .concat(repId(14, 'flat'))
           },
           {
-            label: 'Shallow', colour: '#1f6fb2', j: 20, g: -GENTLE,
-            ids: repId(11, 'gentle-down')
-              .concat(['gentle-down-to-flat'])
+            label: 'Shallow', colour: '#1f6fb2', j: 20, g: -MEDIUM,
+            ids: repId(10, 'medium-down')
+              .concat(['medium-to-gentle-down', 'gentle-down-to-flat'])
               .concat(repId(8, 'flat'))
           },
           {
             label: 'Varied', colour: '#2f855a', j: 28, g: -STEEP,
-            ids: ['steep-down', 'steep-to-gentle-down', 'gentle-down',
-                  'gentle-down-to-flat', 'flat', 'flat', 'flat-to-gentle-down',
-                  'gentle-to-steep-down', 'steep-to-gentle-down', 'gentle-down-to-flat']
-              .concat(repId(10, 'flat'))
+            ids: ['steep-down', 'steep-to-medium-down']
+              .concat(repId(2, 'medium-down'))
+              .concat(['medium-to-gentle-down'])
+              .concat(repId(2, 'gentle-down'))
+              .concat(['gentle-down-to-flat'])
+              .concat(repId(11, 'flat'))
           }
         ]
       }
@@ -207,16 +277,22 @@
         // Through the loop while going fast.
         [{ id: 'loop-right' }],
         rep(2, 'flat'),
-        /* The spike, topping out at 35 m. It has to clear the LEAD car, not the
+        /* The spike, topping out at 34 m. It has to clear the LEAD car, not the
            train's average: the physics stalls the train when its MEAN height
            has used up the launch, and on this steep a grade a four-car train
            averages ~4.4 m below its front car. A 22 m/s launch is worth 24.7 m
            of mean climb, so the front car crests about 29 m — which is why a
-           29 m spike (the obvious arithmetic) let it run off the top. 35 m
+           29 m spike (the obvious arithmetic) let it run off the top. 34 m
            leaves real margin, and a student who winds the launch past about
-           24.5 m/s will still fly off the end, which is the lesson. */
-        [{ id: 'flat-to-gentle-up' }, { id: 'gentle-to-steep-up' }],
-        rep(5, 'steep-up')
+           24.5 m/s will still fly off the end, which is the lesson.
+
+           Climbing the ladder to 45 degrees costs four tiles and 10 m before a
+           single length of constant steep track is laid — which is what a
+           20 m radius through 45 degrees of arc actually costs, and is the
+           reason a spike is an expensive thing to build. */
+        [{ id: 'flat-to-gentle-up' }, { id: 'gentle-to-medium-up' },
+         { id: 'medium-to-steep-up' }],
+        rep(4, 'steep-up')
       )
     }
   };

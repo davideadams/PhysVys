@@ -1,6 +1,6 @@
 # Geometry refactor: honest track at a workable scale
 
-Status: **Phases 1 and 2 done. Phases 3 to 6 not started.** The numbers below are
+Status: **Phases 1, 2, 3 and most of 6 done. Phases 4 and 5 not started.** The numbers below are
 calculated but only cross-checked by hand — the sim is its own test rig, so
 expect to verify rather than trust. Phase 1 needed three corrections that the
 arithmetic had not predicted; they are recorded under it as a warning about how
@@ -273,10 +273,67 @@ the same curvature — at which point that check should be **rewritten as an
 equality, not deleted**, because "every transition is equally tight" is the
 property the new palette is meant to have.
 
-## Phase 3 — quintic profile AND longer transitions, together
+## Phase 3 — quintic profile and short transitions — **DONE**
 
-These are **one change, not two.** The quintic costs peak curvature; the extra
-length pays for it. Shipping the quintic alone is a regression.
+**Shipped differently from the plan below, which is kept for its reasoning.**
+The plan bought radius with LENGTH: one tile per level of grade change, so
+`flat <-> gentle` became two tiles and `gentle <-> steep` four. Built that way it
+worked and the numbers held, but the palette it produced was not one anyone
+would want to build with — the smallest hill was eight tiles and reaching steep
+cost twelve tiles and 36 m of climb.
+
+What shipped buys the radius with a **finer height grid** instead.
+
+### `LEVEL_M` 1 -> 0.5, and a four-rung ladder
+
+The binding constraint was never length, it was parity: a one-tile transition
+from flat to grade `g` rises `g/2` levels, so `g` must be EVEN or the track
+leaves the grid. At 1 m levels that forced the shallowest usable grade to 18.4
+degrees, which needs a 12.5 m radius to reach in one tile. Halve the level and
+the same even grades mean half the angle, so the ladder can start shallow:
+
+| grade (levels/tile) | angle | transition from below | radius |
+| --- | --- | --- | --- |
+| GENTLE 2 | 9.5 deg | 1 tile, 0.5 m | 24.3 m |
+| MEDIUM 4 | 18.4 deg | 1 tile, 1.5 m | 26.3 m |
+| STEEP 12 | 45.0 deg | **2 tiles**, 8 m | 18.9 m |
+
+Four grades a student names, nothing hidden behind them, and the two angles that
+had names before keep them. Everything is one tile except the last step.
+
+**Lengths are solved, not written down.** `transitionTiles()` finds the peak
+curvature a one-tile version would reach and adds tiles until it clears
+`MIN_TRANS_R` (18 m). Change a grade and the lengths re-solve rather than
+quietly going sharp.
+
+### Four things worth knowing
+
+**Curvature does not peak in the middle of a transition.** `z''` does, but
+`(1 + z'^2)^1.5` grows right through the piece, so on a large grade change the
+tightest point sits noticeably earlier — around `t = 0.36` for medium-to-steep,
+where it is 18.9 m rather than the 20.8 the midpoint predicts. Assuming the
+midpoint made `MIN_TRANS_R` a fiction. Anything reasoning about transition
+curvature must search rather than evaluate.
+
+**Flat track can only sit on whole metres.** Parity again: `flat <-> gentle` and
+`gentle <-> medium` both move an odd number of levels, so a flat joint always
+returns to an even one. Sloped joints land on half-metres; flat ones do not.
+Putting flat track at 1.5 m would need a piece that starts and ends level while
+gaining height, which the profile cannot produce — with `gIn = gOut = 0`,
+`riseAt` is identically zero. It is still finer than before: the smallest
+flat-to-flat step halved from 2 m to 1 m.
+
+**The demo lanes have a parity problem of their own.** A lane walking the ladder
+down from steep sheds 16 + 3 + 1 levels in transitions; one from gentle sheds 1.
+Those differ in parity, so a steep lane and a gentle lane can never total the
+same drop however much constant grade either is given. `path-independence` now
+starts its shallow lane on medium.
+
+**Level-versus-metre confusion was the dominant failure mode**, by a wide margin
+— loop geometry is in metres, path `z` is in levels, and they were the same
+number until this phase. Every unit that could be confused, was.
+
+### The plan as originally written, for its reasoning
 
 ### The quintic
 
@@ -389,6 +446,20 @@ where eased you need 5.5 tiles for the same radius. That is the whole price.
   rolls into the curve *through the spiral*, which is the engineering reason
   spirals exist. It starts and ends at zero automatically, so `banked pieces
   still start and finish level` stops being a rule and becomes a consequence.
+
+  **This is more urgent than it looks.** `bankProfile` ramps the bank in over
+  the first quarter of a turn, but the curvature arrives in FULL at the joint —
+  so the entry of a banked turn is, for a fifth of a second, an unbanked turn.
+  A 15 m corner taken at 19.8 m/s spikes to 2.7 g laterally however well it is
+  banked. Measured, not theorised: it is what stopped `first-drop` passing its
+  own g check during phase 3.
+
+  Until it is fixed, layout has to work around it — **corners must be taken
+  below about 14.8 m/s**, which is 11 m of drop, so on a tall ride they belong
+  near the top. `first-drop` is now laid out that way (20 m lift, corners at the
+  10 m level, airtime hill at the bottom) and it is a perfectly good ride, but
+  the constraint is artificial and phase 4 should lift it. Check whether the
+  preset wants simplifying afterwards.
 - `pieceLength` stays analytic: `R * (π/2 + 2*θs)`.
 
 ### How to build it
@@ -442,7 +513,7 @@ Details to get right:
 - `RC.features()` already merges consecutive same-job pieces, so the report will
   say "Turn 1" for the pair without changes.
 
-## Phase 6 — loop easements
+## Phase 6 — loop retune **DONE**, easements not started
 
 The teardrop is already a clothoid in shape, but `r(0) = A + B = R`, so
 curvature **steps** off the straight before it. It needs its own entry and exit
@@ -526,28 +597,17 @@ students have recorded stop matching.
 
 ## Suggested order
 
-Phases 1 and 2 are **done**, both with no breakage: phase 1 was a strict
-improvement, phase 2 changed no geometry at all.
+Phases 1, 2, 3 and the loop retune from 6 are **done**. Bundling 3 and 6's
+breaking halves together worked as intended: one `FORMAT` bump, one preset
+rebuild, one stale-save banner.
 
-**Revised by phase 2's measurements — ship 3 and 6 TOGETHER, then 4, then 5.**
+**Phase 4 is next**, and it has become the most valuable one left. It is
+save-safe (`T` stays the grid parameter, `exitNode` is untouched), it zeroes the
+lateral jolts the way phase 3 zeroed the vertical ones, and it lifts a real
+constraint that layout is currently working around — see the bank-ramp note
+under it, which is now the single worst thing measured on the catalogue.
 
-The original order had 6 last, on the assumption its loop retune was a small
-tidy-up. It is not. `LOOP_R` 7 -> 10 m puts `2R` = 20 m inside a 3-tile 18 m
-footprint, so `LOOP_LEN` has to go to 4 — which moves exit nodes and breaks
-saves, exactly as phase 3 does. Doing them together buys **one `FORMAT` bump, one
-preset rebuild, one stale-save banner** instead of two of each. Note the pair
-lengthens the track again, so `DEFAULT_MU` and the preset energy budgets need
-rechecking with it.
+Then phase 5, which depends on it, and then loop easements, which are all that
+is left of 6.
 
-That bundle also fixes the two worst measured defects at once: every vertical
-jolt goes to exactly zero, and Looper stops being a contradiction. A 7 m
-teardrop needs about 14.5 m/s at the bottom to hold its 2.45 m top, and the shape
-only tolerates 9.7 — **there is no speed at which that loop both stays on and
-stays legal.**
-
-Phase 4 follows because it is save-safe (`T` stays the grid parameter,
-`exitNode` is untouched), zeroes the lateral jolts, and is a prerequisite for 5.
-
-Independent of all of it: **bank the preset turns**, which needs no new code.
-
-Suite is at **167 checks**, all passing, as of the end of phase 2.
+Suite is at **171 checks**, all passing, as of the end of phase 3.

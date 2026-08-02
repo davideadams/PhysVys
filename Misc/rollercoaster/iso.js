@@ -3,24 +3,43 @@
 (function () {
   const RC = window.RC || (window.RC = {});
 
-  const GRID = 40;      // tiles per side (160 m square)
+  const GRID = 40;      // tiles per side (240 m square)
   /* Metres per tile. Six, not four, and the reason is worth knowing: vertical
      curvature goes as 1/TILE_M^2, so this one number multiplies every grade
      transition's radius by 2.25. At four metres the mildest transition in the
      catalogue pulled 6.1 g in a valley and −4.1 g over a crest at 20 m/s,
      against limits of 5.0 and −1.5 — the track a student could build broke the
-     rules the report judged them by. It also softens the grades to 18.4 and 45
-     degrees, both more realistic than the 26.6 and 56.3 they replace.
+     rules the report judged them by.
 
      Nothing about the GRID changes: TW and TH below are pixels per tile, so the
-     park draws identically and only the labels and the physics move. Piece
-     lengths are in tiles and heights in levels, so no piece changes shape and
-     saved tracks still close. See TODO.md. */
+     park draws identically and only the labels and the physics move. */
   const TILE_M = 6;     // metres per tile
-  const LEVEL_M = 1;    // metres per height level
+
+  /* Metres per height LEVEL — the vertical grid the whole track snaps to. Half
+     a metre, not one, and it is what makes short transitions possible.
+
+     A transition from flat to a grade of g levels per tile rises g/2 levels
+     over one tile, so g must be EVEN or the piece lands between levels and
+     leaves the grid. That single constraint used to force the shallowest usable
+     grade to be 18.4 degrees, which needs either a 12.5 m radius to reach in
+     one tile or two tiles to reach gently — and neither is a good answer.
+
+     Halving the level halves the angle each even grade represents, so the
+     ladder can start at 9.5 degrees and step 9.5, 18.4, 45 with every
+     transition one tile wide (two for the last) and nothing bending tighter
+     than 20.8 m. The angles a student names are unchanged; there are simply
+     more rungs available between them.
+
+     It also halves the rounding on sloped turns, whose dH has to land on a
+     whole level: the worst mismatch between a turn's real pitch and the grade
+     it is named for drops from about 1.4 degrees to under 0.6. */
+  const LEVEL_M = 0.5;
   const TW = 64;        // tile width in px at zoom 1
   const TH = 32;        // tile height in px at zoom 1 (2:1 isometric)
-  const LEVEL_PX = 10;  // px per height level at zoom 1
+  /* Pixels per LEVEL at zoom 1. Halved with LEVEL_M so a metre of height draws
+     the same size on screen as it always did — this is a change to how finely
+     track can be placed, not to how tall the park looks. */
+  const LEVEL_PX = 5;
   const SLAB = 20;      // px thickness of the ground slab's dirt sides
 
   Object.assign(RC, { GRID, TILE_M, LEVEL_M, TW, TH, LEVEL_PX, SLAB });

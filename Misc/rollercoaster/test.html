@@ -106,11 +106,26 @@
 
   const near = (a, b, eps) => Math.abs(a - b) <= (eps || 1e-9);
 
-  /* Release points in TILES, not metres. Several tests need the train to start
-     on a CONSTANT grade, past the entry transition — and a literal distance in
-     metres stops meaning that the moment the tile scale changes. 1.5 tiles is
-     comfortably past a one-tile transition whatever a tile is worth. */
+  /* Release points in TILES, not metres, for the tests that want a place. */
   const tiles = n => n * RC.TILE_M;
+
+  /* Where the track first reaches a CONSTANT grade: the entry transition is
+     behind it and the slope has stopped changing.
+
+     Several tests need exactly that and used to say "1.5 tiles in", which was
+     comfortably past a transition while every transition was one tile long.
+     Transitions are now as long as their grade change — two tiles from flat to
+     gentle, four from gentle to steep — so a fixed distance lands INSIDE one,
+     on a slope that is still changing, and the test measures a shape it did not
+     mean to. Found rather than guessed, so the next change to the lengths does
+     not quietly move it again. */
+  function onConstantGrade() {
+    for (const p of RC.trackPath().pts) {
+      const d = p.def;
+      if (d && d.kind === 'straight' && d.gIn === d.gOut && d.gIn !== 0) return p.s;
+    }
+    return 0;
+  }
 
   /* Unit tangent components on a constant GENTLE grade, so a test can say
      "clearly sloped" without writing down a number that the tile scale
@@ -394,7 +409,7 @@
     const seq = []
       .concat(['flat', 'flat'])
       .concat(['flat-to-gentle-up', 'gentle-up', 'gentle-up', 'gentle-up',
-               'gentle-up', 'gentle-up', 'gentle-up-to-flat'])   // up to k = 12
+               'gentle-up', 'gentle-up', 'gentle-up-to-flat'])   // 12 levels, 6 m
       .concat(['turn-right-tight', 'turn-right-tight'])          // now heading -i
       .concat(new Array(10).fill('flat'))                        // back along j = 22
       .concat(['turn-right-tight'])                              // now heading -j
@@ -406,7 +421,8 @@
         return `${id} refused at (${h.i},${h.j},dir ${h.dir},k ${h.k}): ${why}`;
       }
     }
-    if (RC.track.head.k !== 12) return `expected to finish at 12 m, got ${RC.track.head.k}`;
+    // Comfortably over CLEARANCE, which is what makes the crossing legal.
+    if (RC.track.head.k !== 12) return `expected to finish at level 12, got ${RC.track.head.k}`;
   });
 
   check('track may not be built back through itself', () => {
@@ -517,8 +533,9 @@
   check('slope pairs resolve to exactly one piece each', () => {
     const m = straightMap();
     if (m.dupe) return `two pieces claim "${m.dupe}": ${m.a} and ${m.b}`;
-    // Every slope must at least be able to hold itself.
-    for (const g of [-6, -2, 0, 2, 6]) {
+    // Every slope must at least be able to hold itself. Taken from the ladder
+    // rather than listed, since the ladder has gained a rung once already.
+    for (const g of RC.GRADES.concat(RC.GRADES.map(x => -x))) {
       if (!m.has(g + '>' + g)) return `no piece holds slope ${g}`;
     }
   });
@@ -526,8 +543,10 @@
   check('every slope can be reached from level in single steps', () => {
     const m = straightMap();
     if (m.dupe) return 'duplicate mapping';
-    // Walking outwards from level, each step changes slope by one grade.
-    const chains = [[0, 2, 6], [0, -2, -6]];
+    // Walking outwards from level, each step changes slope by one RUNG of the
+    // ladder — which is the property the build palette's walk-up depends on,
+    // whatever the rungs happen to be.
+    const chains = [RC.GRADES, RC.GRADES.map(g => -g)];
     for (const chain of chains) {
       for (let n = 0; n + 1 < chain.length; n++) {
         const up = chain[n] + '>' + chain[n + 1];
@@ -539,23 +558,37 @@
   });
 
   check('holding a slope selection walks up through the transitions', () => {
-    // This is the behaviour the build window depends on: pick "steep up" and
-    // press build repeatedly, and the track should climb 0 -> gentle -> steep
-    // without the student ever naming a transition piece.
+    /* The behaviour the build window depends on: pick the steepest grade and
+       press build repeatedly, and the track climbs the ladder a rung at a time
+       without the student ever naming a transition piece. The palette offers
+       only what is directly reachable — RC.slopeChoices greys the rest — so
+       this walks the same way, one rung per press, and then holds.
+
+       Written against RC.GRADES so it keeps testing the walk rather than a
+       particular number of rungs; it already went from two to three. */
     const m = straightMap();
     RC.resetTrack();
-    const target = 6;
+    const ladder = RC.GRADES;
+    const target = ladder[ladder.length - 1];
     const seen = [];
-    for (let n = 0; n < 4; n++) {
+    for (let n = 0; n < ladder.length + 1; n++) {
       const g = RC.track.head.g;
-      const def = m.get(g + '>' + target) || m.get(g + '>' + (g < 2 ? 2 : target));
+      // Straight at the target if there is such a piece, else one rung up.
+      const next = ladder[Math.min(ladder.indexOf(g) + 1, ladder.length - 1)];
+      const def = m.get(g + '>' + target) || m.get(g + '>' + next);
       if (!def) return `stuck at slope ${g} with no piece toward ${target}`;
       if (!RC.place(def.id)) return `${def.id} refused at slope ${g}`;
       seen.push(RC.track.head.g);
     }
-    if (seen[0] !== 2) return `first build left slope ${seen[0]}, expected gentle (2)`;
-    if (seen[1] !== 6) return `second build left slope ${seen[1]}, expected steep (6)`;
-    if (seen[2] !== 6) return `third build left slope ${seen[2]}, expected to hold steep`;
+    for (let n = 0; n < ladder.length - 1; n++) {
+      if (seen[n] !== ladder[n + 1]) {
+        return `build ${n + 1} left slope ${seen[n]}, expected ${ladder[n + 1]}`;
+      }
+    }
+    // And once at the top it stays there rather than falling back.
+    if (seen[seen.length - 1] !== target) {
+      return `after reaching ${target} the track came off it to ${seen[seen.length - 1]}`;
+    }
   });
 
   section('Finish track');
@@ -726,7 +759,7 @@
     RC.sim.friction = false;
     // Start past the transition piece, on constant gentle-down, so the
     // comparison against a = g*sin(theta) is against a constant slope.
-    RC.resetSim(tiles(1.5));
+    RC.resetSim(onConstantGrade());
     runFor(1.5);
     if (RC.sim.v <= 0) return `speed is ${RC.sim.v.toFixed(2)} m/s, expected positive`;
     // Gentle is GENTLE levels of rise per tile of run, so sin(theta) is that
@@ -755,7 +788,7 @@
     // Release ON the constant grade, not at s=0: the entry there is level, so
     // a train released at the very start barely accelerates and ΔPE is a few
     // centimetres of noise rather than a real energy exchange.
-    RC.resetSim(tiles(1.5));
+    RC.resetSim(onConstantGrade());
     const start = RC.energy();
     runFor(2);                // stop short of the end, which would zero v
     const end = RC.energy();
@@ -804,7 +837,7 @@
     RC.sim.friction = false;
     // Released partway down, so it can never climb back to s = 0 and trip
     // the end-of-track stop instead of oscillating in the dip.
-    RC.resetSim(tiles(1.5));
+    RC.resetSim(onConstantGrade());
     runFor(30);
     if (RC.sim.maxZ * 1 > 20) return 'train somehow climbed the hill';
     if (RC.sim.reversals < 2) {
@@ -873,7 +906,7 @@
     for (const id of ['flat-to-gentle-down', 'gentle-down', 'gentle-down']) {
       if (!RC.place(id)) return `${id} refused`;
     }
-    const p = RC.pathAt(tiles(1.5), false);   // on the constant gentle grade
+    const p = RC.pathAt(onConstantGrade(), false);   // on the constant gentle grade
     const rise = RC.SLOPE.GENTLE * RC.LEVEL_M;
     const hyp = Math.hypot(RC.TILE_M, rise);
     const sinT = rise / hyp;
@@ -939,20 +972,49 @@
      18 m would then be wrong in a way that reads like a physics regression. */
   section('Curvature');
 
-  /* The curvature a straight transition has at its ENTRY, where its slope is
-     gIn. The height profile is a quadratic, so the slope ramps linearly from
-     gIn to gOut over L tiles and d2z/dx2 is a constant; curvature is that over
-     (1 + z')^1.5, which is why a transition is tightest at its flatter end.
+  /* The TIGHTEST curvature a straight transition reaches, which is now in the
+     middle of it rather than at either end.
 
-     Written out rather than measured because phase 3 replaces the profile with
-     a quintic, whose peak is exactly 1.5x the constant — so this expression is
-     precisely the thing that has to change, and these checks should fail loudly
-     when it does rather than quietly agreeing with whatever the code does. */
+     The slope ramps from gIn to gOut through a smoothstep, so d2z/dx2 is that
+     ramp's rate of change — zero at both ends, peaking at t = 0.5 at exactly
+     1.5x the mean the old linear ramp held throughout. Curvature is that over
+     (1 + z')^1.5, and at t = 0.5 the slope is halfway between the two grades.
+
+     Built from the profile's algebra rather than from the geometry the sim
+     lays down, so comparing the two is a real cross-check rather than the code
+     agreeing with itself. SEARCHED rather than evaluated at a guessed t,
+     because the (1 + z')^1.5 term keeps growing while z'' turns over: on a
+     large grade change the tightest point sits noticeably BEFORE the middle,
+     where the bend is slightly gentler but the slope has not yet arrived to
+     ease it. Assuming the midpoint put medium-to-steep at 20.8 m when it is
+     really 18.9. */
   const transCurv = def => {
-    const zpp = (def.gOut - def.gIn) * RC.LEVEL_M / (def.L * RC.TILE_M * RC.TILE_M);
-    const zp = def.gIn * RC.LEVEL_M / RC.TILE_M;
-    return zpp / Math.pow(1 + zp * zp, 1.5);
+    const dg = def.gOut - def.gIn;
+    let peak = 0;
+    for (let n = 0; n <= 400; n++) {
+      const t = n / 400;
+      const g = def.gIn + dg * t * t * (3 - 2 * t);
+      const zp = g * RC.LEVEL_M / RC.TILE_M;
+      const zpp = dg * 6 * (t - t * t) * RC.LEVEL_M / (def.L * RC.TILE_M * RC.TILE_M);
+      const k = zpp / Math.pow(1 + zp * zp, 1.5);
+      if (Math.abs(k) > Math.abs(peak)) peak = k;
+    }
+    return peak;
   };
+
+  /* Tightest curvature actually reached along a piece, in each plane, by
+     sampling. The counterpart to transCurv: one says what the design intends,
+     the other what the geometry delivers. */
+  function peakCurv(def) {
+    const node = { i: 16, j: 19, dir: 0, k: 30, g: def.gIn };
+    let vert = 0, lat = 0;
+    for (let n = 1; n < 200; n++) {
+      const k = RC.curvInside(def, node, n / 200);
+      if (Math.abs(k.vert) > Math.abs(vert)) vert = k.vert;
+      if (Math.abs(k.lat) > Math.abs(lat)) lat = k.lat;
+    }
+    return { vert, lat };
+  }
 
   /* Track laid high enough that a drop has somewhere to go — RC.resetTrack
      starts at ground level, where anything descending is refused outright. */
@@ -1015,44 +1077,138 @@
   });
 
   check('a slope transition is a valley going up and a crest going down', () => {
-    const entry = id => {
+    for (const id of ['flat-to-gentle-up', 'medium-to-steep-up']) {
       const def = RC.pieceDef(id);
-      const node = { i: 16, j: 19, dir: 0, k: 20, g: def.gIn };
-      // Just inside the entry, where transCurv's (1 + z')^1.5 is evaluated.
-      return { k: RC.curvInside(def, node, 0.002), def };
-    };
-    for (const id of ['flat-to-gentle-up', 'gentle-to-steep-up']) {
-      const { k, def } = entry(id);
-      const want = transCurv(def);
+      const k = peakCurv(def), want = transCurv(def);
       if (!(k.vert > 0)) return `${id} reports ${k.vert.toFixed(5)}, expected a valley`;
-      if (Math.abs(k.vert - want) > Math.abs(want) * 0.01) {
-        return `${id} is ${(1 / k.vert).toFixed(2)} m, expected ${(1 / want).toFixed(2)} m`;
+      if (Math.abs(k.vert - want) > Math.abs(want) * 0.02) {
+        return `${id} is tightest at ${(1 / k.vert).toFixed(2)} m, expected ${(1 / want).toFixed(2)} m`;
       }
-      if (!near(k.lat, 0, 1e-9)) return `${id} reports ${k.lat} sideways on a straight`;
+      if (!near(k.lat, 0, 1e-6)) return `${id} reports ${k.lat} sideways on a straight`;
     }
-    for (const id of ['flat-to-gentle-down', 'gentle-to-steep-down']) {
-      const { k, def } = entry(id);
-      const want = transCurv(def);
+    for (const id of ['flat-to-gentle-down', 'medium-to-steep-down']) {
+      const def = RC.pieceDef(id);
+      const k = peakCurv(def), want = transCurv(def);
       if (!(k.vert < 0)) return `${id} reports ${k.vert.toFixed(5)}, expected a crest`;
-      if (Math.abs(k.vert - want) > Math.abs(want) * 0.01) {
-        return `${id} is ${(-1 / k.vert).toFixed(2)} m, expected ${(-1 / want).toFixed(2)} m`;
+      if (Math.abs(k.vert - want) > Math.abs(want) * 0.02) {
+        return `${id} is tightest at ${(-1 / k.vert).toFixed(2)} m, expected ${(-1 / want).toFixed(2)} m`;
       }
     }
   });
 
-  check('a bigger grade change over the same length bends harder', () => {
-    /* Deliberately a tripwire. Every transition in the catalogue is one tile
-       long today, so gentle <-> steep changes grade by twice as much in the
-       same distance and comes out tighter. Phase 3 sets transition length FROM
-       the grade change precisely so that they all land on the same curvature —
-       at which point this check should be REWRITTEN as an equality, not
-       deleted, because "every transition is equally tight" is the property the
-       new palette is meant to have. */
-    const mild = Math.abs(transCurv(RC.pieceDef('flat-to-gentle-up')));
-    const harsh = Math.abs(transCurv(RC.pieceDef('gentle-to-steep-up')));
-    if (!(harsh > mild)) {
-      return `gentle-to-steep (${(1 / harsh).toFixed(1)} m) is not tighter than ` +
-             `flat-to-gentle (${(1 / mild).toFixed(1)} m)`;
+  check('every transition in the catalogue is equally tight', () => {
+    /* This was a tripwire the other way round, and it has now tripped as
+       intended. While every transition was one tile long, gentle to steep
+       changed grade by twice as much in the same distance and came out more
+       than twice as sharp: the mildest piece in the palette and the harshest
+       differed by a factor a student had no way to see coming.
+
+       Length is SOLVED from MIN_TRANS_R now rather than written down, so the
+       property to check is that the solver is both safe and tight: no piece
+       bends harder than the minimum, and no piece carries a tile it does not
+       need. Radius scales linearly with length, so one tile shorter would have
+       to fall below the minimum or the piece is padded. */
+    const min = RC.MIN_TRANS_R;
+    for (const def of RC.PIECES) {
+      if (def.kind !== 'straight' || def.gIn === def.gOut) continue;
+      const r = 1 / Math.abs(peakCurv(def).vert);
+      if (r < min * 0.98) {
+        return `${def.id} bends at ${r.toFixed(1)} m, inside the ${min} m minimum`;
+      }
+      if (def.L > 1 && r * (def.L - 1) / def.L >= min) {
+        return `${def.id} takes ${def.L} tiles to bend at ${r.toFixed(1)} m, but ` +
+               `${def.L - 1} would still clear ${min} m`;
+      }
+    }
+  });
+
+  check('a transition meets constant-grade track with no step at all', () => {
+    /* The headline of the quintic, and what makes it worth 1.5x in peak
+       curvature. A smoothstep slope ramp has zero curvature at both ends, and
+       constant-grade track has zero curvature everywhere, so the joint between
+       them steps by nothing. Not a smaller step: none.
+
+       Measured on the real path rather than from the formulas, because it is
+       the joint that has to be clean, not the algebra. */
+    // All the way up the ladder and back down it, so every transition in the
+    // catalogue meets constant grade at least once.
+    const bad = shapeTrack(['flat', 'flat-to-gentle-up', 'gentle-up',
+                            'gentle-to-medium-up', 'medium-up',
+                            'medium-to-steep-up', 'steep-up', 'steep-to-medium-up',
+                            'medium-to-gentle-up', 'gentle-up-to-flat', 'flat'], 4);
+    if (bad) return bad;
+    for (const j of RC.jointSteps()) {
+      // A thousandth per metre is a kilometre of radius — nothing a rider could
+      // feel, and orders below what one transition used to slam on by itself.
+      if (j.dMag > 1e-3) {
+        const after = RC.track.pieces[j.pi].defId;
+        return `entering ${after} steps ${j.dMag.toFixed(5)} per metre ` +
+               `(a ${(1 / j.dMag).toFixed(1)} m radius arriving all at once)`;
+      }
+    }
+  });
+
+  check('a transition still leaves and arrives at the grade it names', () => {
+    // The quintic changed the middle of the profile, not its ends. The slope
+    // has to match the track either side and the piece has to land on its
+    // stated height, or the palette stops fitting together — a far worse
+    // failure than a jolt, and a quieter one.
+    for (const def of RC.PIECES) {
+      if (def.kind !== 'straight') continue;
+      if (!near(RC.gradeAt(def, 0), def.gIn, 1e-9)) {
+        return `${def.id} leaves at grade ${RC.gradeAt(def, 0)}, not ${def.gIn}`;
+      }
+      if (!near(RC.gradeAt(def, 1), def.gOut, 1e-9)) {
+        return `${def.id} arrives at grade ${RC.gradeAt(def, 1)}, not ${def.gOut}`;
+      }
+      if (!near(RC.riseAt(def, 1), def.dH, 1e-9)) {
+        return `${def.id} rises ${RC.riseAt(def, 1)} levels, not the ${def.dH} it claims`;
+      }
+      if (!near(RC.riseAt(def, 0), 0, 1e-12)) return `${def.id} does not start where it starts`;
+    }
+  });
+
+  check('every piece lands on a whole level', () => {
+    /* The one thing the grade ladder is not free to break. A piece's height
+       gain is L*(gIn+gOut)/2, so a transition out of flat to grade g rises g/2
+       and g must be EVEN — which is the constraint that fixed the ladder at
+       2, 4 and 12 levels per tile, and the reason halving LEVEL_M was what let
+       the transitions be short. A fraction of a level here does not fail
+       loudly; it slowly detaches the track from the grid. */
+    for (const def of RC.PIECES) {
+      if (def.dH !== Math.round(def.dH)) {
+        return `${def.id} rises ${def.dH} levels, which is not a whole one`;
+      }
+    }
+    for (const g of RC.GRADES) {
+      if (g % 2 !== 0) return `grade ${g} is odd, so a transition out of flat to it ` +
+                              `would rise half a level`;
+    }
+  });
+
+  check('the grade ladder is what the palette offers, with nothing hidden', () => {
+    // Every rung a student can select, and no rung they cannot: a grade with
+    // no way to reach it is a piece nobody can build, and a transition between
+    // non-adjacent rungs would be a shortcut the walk-up never takes.
+    const grades = new Set();
+    for (const def of RC.PIECES) {
+      if (def.kind !== 'straight') continue;
+      grades.add(Math.abs(def.gIn));
+      grades.add(Math.abs(def.gOut));
+    }
+    for (const g of grades) {
+      if (RC.GRADES.indexOf(g) < 0) return `pieces use grade ${g}, which is not on the ladder`;
+    }
+    for (const g of RC.GRADES) {
+      if (!grades.has(g)) return `the ladder claims grade ${g}, which no piece uses`;
+    }
+    // Transitions only ever join neighbours.
+    for (const def of RC.PIECES) {
+      if (def.kind !== 'straight' || def.gIn === def.gOut) continue;
+      const a = RC.GRADES.indexOf(Math.abs(def.gIn));
+      const b = RC.GRADES.indexOf(Math.abs(def.gOut));
+      const rungs = (def.gIn * def.gOut < 0) ? a + b : Math.abs(a - b);
+      if (rungs !== 1) return `${def.id} skips ${rungs} rungs of the ladder`;
     }
   });
 
@@ -1259,10 +1415,14 @@
       if (along < prevAlong - 1e-9) backwards = true;    // the loop doubles back
       prevAlong = along;
     }
-    // Teardrop height is R(1+a), reached at the top (t = 0.5).
-    const expected = RC.loopHeight(def.R, def.a);
-    if (!near(peak, expected, 0.05)) {
-      return `loop peaks at ${peak.toFixed(2)} m, expected ${expected.toFixed(2)}`;
+    /* Teardrop height is R(1+a), reached at the top (t = 0.5). The loop's own
+       geometry is in METRES — its radius is a metre figure, not a tile or level
+       one — while a centreline's z comes back in LEVELS, so one has to be
+       converted into the other. They were the same number until a level stopped
+       being a metre. */
+    const expected = RC.loopHeight(def.R, def.a) / RC.LEVEL_M;
+    if (!near(peak, expected, 0.05 / RC.LEVEL_M)) {
+      return `loop peaks at level ${peak.toFixed(2)}, expected ${expected.toFixed(2)}`;
     }
     if (!backwards) return 'the path never doubles back — that is a hump, not a loop';
   });
@@ -1300,8 +1460,10 @@
     if (!path) return 'loop was refused';
     let top = path.pts[0];
     for (const p of path.pts) if (p.z > top.z) top = p;
-    const expected = RC.loopHeight(RC.LOOP_R, RC.LOOP_A);
-    if (top.z < expected - 0.5) return `highest point is only ${top.z.toFixed(1)} m`;
+    const expected = RC.loopHeight(RC.LOOP_R, RC.LOOP_A) / RC.LEVEL_M;   // levels
+    if (top.z < expected - 1) {
+      return `highest point is level ${top.z.toFixed(1)}, expected ${expected.toFixed(1)}`;
+    }
 
     const fr = RC.carFrame(top);
     if (!(fr.u.z < -0.8)) {
@@ -1519,17 +1681,26 @@
     RC.setLoopR(loopIdx, 999);
     if (RC.loopR(loopIdx) > RC.LOOP_R_MAX + 1e-9) return `radius exceeded the max (${RC.loopR(loopIdx)})`;
 
-    // A loop butted against the ceiling refuses to grow through it.
+    /* A loop butted against the ceiling refuses to grow through it. Placed just
+       far enough down that the loop it already is will fit and the biggest one
+       it could become will not — derived from the loop's own height, because a
+       literal drop below MAX_H stopped working the moment LOOP_R grew and the
+       test then failed on being unable to set itself up rather than on anything
+       it was checking. */
+    // In LEVELS, since that is what a start node's k is in.
+    const here = RC.loopHeight(RC.LOOP_R, RC.LOOP_A) / RC.LEVEL_M;
+    const biggest = RC.loopHeight(RC.LOOP_R_MAX, RC.LOOP_A) / RC.LEVEL_M;
     RC.track.pieces = [];
-    RC.track.start = { i: 6, j: 20, dir: 0, k: RC.MAX_H - 4, g: 0 };
+    RC.track.start = { i: 6, j: 20, dir: 0, k: Math.floor(RC.MAX_H - here) - 1, g: 0 };
     RC.track.head = Object.assign({}, RC.track.start);
     RC.version++;
     if (!RC.place('loop-right')) {
-      // If it can't even be placed that high, lower it a touch and retry.
-      RC.track.start.k = RC.MAX_H - 12;
-      RC.track.head = Object.assign({}, RC.track.start);
-      RC.version++;
-      if (!RC.place('loop-right')) return 'could not place a high loop to test the ceiling';
+      return `could not place a loop at ${RC.track.start.k} m to test the ceiling: ` +
+             RC.canPlace(RC.pieceDef('loop-right'), RC.track.head).why;
+    }
+    if (!(RC.track.start.k + biggest > RC.MAX_H)) {
+      return `a full-size loop at level ${RC.track.start.k} would still fit under ` +
+             `the ${RC.MAX_H}-level ceiling, so there is nothing here to test`;
     }
     const hi = RC.track.pieces.findIndex(p => RC.pieceDef(p.defId).kind === 'loop');
     const before = RC.loopR(hi);
@@ -2090,8 +2261,8 @@
   });
 
   check('a car hanging off the end drags the rest of the train forward', () => {
-    // Chain-off-a-table. The track climbs to 10 m and then runs LEVEL to the
-    // edge, with 12 m of flat top so the whole 10.5 m train is on the level
+    // Chain-off-a-table. The track climbs to 5 m and then runs LEVEL to the
+    // edge, with 18 m of flat top so the whole 10.5 m train is on the level
     // when its nose goes over: the cars on the rails feel no slope at all, so
     // any acceleration can only be the hanging car pulling them. It has to be
     // elevated — a track ending at ground level has nowhere to hang.
@@ -2103,7 +2274,7 @@
     for (const id of seq) {
       if (!RC.place(id)) return `${id} refused`;
     }
-    if (RC.track.head.k !== 10) return `top of the climb is ${RC.track.head.k} m, expected 10`;
+    if (RC.track.head.k !== 10) return `top of the climb is level ${RC.track.head.k}, expected 10`;
     RC.sim.shuttleMode = true;
     RC.sim.cars = 4;
     RC.sim.friction = false;
@@ -2121,28 +2292,49 @@
   });
 
   check('a train too slow at the top of a loop falls out of it and crashes', () => {
-    // The window here is narrow, so the numbers matter. The loop rises
-    // R(1+a) = 9.45 m and its top radius is aR = 2.45 m, so the train must
-    // fall MORE than 9.45 m to crest it at all, but less than
-    // 9.45 + gr/2g = 10.67 m or it is still fast enough to hold on. A drop of
-    // about 10.2 m sits between the two: it gets over the top and lets go.
+    /* The window is narrow, so every number here is derived from the loop
+       rather than written down — it moved once already when LOOP_R went from
+       7 m to 10 m, and a literal would have quietly started the train high
+       enough to make the loop, which reads exactly like a physics regression.
+
+       The loop rises R(1+a) and its top radius is aR, so a train must fall MORE
+       than the height to crest it at all, and less than height + aR/2 or it is
+       still doing sqrt(g*aR) up there and holds on. Halfway between the two
+       gets it over the top and lets it go. */
+    const R = RC.LOOP_R, a = RC.LOOP_A;
+    const loopH = RC.loopHeight(R, a);        // metres
+    const holdOn = loopH + a * R / 2;         // metres — the drop that holds it on
+    const baseM = 1;                          // metres: the loop sits a little up
+    const dropM = baseM + (loopH + holdOn) / 2;
+
+    /* Build the descent in LEVELS, which is what a node's k counts, and the
+       release in METRES, which is what releaseAtHeight takes. Keeping the two
+       apart matters now that a level is not a metre — mixing them put the loop
+       three levels up when the test meant one, and the window is too narrow to
+       survive that. */
+    const down = RC.pieceDef('gentle-down').dH;          // negative, levels
+    const ends = RC.pieceDef('flat-to-gentle-down').dH
+               + RC.pieceDef('gentle-down-to-flat').dH;  // both transitions
+    const base = Math.round(baseM / RC.LEVEL_M);
+    // Enough constant grade above the release point that it lands on the
+    // descent rather than on the transition at the top of it.
+    const gd = Math.ceil((dropM / RC.LEVEL_M - base) / Math.abs(down)) + 2;
     RC.track.pieces = [];
-    RC.track.start = { i: 6, j: 20, dir: 0, k: 13, g: 0 };
+    RC.track.start = { i: 6, j: 20, dir: 0, k: base - ends - down * gd, g: 0 };
     RC.track.head = Object.assign({}, RC.track.start);
     RC.version++;
-    const seq = ['flat-to-gentle-down'].concat(new Array(5).fill('gentle-down'))
+    const seq = ['flat-to-gentle-down'].concat(new Array(gd).fill('gentle-down'))
       .concat(['gentle-down-to-flat', 'flat', 'loop-right', 'flat']);
     for (const id of seq) {
       if (!RC.place(id)) return `${id} refused: ` + RC.canPlace(RC.pieceDef(id), RC.track.head).why;
     }
+    if (RC.track.head.k !== base) {
+      return `the loop sits at level ${RC.track.head.k}, expected ${base}`;
+    }
     RC.sim.cars = 1;
     RC.sim.friction = false;
-    /* Released by HEIGHT, because this test is tuned to a drop rather than to a
-       place: the loop's base is at 1 m and its top at 10.45 m, and 10.2 m is the
-       narrow band that gets the train over the top too slowly to hold on. Given
-       as a distance it would move with the tile scale and the train would
-       quietly start high enough to make the loop. */
-    RC.resetSim(releaseAtHeight(10.2));
+    // By HEIGHT, not by distance: the test is tuned to a drop, not to a place.
+    RC.resetSim(releaseAtHeight(dropM));
     runFor(30);
 
     if (RC.sim.state !== 'crashed') {
@@ -2436,11 +2628,16 @@
     // differs — so the speeds are read at the same place and are comparable.
     const speedAfter = brakes => {
       RC.track.pieces = [];
-      RC.track.start = { i: 4, j: 20, dir: 0, k: 20, g: 0 };
+      /* A 20 m drop, on medium. The train has to arrive fast enough that ONE
+         brake piece cannot take it all the way to the brake speed, or both
+         runs finish at the floor and the test proves nothing — which is what
+         happened when the same piece list started dropping half as far. */
+      RC.track.start = { i: 4, j: 20, dir: 0, k: 42, g: 0 };
       RC.track.head = Object.assign({}, RC.track.start);
       RC.version++;
-      const seq = ['flat-to-gentle-down'].concat(new Array(8).fill('gentle-down'))
-        .concat(['gentle-down-to-flat'])
+      const seq = ['flat-to-gentle-down', 'gentle-to-medium-down']
+        .concat(new Array(8).fill('medium-down'))
+        .concat(['medium-to-gentle-down', 'gentle-down-to-flat'])
         .concat(new Array(brakes).fill('brake'))
         .concat(new Array(10 - brakes).fill('flat'));
       for (const id of seq) if (!RC.place(id)) return null;
@@ -2846,8 +3043,25 @@
       RC.sim.mu = mu;
       RC.sim.kDrag = 0.0012;
       RC.resetSim();
-      runFor(20);
-      return { v: Math.abs(RC.sim.v), th: RC.sim.eThermal };
+      /* Read both runs at the same PLACE, not after the same time.
+
+         Two things go wrong with a fixed time. The chain holds the train at
+         liftSpeed whatever mu is, so a run that ends on the lift reads the same
+         speed either way — and the lift alone is most of twenty seconds. Run
+         long enough to clear it and the opposite happens: heat is a force times
+         a DISTANCE, so the lighter run, which travels further and is then
+         braked to a stand at the station, ends up with more heat in it despite
+         having lost less to friction. Comparing at one point on the track
+         compares the same distance travelled, which is the only fair way to ask
+         this question. */
+      const mark = RC.trackPath().total / 2;
+      let out = null;
+      runUntil(120, () => {
+        if (RC.sim.s < mark) return false;
+        out = { v: Math.abs(RC.sim.v), th: RC.sim.eThermal };
+        return true;
+      });
+      return out;
     };
     const light = runMu(0.005);
     const heavy = runMu(0.05);
@@ -3070,17 +3284,17 @@
     // The check fires on every substep the force holds for. The report must
     // show one line for that turn, carrying the worst reading, not hundreds.
     RC.track.pieces = [];
-    RC.track.start = { i: 4, j: 20, dir: 0, k: 20, g: 0 };
+    RC.track.start = { i: 4, j: 20, dir: 0, k: 28, g: 0 };
     RC.track.head = Object.assign({}, RC.track.start);
     RC.version++;
-    const seq = ['flat-to-gentle-down'].concat(new Array(6).fill('gentle-down'))
-      .concat(['gentle-down-to-flat', 'flat', 'turn-right-tight', 'flat']);
+    const seq = ['flat-to-gentle-down', 'gentle-to-medium-down'].concat(new Array(4).fill('medium-down'))
+      .concat(['medium-to-gentle-down', 'gentle-down-to-flat', 'flat', 'turn-right-tight', 'flat']);
     for (const id of seq) {
       if (!RC.place(id)) return `${id} refused`;
     }
     RC.sim.cars = 1;
     RC.sim.friction = false;
-    RC.resetSim(tiles(1.5));
+    RC.resetSim(onConstantGrade());
     runFor(60);
 
     const sideways = RC.sim.warnings.filter(w => /sideways/i.test(w));
@@ -3101,17 +3315,17 @@
   check('a g-force warning names the feature that caused it', () => {
     // A fast, unbanked tight turn: the complaint has to say which turn.
     RC.track.pieces = [];
-    RC.track.start = { i: 4, j: 20, dir: 0, k: 20, g: 0 };
+    RC.track.start = { i: 4, j: 20, dir: 0, k: 28, g: 0 };
     RC.track.head = Object.assign({}, RC.track.start);
     RC.version++;
-    const seq = ['flat-to-gentle-down'].concat(new Array(6).fill('gentle-down'))
-      .concat(['gentle-down-to-flat', 'flat', 'turn-right-tight', 'flat']);
+    const seq = ['flat-to-gentle-down', 'gentle-to-medium-down'].concat(new Array(4).fill('medium-down'))
+      .concat(['medium-to-gentle-down', 'gentle-down-to-flat', 'flat', 'turn-right-tight', 'flat']);
     for (const id of seq) {
       if (!RC.place(id)) return `${id} refused`;
     }
     RC.sim.cars = 1;
     RC.sim.friction = false;
-    RC.resetSim(tiles(1.5));
+    RC.resetSim(onConstantGrade());
     runFor(60);
 
     const sideways = RC.sim.warnings.filter(w => /sideways/i.test(w));
@@ -3147,11 +3361,12 @@
     // Start high so the drop is legal (from the k=0 station it would go below
     // ground and be silently refused), giving real speed into the turn.
     RC.track.pieces = [];
-    RC.track.start = { i: 4, j: 20, dir: 0, k: 20, g: 0 };
+    RC.track.start = { i: 4, j: 20, dir: 0, k: 28, g: 0 };
     RC.track.head = Object.assign({}, RC.track.start);
     RC.version++;
-    const seq = ['flat-to-gentle-down'].concat(new Array(6).fill('gentle-down'))
-      .concat(['gentle-down-to-flat', 'flat', 'flat', 'flat', 'flat',
+    const seq = ['flat-to-gentle-down', 'gentle-to-medium-down'].concat(new Array(4).fill('medium-down'))
+      .concat(['medium-to-gentle-down', 'gentle-down-to-flat',
+               'flat', 'flat', 'flat', 'flat',
                'turn-right-tight'])          // the turn we will look for
       .concat(['flat', 'flat', 'flat', 'flat']);
     for (const id of seq) {
@@ -3164,7 +3379,7 @@
 
     RC.sim.cars = 1;
     RC.sim.friction = false;
-    RC.resetSim(tiles(1.5));                 // released on the grade, at rest
+    RC.resetSim(onConstantGrade());                 // released on the grade, at rest
     runFor(60);
 
     // The largest lateral g in the whole run should fall within the turn's
@@ -3525,8 +3740,26 @@
 
   section('Sloped turns');
   const TURN_BASES = ['turn-left-tight', 'turn-left-wide', 'turn-right-wide', 'turn-right-tight'];
-  const TURN_GRADES = [['-gentle-down', -2], ['-steep-down', -6],
-                       ['-gentle-up', 2], ['-steep-up', 6]];
+
+  /* Suffix and grade for every sloped variant, taken from the ladder. Written
+     out as literals it said gentle was 2 and steep was 6, which stayed true
+     right up until the ladder gained a rung and halved its level — and then
+     reported a 45 degree piece as sitting 18 degrees off the grade it names,
+     which reads like a geometry bug rather than a stale test. */
+  const TURN_GRADES = [];
+  for (const g of RC.GRADES) {
+    if (!g) continue;
+    const name = RC.slopeName(g).split(' ')[0];
+    TURN_GRADES.push(['-' + name + '-down', -g], ['-' + name + '-up', g]);
+  }
+
+  /* Half the ceiling, in LEVELS: as much room to build downward as upward.
+
+     Tests that start "mid-air" used to say k: 30, which was half the ceiling
+     when a level was a metre and is a quarter of it now — so the ladder down to
+     steep plus a steep quarter turn ran out of ground and the piece was refused,
+     with the test reporting that as a build-rule failure. */
+  const midAir = () => Math.round(RC.MAX_H / 2);
 
   check('every turn has a sloped variant the palette can name', () => {
     // The build palette resolves a turn by appending the slope to the flat id,
@@ -3548,6 +3781,8 @@
     wanted[0] = '';
     wanted[RC.SLOPE.GENTLE] = '-gentle-up';
     wanted[-RC.SLOPE.GENTLE] = '-gentle-down';
+    wanted[RC.SLOPE.MEDIUM] = '-medium-up';
+    wanted[-RC.SLOPE.MEDIUM] = '-medium-down';
     wanted[RC.SLOPE.STEEP] = '-steep-up';
     wanted[-RC.SLOPE.STEEP] = '-steep-down';
 
@@ -3555,13 +3790,15 @@
       [0, []],
       [RC.SLOPE.GENTLE, ['flat-to-gentle-up']],
       [-RC.SLOPE.GENTLE, ['flat-to-gentle-down']],
-      [RC.SLOPE.STEEP, ['flat-to-gentle-up', 'gentle-to-steep-up']],
-      [-RC.SLOPE.STEEP, ['flat-to-gentle-down', 'gentle-to-steep-down']]
+      [RC.SLOPE.MEDIUM, ['flat-to-gentle-up', 'gentle-to-medium-up']],
+      [-RC.SLOPE.MEDIUM, ['flat-to-gentle-down', 'gentle-to-medium-down']],
+      [RC.SLOPE.STEEP, ['flat-to-gentle-up', 'gentle-to-medium-up', 'medium-to-steep-up']],
+      [-RC.SLOPE.STEEP, ['flat-to-gentle-down', 'gentle-to-medium-down', 'medium-to-steep-down']]
     ]) {
       // Tight turns, and starting mid-air: a steep quarter turn moves 14 m of
       // height, so a wide one either digs in or runs past the height cap.
       RC.track.pieces = [];
-      RC.track.start = { i: 8, j: 20, dir: 0, k: 30, g: 0 };
+      RC.track.start = { i: 8, j: 20, dir: 0, k: midAir(), g: 0 };
       RC.track.head = Object.assign({}, RC.track.start);
       RC.version++;
       for (const id of ids) if (!RC.place(id)) return `${id} refused`;
@@ -3595,7 +3832,7 @@
     // turn, so a chain could be chosen and simply never appeared.
     const startOn = g => {
       RC.track.pieces = [];
-      RC.track.start = { i: 8, j: 20, dir: 0, k: 20, g };
+      RC.track.start = { i: 8, j: 20, dir: 0, k: midAir(), g };
       RC.track.head = Object.assign({}, RC.track.start);
       RC.version++;
     };
@@ -3627,7 +3864,7 @@
     RC.build.dir = 'right-tight';
 
     RC.track.pieces = [];
-    RC.track.start = { i: 8, j: 20, dir: 0, k: 20, g: RC.SLOPE.GENTLE };
+    RC.track.start = { i: 8, j: 20, dir: 0, k: midAir(), g: RC.SLOPE.GENTLE };
     RC.track.head = Object.assign({}, RC.track.start);
     RC.version++;
     if (!RC.chainable()) return 'no chain offered on a climbing corner';
@@ -3658,7 +3895,7 @@
     RC.build.dir = 'straight';
 
     RC.track.pieces = [];
-    RC.track.start = { i: 8, j: 20, dir: 0, k: 20, g: RC.SLOPE.GENTLE };
+    RC.track.start = { i: 8, j: 20, dir: 0, k: midAir(), g: RC.SLOPE.GENTLE };
     RC.track.head = Object.assign({}, RC.track.start);
     RC.version++;
 
@@ -3695,9 +3932,11 @@
     runFor(30);
 
     if (!(RC.sim.eMotor > 0)) return 'the chain did no work on a curving lift';
-    // Three quarters at 5 m each, from 5 m up.
-    if (!(RC.sim.maxZ > 18)) {
-      return `the train only got to ${RC.sim.maxZ.toFixed(1)} m, expected about 20`;
+    // Three quarters, each climbing whatever the piece says it climbs.
+    const climb = RC.pieceDef('turn-right-tight-gentle-up').dH;
+    const top = (5 + 3 * climb) * RC.LEVEL_M;
+    if (!(RC.sim.maxZ > top - 2)) {
+      return `the train only got to ${RC.sim.maxZ.toFixed(1)} m, expected about ${top.toFixed(1)}`;
     }
     RC.sim.cars = 4;
   });
@@ -3708,7 +3947,7 @@
     // it lit is how a student sees which corner they are about to get.
     RC.clearSelection();
     RC.track.pieces = [];
-    RC.track.start = { i: 8, j: 20, dir: 0, k: 30, g: 0 };
+    RC.track.start = { i: 8, j: 20, dir: 0, k: midAir(), g: 0 };
     RC.track.head = Object.assign({}, RC.track.start);
     RC.version++;
     if (!RC.place('flat-to-gentle-up')) return 'could not get onto a climb';
@@ -3780,7 +4019,7 @@
 
   check('a sloped turn descends as it curves', () => {
     RC.track.pieces = [];
-    RC.track.start = { i: 20, j: 20, dir: 0, k: 30, g: -RC.SLOPE.GENTLE };
+    RC.track.start = { i: 20, j: 20, dir: 0, k: midAir(), g: -RC.SLOPE.GENTLE };
     RC.track.head = Object.assign({}, RC.track.start);
     RC.version++;
     if (!RC.place('turn-right-wide-gentle-down')) return 'the sloped turn was refused';
@@ -3791,7 +4030,7 @@
       if (pts[n].z > pts[n - 1].z + 1e-9) return `height rose at sample ${n} of a down turn`;
     }
     if (RC.track.head.dir === RC.track.start.dir) return 'the turn did not change heading';
-    if (RC.track.head.k !== 30 + RC.pieceDef('turn-right-wide-gentle-down').dH) {
+    if (RC.track.head.k !== midAir() + RC.pieceDef('turn-right-wide-gentle-down').dH) {
       return `exit is at ${RC.track.head.k}, not the piece's dH below the entry`;
     }
     // Curving AND descending: it must bend in plan as well as drop.
@@ -3804,7 +4043,7 @@
     // The whole reason sloped turns are worth having: a helix is not a special
     // piece, it is four of them in a row.
     RC.track.pieces = [];
-    RC.track.start = { i: 20, j: 20, dir: 0, k: 40, g: -RC.SLOPE.GENTLE };
+    RC.track.start = { i: 20, j: 20, dir: 0, k: midAir(), g: -RC.SLOPE.GENTLE };
     RC.track.head = Object.assign({}, RC.track.start);
     RC.version++;
     const id = 'turn-right-wide-gentle-down';
@@ -3825,7 +4064,7 @@
     // Banking rolls about the tangent and the tangent now pitches, so the two
     // have to compose without tipping the train past its side.
     RC.track.pieces = [];
-    RC.track.start = { i: 20, j: 20, dir: 0, k: 30, g: -RC.SLOPE.STEEP };
+    RC.track.start = { i: 20, j: 20, dir: 0, k: midAir(), g: -RC.SLOPE.STEEP };
     RC.track.head = Object.assign({}, RC.track.start);
     RC.version++;
     if (!RC.place('turn-right-wide-steep-down', { bank: true })) {
@@ -3845,7 +4084,7 @@
 
   check('a train runs a helix with the energy books intact', () => {
     RC.track.pieces = [];
-    RC.track.start = { i: 20, j: 20, dir: 0, k: 40, g: -RC.SLOPE.GENTLE };
+    RC.track.start = { i: 20, j: 20, dir: 0, k: midAir(), g: -RC.SLOPE.GENTLE };
     RC.track.head = Object.assign({}, RC.track.start);
     RC.version++;
     for (let n = 0; n < 4; n++) {
@@ -3862,8 +4101,10 @@
       return `energy does not balance down a helix: total ${e.total.toFixed(0)} vs ` +
              `supplied ${e.supplied.toFixed(0)} J`;
     }
-    // A 32 m drop, so it should be doing about sqrt(2gh) at the bottom.
-    const ideal = Math.sqrt(2 * 9.81 * 32);
+    // Four quarters of whatever the piece drops, so it should be doing about
+    // sqrt(2gh) at the bottom for that h.
+    const fall = 4 * Math.abs(RC.pieceDef('turn-right-wide-gentle-down').dH) * RC.LEVEL_M;
+    const ideal = Math.sqrt(2 * 9.81 * fall);
     if (Math.abs(RC.sim.maxV - ideal) > 1.5) {
       return `bottom speed ${RC.sim.maxV.toFixed(1)} m/s, expected about ${ideal.toFixed(1)}`;
     }
@@ -3876,7 +4117,7 @@
     // the physics differentiates the path and it came out as a one-sample g
     // spike. The height profile eases that away; this pins it shut.
     RC.track.pieces = [];
-    RC.track.start = { i: 20, j: 20, dir: 0, k: 30, g: 0 };
+    RC.track.start = { i: 20, j: 20, dir: 0, k: midAir(), g: 0 };
     RC.track.head = Object.assign({}, RC.track.start);
     RC.version++;
     for (const id of ['flat-to-gentle-down', 'gentle-down',
@@ -3915,12 +4156,13 @@
     const labels = [RC.demo.mainLabel].concat(RC.demo.trains.map(t => t.label));
     for (let n = 0; n < paths.length; n++) {
       const pts = paths[n].pts;
+      // Both in levels: pts[].z and the demo's start k count the same thing.
       if (!near(pts[0].z, RC.demo.drop, 1e-9)) {
-        return `${labels[n]} starts at ${pts[0].z} m, not ${RC.demo.drop}`;
+        return `${labels[n]} starts at level ${pts[0].z}, not ${RC.demo.drop}`;
       }
       let low = Infinity;
       for (const p of pts) low = Math.min(low, p.z);
-      if (!near(low, 0, 1e-9)) return `${labels[n]} bottoms out at ${low} m, not 0`;
+      if (!near(low, 0, 1e-9)) return `${labels[n]} bottoms out at level ${low}, not 0`;
       if (!near(pts[pts.length - 1].z, 0, 1e-9)) {
         return `${labels[n]} does not finish at ground level`;
       }
@@ -3982,7 +4224,9 @@
     for (let n = 0; n < speeds.length; n++) {
       if (speeds[n] === null) return `${labels[n]} never reached the bottom`;
     }
-    const ideal = Math.sqrt(2 * 9.81 * RC.demo.drop);
+    // demo.drop is the start node's k, so it counts LEVELS; v = sqrt(2gh)
+    // wants the height in metres.
+    const ideal = Math.sqrt(2 * 9.81 * RC.demo.drop * RC.LEVEL_M);
     for (let n = 0; n < speeds.length; n++) {
       if (Math.abs(speeds[n] - ideal) > 0.2) {
         return `${labels[n]} arrived at ${speeds[n].toFixed(2)} m/s, ` +

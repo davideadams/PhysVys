@@ -8,10 +8,12 @@
    - The turn icons use the same arc geometry as the pieces they build. Tight
      turns sweep a full 90 degrees at a small radius; wide turns sweep 45 at a
      large one, so the wider turn visibly bends less over the same distance.
-   - The slope icons are drawn at the real angles: gentle is atan(2/6) = 18
-     degrees and steep is atan(6/6) = 45, matching the 2 and 6 levels per tile
-     the track model uses against a 6 m tile. The icon is a scale drawing of the
-     thing it builds, so it has to be redrawn if TILE_M ever moves again. */
+   - The slope icons are drawn at the real angles: a grade of g levels per tile
+     is atan(g * LEVEL_M / TILE_M), so with 0.5 m levels against a 6 m tile
+     gentle (2) is 9.5 degrees, medium (4) is 18.4 and steep (12) is 45. The
+     icon is a scale drawing of the thing it builds, so all three have to be
+     redrawn if either scale moves again — as they did when the level halved and
+     the old gentle drawing became the medium one. */
 (function () {
   const RC = window.RC || (window.RC = {});
 
@@ -53,12 +55,27 @@
       head('21 12 L15.8 9 L15.8 15')
     ),
 
-    // 1 in 3: gentle, 18 degrees.
+    /* These are SCALE DRAWINGS of the pieces they build, so they move whenever
+       the grade ladder does. Arrowheads are placed in the line's own frame —
+       tip 4.43 along it, base corners 1.01 along and 2.91 either side — which
+       is what keeps them looking like one set at three different angles. */
+
+    // 1 in 6: gentle, 9.5 degrees.
     'slope-gentle-up': svg(
+      `<path d="M4 13 L16 11"/>` +
+      head('20.4 10.3 L17.5 13.7 L16.5 8.0')
+    ),
+    'slope-gentle-down': svg(
+      `<path d="M4 11 L16 13"/>` +
+      head('20.4 13.7 L17.5 10.3 L16.5 16.0')
+    ),
+
+    // 1 in 3: medium, 18.4 degrees.
+    'slope-medium-up': svg(
       `<path d="M4 14 L16 10"/>` +
       head('20.2 8.6 L17.9 12.4 L16 6.9')
     ),
-    'slope-gentle-down': svg(
+    'slope-medium-down': svg(
       `<path d="M4 10 L16 14"/>` +
       head('20.2 15.4 L17.9 11.6 L16 17.1')
     ),

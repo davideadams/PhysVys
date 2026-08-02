@@ -540,6 +540,86 @@
     return res.ok;
   }
 
+  /* Tracks that this build can no longer open, said out loud once on startup.
+
+     Not window.alert. On a shared classroom login that fires for every student
+     at the start of every lesson, in front of a track they cannot see yet, and
+     it has to be dismissed before the page will do anything — which teaches
+     people to dismiss it without reading. A banner sits there until it is
+     acknowledged, and the park is usable behind it.
+
+     Dismissal is remembered, so it is a message rather than a nag. The button
+     that removes the stale tracks is separate and never automatic: a student
+     may want to know the name of what they lost even when nothing can be done
+     for it, and deleting someone's work to tidy up after ourselves is not a
+     trade we get to make on their behalf. */
+  const NOTICE_DISMISSED = 'physvys.rc.stale.seen';
+
+  function showSaveNotice(restoreFailed) {
+    const el = document.getElementById('save-notice');
+    if (!el) return;
+
+    let stale = [];
+    try { stale = RC.staleSaves ? RC.staleSaves() : []; } catch (e) { stale = []; }
+    if (!stale.length && !restoreFailed) { el.hidden = true; return; }
+
+    // The signature of what is stale, so a notice dismissed today does not
+    // stay dismissed when a different track goes bad tomorrow.
+    const key = stale.map(n => n === null ? '(unfinished track)' : n).join('|');
+    let seen = null;
+    try { seen = window.localStorage.getItem(NOTICE_DISMISSED); } catch (e) { seen = null; }
+    if (seen === key && !restoreFailed) { el.hidden = true; return; }
+
+    const named = stale.filter(n => n !== null);
+    const hadAuto = stale.some(n => n === null);
+    const bits = [];
+    if (hadAuto) bits.push('the track you were part way through');
+    if (named.length) {
+      bits.push(named.length === 1
+        ? `your saved track “${named[0]}”`
+        : `${named.length} of your saved tracks (${named.join(', ')})`);
+    }
+
+    let msg;
+    if (bits.length) {
+      msg = `The track pieces changed shape in this version, so ${bits.join(' and ')} ` +
+            `cannot be opened any more. Nothing has been deleted.`;
+    } else {
+      msg = `The track you were part way through could not be opened: ${restoreFailed}. ` +
+            `Nothing has been deleted.`;
+    }
+
+    el.innerHTML = '';
+    const p = document.createElement('span');
+    p.textContent = msg;
+    el.appendChild(p);
+
+    if (stale.length) {
+      const drop = document.createElement('button');
+      drop.type = 'button';
+      drop.className = 'notice-btn';
+      drop.textContent = stale.length === 1 ? 'Remove it' : 'Remove them';
+      drop.addEventListener('click', () => {
+        try { RC.dropStaleSaves(); } catch (e) { /* nothing more to do */ }
+        refreshTrackList(presetSelect);
+        el.hidden = true;
+      });
+      el.appendChild(drop);
+    }
+
+    const ok = document.createElement('button');
+    ok.type = 'button';
+    ok.className = 'notice-btn';
+    ok.textContent = !stale.length ? 'OK' : (stale.length === 1 ? 'Keep it' : 'Keep them');
+    ok.addEventListener('click', () => {
+      try { window.localStorage.setItem(NOTICE_DISMISSED, key); } catch (e) { /* fine */ }
+      el.hidden = true;
+    });
+    el.appendChild(ok);
+
+    el.hidden = false;
+  }
+
   function setBuildMessage(text) {
     const el = document.getElementById('build-msg');
     if (el) el.textContent = text || '';
@@ -684,14 +764,15 @@
      what the student came back for. A save that cannot be read is not worth
      breaking the page over: the default ride is already standing behind it. */
   let opening = DEFAULT_TRACK;
+  let restoreFailed = '';
   try {
     if (RC.hasAutosave && RC.hasAutosave()) {
       const back = RC.restoreAutosave();
       if (back.ok) opening = '';
-      else console.warn('Could not restore the last track:', back.why);
+      else restoreFailed = back.why;
     }
   } catch (e) {
-    console.warn('Could not restore the last track:', e);
+    restoreFailed = (e && e.message) || String(e);
   }
 
   RC.initBuild();
@@ -700,6 +781,7 @@
   RC.initControls();
   initTrackList(opening);
   updateRideUI();
+  showSaveNotice(restoreFailed);
   // Whatever ended up standing — the default ride or a half-built track from
   // last visit — is what the page should open looking at. A track built
   // against an edge of the park is nowhere near the middle of it.

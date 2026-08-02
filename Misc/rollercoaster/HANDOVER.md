@@ -178,9 +178,11 @@ Three separate things read it, which is why it's worth guarding:
   banking needed no changes to the force maths at all.
 
 It is computed in **metres**, not in mixed tile/level coordinates. A tile is 6 m
-across and a level is 1 m tall, so computing the tangent in raw coordinates would
-flatten every pitch angle by a factor of six — cars would tilt, just visibly too
-little, which reads as a styling choice rather than a bug.
+across and a level is 0.5 m tall, so computing the tangent in raw coordinates
+would exaggerate every pitch angle by a factor of twelve — cars would tilt, just
+far too much, which reads as a styling choice rather than a bug. (It used to be
+a factor of six the other way, when a level was a metre; the point is that the
+two units are not interchangeable, whichever way round they happen to sit.)
 
 Sign convention, verified by test: a right turn from heading `+i` curves towards
 `+j`, so `+j` is the rider's right and `r` must come out as `(0,1,0)` when `f` is

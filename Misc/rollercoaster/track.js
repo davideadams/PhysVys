@@ -7,13 +7,37 @@
   const D = [[1, 0], [0, 1], [-1, 0], [0, -1]];
   RC.DIRS = D;
 
-  /* Slope is measured in height levels per tile, signed by travel direction.
-     One tile is 6 m and one level is 1 m, so GENTLE is atan(2/6) = 18 deg and
-     STEEP is atan(6/6) = 45 deg. Both squarely realistic — 45 is a classic
-     first-drop angle. The grades are in levels PER TILE, so they are unchanged
-     by the tile scale; only the angle they work out to moves. */
-  const FLAT = 0, GENTLE = 2, STEEP = 6;
-  const MAX_H = 60;
+  /* Slope in height levels per tile, signed by travel direction. A tile is 6 m
+     and a level is 0.5 m, so a grade of g works out to atan(g/12):
+
+       GENTLE  2  ->  9.5 deg    1 in 6
+       MEDIUM  4  -> 18.4 deg    1 in 3
+       STEEP  12  -> 45.0 deg    1 in 1     — the classic first-drop angle
+
+     Four grades a student names, and no fifth one hidden behind them. The
+     ladder is not a free choice: a transition out of FLAT gets no help from the
+     (1 + z'^2) term that eases the steeper ones, so at one tile it can only
+     reach atan(1/6) before it starts bending tighter than 20 m. That fixes the
+     first rung at 9.5 degrees, and the same argument fixes the second at 18.4.
+     Only the last step is big enough to need two tiles.
+
+     The grades are in levels PER TILE, so the tile scale does not move them —
+     only the angle they work out to. */
+  const FLAT = 0, GENTLE = 2, MEDIUM = 4, STEEP = 12;
+
+  /* No transition may bend tighter than this, in metres. It is the number the
+     piece lengths are solved from rather than a check on them, so changing a
+     grade re-sizes its transitions instead of quietly making them sharper.
+     20 m carries 20.7 m/s before a crest passes the airtime limit, which clears
+     everything the presets reach and everything the turns are headed for. */
+  const MIN_TRANS_R = 18;
+
+  /* 120 levels is still 60 m. Deliberately far more height than the catalogue
+     can carry honestly — a 60 m drop is 34 m/s, and the pieces are good for
+     20.7 — because building something far too fast and reading the report tell
+     you WHY is the exercise. The Shape section names the piece that cannot take
+     it; the ceiling is not the place to prevent it. */
+  const MAX_H = 120;
   RC.MAX_H = MAX_H;
 
   /* Banking is a single angle, applied to turns only. A lone banked turn rolls
@@ -50,12 +74,58 @@
   }
   RC.bankedTurnDir = bankedTurnDir;
 
-  /* A piece's height gain is the integral of its slope profile. Ramping the
-     slope linearly from gIn to gOut over L tiles gives L*(gIn+gOut)/2, which
-     is an integer for every combination below — that is why GENTLE and STEEP
-     are even numbers, and it is what keeps the track snapped to the grid. */
+  /* A piece's height gain is the integral of its slope profile, which whatever
+     shape that profile takes averages to (gIn+gOut)/2 — so dH is L*(gIn+gOut)/2
+     and lands on a whole level for every combination below. That is why GENTLE
+     and STEEP are even numbers, and it is what keeps the track on the grid.
+
+     LENGTH IS SET BY THE GRADE CHANGE: one tile per level of it. A transition
+     bends by its grade change spread over its length, so pricing length that way
+     lands every transition on the SAME curvature — flat to gentle and gentle to
+     steep are equally tight, and so are their concave and convex versions.
+
+     That last part is the point. A palette where a convex transition and a
+     concave one of the same grade change had different lengths would be a
+     palette a student has to memorise rather than reason about, and the whole
+     argument for tile-based building is that the pieces behave predictably.
+     Constant-grade pieces have no grade change, so they take the floor of one
+     tile. */
+  /* Tiles a transition needs, solved from MIN_TRANS_R rather than written down.
+
+     Its slope ramps from gIn to gOut through a smoothstep, so the curvature it
+     reaches peaks at 1.5x the mean rate of that ramp, eased by (1 + z'^2)^1.5
+     where z' is the slope at the tightest point — which is why a piece bending
+     between two steep grades needs less length than the same bend near level:
+     45 degree track covers 8.5 m per tile against flat track's 6, so the same
+     turn of the tangent spreads over more of it.
+
+     The peak is FOUND, not assumed to be at the middle. z'' does peak there,
+     but (1 + z'^2)^1.5 grows right through the piece, so on a large grade change
+     the tightest point sits earlier — where the bend is slightly gentler but the
+     slope has not yet arrived to ease it. Assuming the midpoint put
+     medium-to-steep at 20.8 m when it is really 18.9, which is the sort of error
+     that makes a stated minimum a fiction.
+
+     One tile everywhere except MEDIUM <-> STEEP, which needs two. */
+  function transitionTiles(gIn, gOut) {
+    const dg = gOut - gIn;
+    if (!dg) return 1;
+    let peak = 0;
+    for (let n = 0; n <= 100; n++) {
+      const t = n / 100;
+      // Slope, and the rate it is changing, at t — for a single tile.
+      const g = gIn + dg * t * t * (3 - 2 * t);
+      const dgdt = dg * 6 * (t - t * t);
+      const zp = g * RC.LEVEL_M / RC.TILE_M;
+      const zpp = dgdt * RC.LEVEL_M / (RC.TILE_M * RC.TILE_M);
+      peak = Math.max(peak, Math.abs(zpp) / Math.pow(1 + zp * zp, 1.5));
+    }
+    return Math.max(1, Math.ceil(peak * MIN_TRANS_R));
+  }
+  RC.transitionTiles = transitionTiles;
+
   function straight(id, label, gIn, gOut, extra) {
-    const L = 1;
+    const L = transitionTiles(gIn, gOut);
     return Object.assign({
       id, label, kind: 'straight', gIn, gOut, L,
       dH: L * (gIn + gOut) / 2
@@ -63,19 +133,23 @@
   }
 
   /* Quarter turns. The exit lands on an edge midpoint only when the radius is
-     a half-integer number of tiles, so the usable radii are 1.5 (6 m) and
-     2.5 (10 m).
+     a half-integer number of tiles, so the usable radii are 1.5 (9 m) and
+     2.5 (15 m).
 
      A turn can be sloped, which is how track curves during a drop — and it is
      what makes a helix nothing more special than four of them in a row.
 
-     Four of them in a row is also as much helix as anyone should build. A
-     helix turning through PHI at pitch theta drops r*PHI*sin(theta), so
-     v^2 = 2g*r*PHI*sin(theta) and the lateral v^2/r = 2g*PHI*sin(theta): the
-     radius cancels. A full circle at the shallowest grade here is 5.6 g at
-     the bottom whatever radius it is drawn at, and widening it does nothing
-     at all. A quarter turn on the same grade is 1.4 g. So a curving drop is
-     a quarter or two, and a full 360 is not a design that can be rescued.
+     Four of them in a row is also as much helix as anyone should build. A helix
+     turning through PHI at pitch theta drops r*PHI*tan(theta), so
+     v^2 = 2g*r*PHI*tan(theta) and the lateral v^2/r = 2g*PHI*tan(theta): THE
+     RADIUS CANCELS. In g that is 2*PHI*tan(theta), so a full circle costs
+
+       gentle  2.1 g      medium  4.2 g      steep  12.6 g
+
+     at the bottom whatever radius it is drawn at, and widening it does nothing
+     at all. The same figures for a quarter turn are 0.5, 1.0 and 3.1 g. So a
+     curving drop is a quarter or two, and a full 360 on anything but the
+     gentlest grade is not a design that can be rescued.
 
      The compromise is in dH. Track has to land on whole levels or it leaves
      the grid, but the honest drop through a quarter circle is its horizontal
@@ -109,8 +183,10 @@
   ];
   const TURN_SLOPES = [
     { suffix: 'gentle-down', g: -GENTLE, label: 'gentle down' },
+    { suffix: 'medium-down', g: -MEDIUM, label: 'medium down' },
     { suffix: 'steep-down',  g: -STEEP,  label: 'steep down' },
     { suffix: 'gentle-up',   g: GENTLE,  label: 'gentle up' },
+    { suffix: 'medium-up',   g: MEDIUM,  label: 'medium up' },
     { suffix: 'steep-up',    g: STEEP,   label: 'steep up' }
   ];
 
@@ -147,17 +223,26 @@
      r(phi) = A + B cos phi          A = R(1+a)/2,  B = R(1-a)/2
      u(phi) = A sin phi + B(phi/2 + sin 2phi / 4)
      w(phi) = A(1 - cos phi) + B sin^2 phi / 2      peaks at w(pi) = R(1+a) */
-  /* Tiles advanced. Three, not four, since the tile became 6 m: the teardrop's
-     own forward reach is B*pi, about 7.2 m, and loopDrift has to smear whatever
-     the footprint asks for beyond that across the bottom of the loop. Four tiles
-     of 6 m meant smearing 16.9 m instead of the 8.9 m it was tuned for, which
-     stretched the bottom enough that the top stopped being the tightest part of
-     the shape — it stopped being a teardrop. Three tiles asks for 10.8 m, close
-     to the original. Growing LOOP_R to 10 m would fix it more thoroughly by
-     making the shape itself reach further; that is TODO.md phase 6. */
-  const LOOP_LEN = 3;      // tiles advanced
+  /* A 7 m loop was not a loop anyone could ride. Its top radius was 2.45 m, so
+     it needed 4.9 m/s up there to hold the train on and therefore about 14.5 m/s
+     at the bottom — while the shape itself only stayed inside the g limits to
+     9.7 m/s. There was NO SPEED at which it both stayed on and stayed legal, and
+     that is not a ride that can be tuned, only replaced.
+
+     At 10 m the window exists: a 3.5 m top needs 5.9 m/s, so 17.3 m/s at the
+     bottom, and 5 g at the bottom is not reached until 19.8 m/s. Narrow, but a
+     real target a student can aim a lift hill at — which is the exercise.
+     13.5 m tall, and 5.1 g at the bottom at 20 m/s against 6.8 g before.
+
+     LOOP_LEN follows from it. The footprint has to hold 2R = 20 m, so four tiles
+     of 6 m rather than three. That costs shape: the teardrop's own forward reach
+     is B*pi, about 10.2 m, and loopDrift smears the remaining 13.8 m across the
+     bottom, more than the 10.8 m that phase 1 already found marginal. Watch the
+     teardrop test — if the top stops being the tightest part of the curve, this
+     is why. */
+  const LOOP_LEN = 4;      // tiles advanced
   const LOOP_LAT = 1;      // tiles sideways
-  const LOOP_R = 7;        // metres — the bottom radius of curvature
+  const LOOP_R = 10;       // metres — the bottom radius of curvature
   const LOOP_A = 0.35;     // top radius = LOOP_A * R; the teardrop's pointiness
   RC.LOOP_R = LOOP_R;
   RC.LOOP_A = LOOP_A;
@@ -177,6 +262,8 @@
 
     straight('gentle-up', 'Gentle up', GENTLE, GENTLE, { liftable: true }),
     straight('gentle-down', 'Gentle down', -GENTLE, -GENTLE),
+    straight('medium-up', 'Medium up', MEDIUM, MEDIUM, { liftable: true }),
+    straight('medium-down', 'Medium down', -MEDIUM, -MEDIUM),
     straight('steep-up', 'Steep up', STEEP, STEEP, { liftable: true }),
     straight('steep-down', 'Steep down', -STEEP, -STEEP),
 
@@ -185,10 +272,15 @@
     straight('flat-to-gentle-down', 'Flat → gentle down', FLAT, -GENTLE),
     straight('gentle-down-to-flat', 'Gentle down → flat', -GENTLE, FLAT),
 
-    straight('gentle-to-steep-up', 'Gentle → steep up', GENTLE, STEEP, { liftable: true }),
-    straight('steep-to-gentle-up', 'Steep → gentle up', STEEP, GENTLE, { liftable: true }),
-    straight('gentle-to-steep-down', 'Gentle → steep down', -GENTLE, -STEEP),
-    straight('steep-to-gentle-down', 'Steep → gentle down', -STEEP, -GENTLE),
+    straight('gentle-to-medium-up', 'Gentle → medium up', GENTLE, MEDIUM, { liftable: true }),
+    straight('medium-to-gentle-up', 'Medium → gentle up', MEDIUM, GENTLE, { liftable: true }),
+    straight('gentle-to-medium-down', 'Gentle → medium down', -GENTLE, -MEDIUM),
+    straight('medium-to-gentle-down', 'Medium → gentle down', -MEDIUM, -GENTLE),
+
+    straight('medium-to-steep-up', 'Medium → steep up', MEDIUM, STEEP, { liftable: true }),
+    straight('steep-to-medium-up', 'Steep → medium up', STEEP, MEDIUM, { liftable: true }),
+    straight('medium-to-steep-down', 'Medium → steep down', -MEDIUM, -STEEP),
+    straight('steep-to-medium-down', 'Steep → medium down', -STEEP, -MEDIUM),
 
     turn('turn-left-tight', 'Left, tight', -1, 1.5),
     turn('turn-right-tight', 'Right, tight', 1, 1.5),
@@ -207,14 +299,36 @@
   RC.PIECES = PIECES;
   RC.pieceDef = id => BY_ID.get(id);
 
-  RC.SLOPE = { FLAT, GENTLE, STEEP };
+  RC.SLOPE = { FLAT, GENTLE, MEDIUM, STEEP };
+  RC.MIN_TRANS_R = MIN_TRANS_R;
+  /* Every grade a piece may sit at, shallowest first — the ladder, in one
+     place, so the palette and the route search do not each keep their own. */
+  RC.GRADES = [FLAT, GENTLE, MEDIUM, STEEP];
+
+  /* What one press actually commits, for the pieces where that stopped being
+     obvious. Transitions are now as long as their grade change, so choosing
+     "steep" from flat lays two tiles and 2 m of climb, then four tiles and 16 m
+     more — a quarter of the way to the ceiling from two clicks. Better said
+     before the press than discovered after it. */
+  RC.pieceCost = function (def) {
+    if (!def || def.kind !== 'straight') return '';
+    const parts = [];
+    if (def.L > 1) parts.push(`${def.L} tiles`);
+    if (def.dH) {
+      parts.push(`${def.dH > 0 ? '+' : '−'}${Math.abs(def.dH) * RC.LEVEL_M} m`);
+    }
+    return parts.join(', ');
+  };
 
   /* Human-readable slope, for the status bar and palette grouping. */
+  const GRADE_NAME = {};
+  GRADE_NAME[GENTLE] = 'gentle';
+  GRADE_NAME[MEDIUM] = 'medium';
+  GRADE_NAME[STEEP] = 'steep';
+
   RC.slopeName = function (g) {
     if (g === 0) return 'flat';
-    const dir = g > 0 ? 'up' : 'down';
-    const mag = Math.abs(g) === GENTLE ? 'gentle' : (Math.abs(g) === STEEP ? 'steep' : '?');
-    return mag + ' ' + dir;
+    return (GRADE_NAME[Math.abs(g)] || '?') + ' ' + (g > 0 ? 'up' : 'down');
   };
 
   /* ---- geometry -------------------------------------------------------
@@ -307,20 +421,57 @@
     return (2 * k * t - 3 * k) * t * t + m * t;
   }
 
-  /* Normalised height profile: 0 at t=0, 1 at t=1, with end slopes in the
-     ratio gIn : gOut so slope stays continuous across joints. */
-  function heightFrac(def, t) {
-    if (def.kind === 'turn' && def.dH !== 0) return turnHeightFrac(def, t);
+  /* Height gained by parameter t, in LEVELS, on a straight piece.
+
+     The slope ramps from gIn to gOut through a SMOOTHSTEP rather than linearly.
+     That is the whole of the change, and everything else follows from it:
+
+       g(t)    = a + (b - a)(3t^2 - 2t^3)
+       rise(t) = L * ( a*t + (b - a)(t^3 - t^4/2) )
+
+     Curvature is proportional to the rate the slope changes, so ramping
+     linearly — as this used to — meant a piece held a CONSTANT non-zero
+     curvature from end to end and stepped to it at both joints. A rider felt
+     the full force of a transition arrive instantly and leave the same way, and
+     the measurements bear that out: 1.76 g at once on First Drop, with nothing
+     leading up to it. No real track is built that way.
+
+     A smoothstep starts and ends at zero rate, so the piece has zero curvature
+     at both ends and meets constant-grade track — which is also zero — with no
+     step at all. Not a smaller step: none.
+
+     The integral of a smoothstep over [0,1] is exactly 1/2, so rise(1) is
+     L*(a+b)/2 = dH exactly, whatever a and b are. The piece still lands on the
+     grid and the node model never notices.
+
+     It costs 1.5x in peak curvature — the same total slope change now happens
+     through a profile that starts and ends at zero, and the peak of that is 1.5
+     times its mean. The lengths above pay for it and then some: flat to gentle
+     went from an 18 m radius over one tile to 25 m over two.
+
+     Working in rise rather than a normalised 0-to-1 fraction also fixes a real
+     limitation. A fraction has to be scaled by dH, so a piece whose ends are at
+     the SAME height — a crest, gentle up to gentle down — could only ever come
+     out flat. Height is integrated here instead, so dH falls out of it rather
+     than being assumed non-zero. */
+  function riseAt(def, t) {
     const a = def.gIn, b = def.gOut;
-    const denom = (a + b) / 2;
-    if (Math.abs(denom) < 1e-9) return t;   // flat piece, or dH === 0
-    return (a * t + (b - a) * t * t / 2) / denom;
+    return def.L * (a * t + (b - a) * (t * t * t - t * t * t * t / 2));
   }
+  RC.riseAt = riseAt;
+
+  /* The slope, in levels per tile, at parameter t. The derivative of the above
+     divided by L — quoted directly because the curvature readout and the tests
+     both want the grade at a point rather than the height. */
+  function gradeAt(def, t) {
+    const a = def.gIn, b = def.gOut;
+    return a + (b - a) * t * t * (3 - 2 * t);
+  }
+  RC.gradeAt = gradeAt;
 
   /* Centreline point at parameter t in [0, 1].
      Returns continuous tile coords (x, y) and height in levels (z). */
   RC.centreline = function (def, node, t) {
-    const z = node.k + def.dH * heightFrac(def, t);
     const E = entryPoint(node);
     if (def.kind === 'loop') {
       const d = D[node.dir];
@@ -347,8 +498,14 @@
     }
     if (def.kind === 'straight') {
       const d = D[node.dir];
-      return { x: E.x + d[0] * def.L * t, y: E.y + d[1] * def.L * t, z };
+      return {
+        x: E.x + d[0] * def.L * t,
+        y: E.y + d[1] * def.L * t,
+        z: node.k + riseAt(def, t)
+      };
     }
+    // A turn holds one grade, so its own profile is only ever about absorbing
+    // the rounding in dH; a flat turn has none to absorb.
     const dir2 = (node.dir + def.turn + 4) & 3;
     const u = D[node.dir], v = D[dir2];
     const C = { x: E.x + def.R * v[0], y: E.y + def.R * v[1] };
@@ -357,39 +514,51 @@
     return {
       x: C.x + def.R * (-v[0] * c + u[0] * s),
       y: C.y + def.R * (-v[1] * c + u[1] * s),
-      z
+      z: node.k + (def.dH === 0 ? 0 : def.dH * turnHeightFrac(def, t))
     };
   };
 
-  /* Path length in metres. Loops are measured by sampling, since their
-     centreline isn't a shape with a closed-form length. */
-  RC.pieceLength = function (def) {
-    if (def.kind === 'loop') {
-      const node = { i: 10, j: 10, dir: 0, k: 10, g: def.gIn };
-      let total = 0, prev = RC.centreline(def, node, 0);
-      for (let n = 1; n <= 96; n++) {
-        const c = RC.centreline(def, node, n / 96);
-        total += Math.hypot(
-          (c.x - prev.x) * RC.TILE_M,
-          (c.y - prev.y) * RC.TILE_M,
-          (c.z - prev.z) * RC.LEVEL_M
-        );
-        prev = c;
-      }
-      return total;
+  /* Path length in metres.
+
+     Measured by sampling for anything whose grade changes along it, which is
+     loops and every transition. The closed form below is hypot(run, rise), and
+     that is the length of the straight LINE between the ends — right only while
+     the grade is constant. It was near enough when a transition was one tile;
+     it is not now, and it never described a crest at all, whose ends are at the
+     same height while the track between them plainly is not level. */
+  function sampledLength(def, samples) {
+    const node = { i: 10, j: 10, dir: 0, k: 10, g: def.gIn };
+    let total = 0, prev = RC.centreline(def, node, 0);
+    for (let n = 1; n <= samples; n++) {
+      const c = RC.centreline(def, node, n / samples);
+      total += Math.hypot(
+        (c.x - prev.x) * RC.TILE_M,
+        (c.y - prev.y) * RC.TILE_M,
+        (c.z - prev.z) * RC.LEVEL_M
+      );
+      prev = c;
     }
-    const horiz = def.kind === 'straight'
-      ? def.L * RC.TILE_M
-      : def.R * RC.TILE_M * Math.PI / 2;
-    const rise = def.dH * RC.LEVEL_M;
-    return Math.hypot(horiz, rise);
+    return total;
+  }
+
+  RC.pieceLength = function (def) {
+    if (def.kind === 'loop') return sampledLength(def, 96);
+    if (def.kind === 'straight') {
+      if (def.gIn === def.gOut) {
+        return Math.hypot(def.L * RC.TILE_M, def.dH * RC.LEVEL_M);
+      }
+      return sampledLength(def, 24 * def.L);
+    }
+    return Math.hypot(def.R * RC.TILE_M * Math.PI / 2, def.dH * RC.LEVEL_M);
   };
 
   /* Tiles the piece passes over, by sampling the centreline. Used for bounds
      checks, collision and (later) support placement. */
   RC.pieceTiles = function (def, node) {
     const seen = new Map();
-    const N = def.kind === 'straight' ? 8 : (def.kind === 'loop' ? 48 : 20);
+    // Per TILE, not per piece: a four-tile transition sampled eight times could
+    // step clean over a tile it passes through and call the ground free.
+    const N = def.kind === 'straight' ? 8 * def.L : (def.kind === 'loop' ? 48 : 20);
     for (let s = 0; s <= N; s++) {
       const p = RC.centreline(def, node, s / N);
       const i = Math.floor(p.x), j = Math.floor(p.y);
@@ -432,7 +601,9 @@
     for (let pi = 0; pi < pieces.length; pi++) {
       const p = pieces[pi];
       const def = BY_ID.get(p.defId);
-      const n = def.kind === 'straight' ? 8 : (def.kind === 'loop' ? 64 : 24);
+      // Per tile for straights, so a long transition's curvature is resolved as
+      // finely as a short one's rather than being averaged into a smooth lie.
+      const n = def.kind === 'straight' ? 8 * def.L : (def.kind === 'loop' ? 64 : 24);
 
       // Hold full bank across joints where a banked turn meets another banked
       // turn going the same way, so a multi-piece turn banks as one.
@@ -957,11 +1128,11 @@
      immediately behind the head is skipped, because neighbouring pieces
      legitimately share their joint tile. Without both of those, ordinary
      S-bends and U-turns would be refused. */
-  const CLEARANCE = 3;   // levels = metres
+  const CLEARANCE = 6;   // levels — 3 m, as it has always been
 
   function interiorCells(def, node) {
     const cells = [];
-    const n = def.kind === 'straight' ? 10 : 24;
+    const n = def.kind === 'straight' ? 10 * def.L : 24;
     for (let q = 0; q <= n; q++) {
       const t = q / n;
       if (t < 0.2 || t > 0.8) continue;
@@ -1112,7 +1283,12 @@
      while a tile is 4 m — it was multiplying tiles as though they were metres.
      At 6 m tiles it under-capped badly enough to clamp the default 7 m loop
      down to 6 m. Both directions now go through TILE_M. */
-  const LOOP_R_MIN = 5, LOOP_R_MAX = 12, LOOP_R_STEP = 1;
+  /* The range a built loop may be resized through. LOOP_R_MAX has to leave the
+     default loop room to GROW past its own footprint, or "a loop at the end
+     grows its footprint" stops being a thing that can happen: at 4 tiles the
+     footprint holds 2R = 24 m, so a 12 m ceiling meant the biggest loop fitted
+     exactly and the footprint never moved. 15 m needs five tiles. */
+  const LOOP_R_MIN = 5, LOOP_R_MAX = 15, LOOP_R_STEP = 1;
   RC.LOOP_R_MIN = LOOP_R_MIN;
   RC.LOOP_R_MAX = LOOP_R_MAX;
   RC.LOOP_R_STEP = LOOP_R_STEP;
@@ -1261,11 +1437,13 @@
   /* Only plain geometry — no stations, brakes or launches in a filler run. */
   const ROUTE_IDS = [
     'flat',
-    'gentle-up', 'gentle-down', 'steep-up', 'steep-down',
+    'gentle-up', 'gentle-down', 'medium-up', 'medium-down', 'steep-up', 'steep-down',
     'flat-to-gentle-up', 'gentle-up-to-flat',
     'flat-to-gentle-down', 'gentle-down-to-flat',
-    'gentle-to-steep-up', 'steep-to-gentle-up',
-    'gentle-to-steep-down', 'steep-to-gentle-down',
+    'gentle-to-medium-up', 'medium-to-gentle-up',
+    'gentle-to-medium-down', 'medium-to-gentle-down',
+    'medium-to-steep-up', 'steep-to-medium-up',
+    'medium-to-steep-down', 'steep-to-medium-down',
     'turn-left-wide', 'turn-right-wide', 'turn-left-tight', 'turn-right-tight'
   ];
 
@@ -1276,8 +1454,26 @@
     return 1;
   }
 
+  /* Both are ceilings on what ONE piece in ROUTE_IDS can do, and the A*
+     heuristic divides by them. Understating either makes the heuristic
+     overestimate the pieces still needed, which stops it being admissible and
+     lets the search settle for a worse route than it could have found.
+
+     Read off the catalogue rather than written down, since the ladder has moved
+     twice now and a stale literal fails silently — the route still works, it is
+     just needlessly long, which is exactly the sort of thing nobody notices. */
   const MAX_ADVANCE = 5;   // best Manhattan tile gain from one piece (wide turn)
-  const MAX_CLIMB = 6;     // best height change from one piece (steep)
+  let maxClimb = 0;
+  function MAX_CLIMB() {
+    if (!maxClimb) {
+      for (const id of ROUTE_IDS) {
+        const def = BY_ID.get(id);
+        if (def) maxClimb = Math.max(maxClimb, Math.abs(def.dH));
+      }
+      maxClimb = maxClimb || 1;
+    }
+    return maxClimb;
+  }
 
   function Heap() { this.a = []; }
   Heap.prototype.push = function (item) {
@@ -1326,7 +1522,7 @@
 
     const heuristic = n => Math.max(
       (Math.abs(n.i - target.i) + Math.abs(n.j - target.j)) / MAX_ADVANCE,
-      Math.abs(n.k - target.k) / MAX_CLIMB
+      Math.abs(n.k - target.k) / MAX_CLIMB()
     );
 
     const open = new Heap();

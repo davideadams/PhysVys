@@ -13,7 +13,15 @@
 (function () {
   const RC = window.RC || (window.RC = {});
 
-  const S = { STEEP_DOWN: -6, GENTLE_DOWN: -2, LEVEL: 0, GENTLE_UP: 2, STEEP_UP: 6 };
+  /* Read off the track model rather than written down. The grades moved when
+     the height level halved, and a palette carrying its own copy of them would
+     have gone on offering pieces that no longer exist. */
+  const G = RC.SLOPE;
+  const S = {
+    STEEP_DOWN: -G.STEEP, MEDIUM_DOWN: -G.MEDIUM, GENTLE_DOWN: -G.GENTLE,
+    LEVEL: G.FLAT,
+    GENTLE_UP: G.GENTLE, MEDIUM_UP: G.MEDIUM, STEEP_UP: G.STEEP
+  };
 
   const DIRECTIONS = [
     { id: 'left-tight',  icon: 'dir-left-tight',  label: 'Tight left',  piece: 'turn-left-tight' },
@@ -25,9 +33,11 @@
 
   const SLOPES = [
     { g: S.STEEP_DOWN,  icon: 'slope-steep-down',  label: 'Steep down' },
+    { g: S.MEDIUM_DOWN, icon: 'slope-medium-down', label: 'Medium down' },
     { g: S.GENTLE_DOWN, icon: 'slope-gentle-down', label: 'Gentle down' },
     { g: S.LEVEL,       icon: 'slope-level',       label: 'Level' },
     { g: S.GENTLE_UP,   icon: 'slope-gentle-up',   label: 'Gentle up' },
+    { g: S.MEDIUM_UP,   icon: 'slope-medium-up',   label: 'Medium up' },
     { g: S.STEEP_UP,    icon: 'slope-steep-up',    label: 'Steep up' }
   ];
 
@@ -155,8 +165,10 @@
      that grade before it can curve along it. */
   const TURN_SUFFIX = {};
   TURN_SUFFIX[S.GENTLE_DOWN] = '-gentle-down';
+  TURN_SUFFIX[S.MEDIUM_DOWN] = '-medium-down';
   TURN_SUFFIX[S.STEEP_DOWN] = '-steep-down';
   TURN_SUFFIX[S.GENTLE_UP] = '-gentle-up';
+  TURN_SUFFIX[S.MEDIUM_UP] = '-medium-up';
   TURN_SUFFIX[S.STEEP_UP] = '-steep-up';
 
   /* What would "build" place, for a given selection?
@@ -516,7 +528,8 @@
           ? def.label + (sel.bank && canBank ? ', banked' : '')
           : '—';
       }
-      if (whyEl) whyEl.textContent = check.ok ? '' : check.why;
+      // When it can be built, the line that would say why not says what it costs.
+      if (whyEl) whyEl.textContent = check.ok ? RC.pieceCost(def) : check.why;
       if (buildBtn) {
         buildBtn.disabled = !check.ok;
         buildBtn.textContent = 'Build this';
