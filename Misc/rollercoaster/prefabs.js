@@ -47,14 +47,19 @@
          THE CORNERS ARE AT HEIGHT AND THE HILLS ARE AT THE BOTTOM, and that is
          the whole shape of the ride rather than a detail of it.
 
-         A 15 m corner is 1.5 g sideways at 14.8 m/s, which is the limit the
-         report judges a student by, and banking does not rescue a corner taken
-         faster: the bank ramps in over the first quarter of the piece while the
-         curvature arrives in full at the joint, so the ENTRY of a banked turn
-         is an unbanked turn. (Phase 4's spiral easements fix that by tying bank
-         to curvature; until then it is a real constraint on layout.) 14.8 m/s
-         is 11 m of drop, so every corner here sits 10 m up, where the train has
-         used most of its height and is slow.
+         A wide corner bends at 12.4 m, which is 1.5 g sideways at 13.5 m/s
+         unbanked — the limit the report judges a student by. 13.5 m/s is 9 m of
+         drop, so every corner here sits 10 m up, where the train has used most
+         of its height and is slow.
+
+         Banking now rescues a corner taken faster, which it did not when this
+         was laid out: bank used to ramp in over the first quarter of the piece
+         while the curvature arrived in full at the joint, so the ENTRY of a
+         banked turn was an unbanked turn and a 15 m corner at 19.8 m/s spiked
+         to 2.7 g however well it was banked. Phase 4 ties bank to curvature and
+         that is gone — the two banked corners here are 0.4 g. The layout is
+         kept anyway, because corners at height and hills at the bottom is a
+         good ride and not merely a workaround, but it is now a choice.
 
          Airtime wants the opposite. A crest bends at about 24 m, so it only
          lifts a rider out of their seat above sqrt(gR) = 15.4 m/s — and a train

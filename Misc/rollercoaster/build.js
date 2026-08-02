@@ -23,12 +23,19 @@
     GENTLE_UP: G.GENTLE, MEDIUM_UP: G.MEDIUM, STEEP_UP: G.STEEP
   };
 
+  /* Ordered by how hard each one bends, tightest at the outside: the further a
+     button sits from Straight, the further the track swings away from it. The
+     middle turn used to be labelled just "Left" and "Right", which was fine
+     with two sizes and is not with three — the labels say the same word as the
+     piece ids now, so the palette and the piece list agree. */
   const DIRECTIONS = [
-    { id: 'left-tight',  icon: 'dir-left-tight',  label: 'Tight left',  piece: 'turn-left-tight' },
-    { id: 'left-wide',   icon: 'dir-left-wide',   label: 'Left',        piece: 'turn-left-wide' },
-    { id: 'straight',    icon: 'dir-straight',    label: 'Straight',    piece: null },
-    { id: 'right-wide',  icon: 'dir-right-wide',  label: 'Right',       piece: 'turn-right-wide' },
-    { id: 'right-tight', icon: 'dir-right-tight', label: 'Tight right', piece: 'turn-right-tight' }
+    { id: 'left-tight',     icon: 'dir-left-tight',     label: 'Tight left',     piece: 'turn-left-tight' },
+    { id: 'left-wide',      icon: 'dir-left-wide',      label: 'Wide left',      piece: 'turn-left-wide' },
+    { id: 'left-sweeping',  icon: 'dir-left-sweeping',  label: 'Sweeping left',  piece: 'turn-left-sweeping' },
+    { id: 'straight',       icon: 'dir-straight',       label: 'Straight',       piece: null },
+    { id: 'right-sweeping', icon: 'dir-right-sweeping', label: 'Sweeping right', piece: 'turn-right-sweeping' },
+    { id: 'right-wide',     icon: 'dir-right-wide',     label: 'Wide right',     piece: 'turn-right-wide' },
+    { id: 'right-tight',    icon: 'dir-right-tight',    label: 'Tight right',    piece: 'turn-right-tight' }
   ];
 
   const SLOPES = [

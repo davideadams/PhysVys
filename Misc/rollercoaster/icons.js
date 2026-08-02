@@ -5,9 +5,12 @@
 
    Two things are deliberate rather than decorative:
 
-   - The turn icons use the same arc geometry as the pieces they build. Tight
-     turns sweep a full 90 degrees at a small radius; wide turns sweep 45 at a
-     large one, so the wider turn visibly bends less over the same distance.
+   - The three turn icons are arcs of the SAME LENGTH at increasing radius, so
+     each visibly bends less than the last over the same distance travelled —
+     which is the whole of what the three sizes mean. They are ordered, not
+     scale drawings: the radii here are 7, 15 and 26 against real ones in the
+     ratio 1 : 1.67 : 2.33, because a literal drawing of a sweeping turn is
+     nearly a straight line in a 24-pixel box.
    - The slope icons are drawn at the real angles: a grade of g levels per tile
      is atan(g * LEVEL_M / TILE_M), so with 0.5 m levels against a 6 m tile
      gentle (2) is 9.5 degrees, medium (4) is 18.4 and steep (12) is 45. The
@@ -47,6 +50,17 @@
     'dir-left-wide': svg(
       `<path d="M12 20 A15 15 0 0 0 7.6 9.4"/>` +
       head('4.1 5.9 L9.7 7.3 L5.5 11.5')
+    ),
+
+    // 24 degrees of a radius-26 arc: the same 11 units of travel again, barely
+    // leaning off straight.
+    'dir-right-sweeping': svg(
+      `<path d="M12 20 A26 26 0 0 1 14.25 9.42"/>` +
+      head('16.26 4.90 L16.96 10.63 L11.53 8.22')
+    ),
+    'dir-left-sweeping': svg(
+      `<path d="M12 20 A26 26 0 0 0 9.75 9.42"/>` +
+      head('7.74 4.90 L12.47 8.22 L7.04 10.63')
     ),
 
     /* ---- slope, seen from the side, travelling left to right ------------ */

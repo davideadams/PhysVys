@@ -40,39 +40,131 @@
   const MAX_H = 120;
   RC.MAX_H = MAX_H;
 
-  /* Banking is a single angle, applied to turns only. A lone banked turn rolls
-     in and out within itself so it joins level track at both ends. But a run
-     of banked turns in the SAME direction — two quarter turns making a 180°,
-     say — must hold full bank across the joints between them; ramping down to
-     level in the middle and back up is wrong and jarring. So the ramp at each
-     end is suppressed when the neighbour on that side is a same-direction
-     banked turn (see rampFlags in trackPath). Bank still returns to level
-     wherever a banked run ends, so it never enters the node state. */
+  /* Smootherstep: 0 to 1 with zero FIRST AND SECOND derivative at both ends.
+     Used wherever a correction has to be blended into a piece without leaving a
+     curvature step where it starts and finishes. */
+  function smootherstep(t) { return t * t * t * (t * (6 * t - 15) + 10); }
+
+  /* ---- eased turns -------------------------------------------------------
+     A quarter turn is a SPIRAL - ARC - SPIRAL, not a circular arc. Its
+     curvature ramps linearly from zero to 1/R over the first spiral, holds
+     through the middle, and ramps back to zero over the last, so the piece
+     meets straight track with NO STEP in curvature. That is the lateral
+     equivalent of what the smoothstep slope profile does for crests and
+     valleys, and it is the reason spirals exist on real railways.
+
+     The turn is still symmetric and still exactly 90°, so the exit is still
+     E + T*(u + v) and the node model, the collision checker and the auto-closer
+     never learn about it. T stays the grid parameter; the RADIUS becomes an
+     output, and a smaller one — which is the entire price of the change.
+
+     THETA is the deflection each spiral does. More easement means lower jerk
+     and a tighter radius, and lateral g is the binding constraint on every turn
+     in the catalogue, so this is deliberately modest: 0.2 rad is 11.5°, so a
+     quarter of the bend is eased and three quarters is still constant radius. */
+  const SPIRAL_THETA = 0.2;
+  const SPIRAL_LS = 2 * SPIRAL_THETA;                 // spiral length, in radii
+  const SPIRAL_S = Math.PI / 2 + 2 * SPIRAL_THETA;    // whole turn, in radii
+
+  /* Where the entry spiral has reached after arc length s, in radii, measured
+     from its start with the heading along +x.
+
+     A clothoid has no closed form and the usual answer is a precomputed Fresnel
+     table. It needs none HERE, because THETA is one small global constant: the
+     heading psi = s^2/(2*Ls) never exceeds 0.2 rad, so expanding cos and sin as
+     power series and integrating term by term gives
+
+       x = s - s^5/(40 Ls^2) + s^9/(3456 Ls^4) - ...
+       y = s^3/(6 Ls) - s^7/(336 Ls^3) + s^11/(42240 Ls^5) - ...
+
+     and the terms kept are already good to about 1e-9 of a radius — the next
+     one is 3e-9. So the spiral stays closed-form and centreline stays cheap
+     enough for the sampling loops that call it.
+
+     That accuracy is not a nicety. curvInside measures a piece's curvature from
+     three centreline points a thousandth of a parameter apart, so an
+     interpolated table would be read across the chords between its own knots
+     and would report a turn as dead straight. */
+  function spiralPoint(s) {
+    const L2 = SPIRAL_LS * SPIRAL_LS, L4 = L2 * L2;
+    const s2 = s * s, s3 = s2 * s, s5 = s3 * s2, s7 = s5 * s2, s9 = s7 * s2;
+    return {
+      x: s - s5 / (40 * L2) + s9 / (3456 * L4),
+      y: s3 / (6 * SPIRAL_LS) - s7 / (336 * L2 * SPIRAL_LS)
+         + s9 * s2 / (42240 * L4 * SPIRAL_LS)
+    };
+  }
+
+  /* The entry spiral's far end, the centre of the constant-radius arc that
+     follows it, and TAU — the ratio between the grid parameter T and the radius
+     the turn actually achieves.
+
+     TAU comes from the shape's own symmetry rather than from integrating the
+     whole of it. The curve is symmetric under (x, y) -> (TAU - y, TAU - x),
+     which maps its start onto its end, so applying that to the point where the
+     entry spiral finishes gives TAU = x1 + y1 + cos(THETA) - sin(THETA)
+     outright. At 0.2 rad that is 1.20639, so R = 0.8289 T: a tight turn is
+     7.46 m rather than 9, and a wide one 12.43 m rather than 15. */
+  const SPIRAL_END = spiralPoint(SPIRAL_LS);
+  const SPIRAL_CX = SPIRAL_END.x - Math.sin(SPIRAL_THETA);
+  const SPIRAL_CY = SPIRAL_END.y + Math.cos(SPIRAL_THETA);
+  const SPIRAL_TAU = SPIRAL_END.x + SPIRAL_END.y
+                   + Math.cos(SPIRAL_THETA) - Math.sin(SPIRAL_THETA);
+  RC.SPIRAL_THETA = SPIRAL_THETA;
+  RC.SPIRAL_TAU = SPIRAL_TAU;
+
+  /* A unit-radius quarter turn: the point at arc length s along it, starting at
+     the origin heading +x and finishing at (TAU, TAU) heading +y. */
+  function turnPoint(s) {
+    if (s <= SPIRAL_LS) return spiralPoint(s);
+    if (s >= SPIRAL_S - SPIRAL_LS) {
+      const p = spiralPoint(SPIRAL_S - s);       // the exit spiral, mirrored
+      return { x: SPIRAL_TAU - p.y, y: SPIRAL_TAU - p.x };
+    }
+    const psi = SPIRAL_THETA + (s - SPIRAL_LS);
+    return { x: SPIRAL_CX + Math.sin(psi), y: SPIRAL_CY - Math.cos(psi) };
+  }
+
+  /* How much of its full curvature the turn has reached at arc length s: zero
+     at both ends, one through the middle, linear across each spiral. */
+  function turnKappa(s) {
+    if (s <= SPIRAL_LS) return s / SPIRAL_LS;
+    if (s >= SPIRAL_S - SPIRAL_LS) return (SPIRAL_S - s) / SPIRAL_LS;
+    return 1;
+  }
+
+  /* What a turn IS, as against what the grid asked for: the radius it reaches
+     and the horizontal distance it covers, both in tiles. def.R is the grid
+     parameter T and is no longer a radius — every reader that wants one of
+     these should say so. */
+  RC.turnRadius = def => def.R / SPIRAL_TAU;
+  RC.turnRun = def => def.R * SPIRAL_S / SPIRAL_TAU;
+
+  /* Banking is a single angle, applied to turns only, and its profile is now
+     simply how much of its curvature the turn has reached — so the train rolls
+     into the bend THROUGH the spiral, arriving at full bank exactly when the
+     full sideways force does.
+
+     It used to be a ramp of its own, a smoothstep over the first and last
+     quarter of the piece, and that was wrong in a way that measured. Curvature
+     arrived in full at the joint while the bank was still rolling in, so the
+     entry of a banked turn was, for a fifth of a second, an UNBANKED turn: a
+     15 m corner taken at 19.8 m/s spiked to 2.7 g however well it was banked,
+     and layout had to be arranged around it. Tying bank to curvature also makes
+     "a banked piece starts and finishes level" a consequence of the geometry
+     rather than a rule kept by hand, so bank still never enters the node state.
+
+     A run of same-direction turns no longer needs special handling, and no
+     longer gets it. Two eased quarters genuinely do go straight for an instant
+     between them, so rolling level there is the honest thing to draw. It also
+     rides worse than one continuous 180° would, which is what phase 5 is for. */
   const BANK_ANGLE = 45 * Math.PI / 180;
   RC.BANK_ANGLE = BANK_ANGLE;
 
-  /* Bank fraction at parameter t. rampIn/rampOut default true (a lone turn);
-     pass false for an end that abuts a same-direction banked turn, so the
-     bank stays full through that joint. */
-  function bankProfile(t, rampIn, rampOut) {
-    if (rampIn === undefined) rampIn = true;
-    if (rampOut === undefined) rampOut = true;
-    const ramp = 0.25;
-    let f = 1;
-    if (rampIn && t < ramp) f = Math.min(f, t / ramp);
-    if (rampOut && t > 1 - ramp) f = Math.min(f, (1 - t) / ramp);
-    f = Math.min(1, Math.max(0, f));
-    return f * f * (3 - 2 * f);
+  function bankProfile(t) {
+    return turnKappa(t * SPIRAL_S);
   }
   RC.bankProfile = bankProfile;
-
-  /* Is this placed piece a banked turn, and which way does it turn? */
-  function bankedTurnDir(pieceEntry) {
-    if (!pieceEntry || !pieceEntry.bank) return 0;
-    const def = BY_ID.get(pieceEntry.defId);
-    return (def && def.kind === 'turn') ? def.turn : 0;
-  }
-  RC.bankedTurnDir = bankedTurnDir;
 
   /* A piece's height gain is the integral of its slope profile, which whatever
      shape that profile takes averages to (gIn+gOut)/2 — so dH is L*(gIn+gOut)/2
@@ -132,9 +224,11 @@
     }, extra || {});
   }
 
-  /* Quarter turns. The exit lands on an edge midpoint only when the radius is
-     a half-integer number of tiles, so the usable radii are 1.5 (9 m) and
-     2.5 (15 m).
+  /* Quarter turns. R here is the GRID PARAMETER T, not the radius: the exit
+     lands on an edge midpoint only when it is a half-integer number of tiles,
+     so the usable values are 1.5 (9 m across) and 2.5 (15 m). The turn is eased
+     (see the spiral block above), so the radius it actually reaches is T/TAU —
+     7.46 m and 12.43 m. RC.turnRadius is the one to ask.
 
      A turn can be sloped, which is how track curves during a drop — and it is
      what makes a helix nothing more special than four of them in a row.
@@ -152,13 +246,24 @@
      gentlest grade is not a design that can be rescued.
 
      The compromise is in dH. Track has to land on whole levels or it leaves
-     the grid, but the honest drop through a quarter circle is its horizontal
-     arc times the slope, R*(pi/2)*g, which is never a whole number. Each piece
-     takes the nearest one, so its real pitch misses the slope it is named for
-     by at most 1.4 degrees — the tight gentle turn, worst of the eight; every
-     other combination is inside half a degree. That is small enough not to
-     read as a kink where it joins straight track of the same slope, and far
-     smaller than the error in pretending a coaster is a bead on a wire. */
+     the grid, but the honest drop through a quarter turn is its horizontal
+     distance times the slope, which is never a whole number. Each piece takes
+     the nearest one, so its average pitch misses the slope it is named for by
+     at most 1.4 degrees — the tight medium turn, worst of the twelve; every
+     other combination is inside a degree. That is small enough not to read as a
+     kink where it joins straight track of the same slope, and far smaller than
+     the error in pretending a coaster is a bead on a wire. turnHeightFrac
+     absorbs it in the middle of the piece, so both ENDS sit at exactly the
+     named grade whatever the rounding did.
+
+     dH is still measured against the pi/2*T circle the turn used to be, not
+     against the 4% longer path easement gives it, and that is deliberate.
+     It is a GRID quantity — which whole number of levels a piece moves the head
+     by — so re-deriving it would change the node graph, break every saved track
+     for a second time in two commits, and make phase 5's swap of two quarters
+     for one 180 stop adding up. What the piece is named for is carried by its
+     end grades, which are exact; what the grid needs is a number that does not
+     move. */
   function turn(id, label, dir, R, g) {
     g = g || FLAT;
     return {
@@ -171,15 +276,36 @@
     };
   }
 
-  /* The sloped variants of each turn, named <turn>-<slope>. Generated rather
-     than written out: it is the same four shapes against the same four slopes,
-     and spelling out sixteen near-identical lines invites one of them to be
+  /* Three sizes, and the names are the ids so the palette and the piece list
+     cannot drift apart. T goes up in whole tiles because it must stay a
+     half-integer, which makes the ladder even; what a rider feels does not,
+     because radius sets the sideways force and easing scales it by 1/TAU:
+
+       tight     T 1.5   9 m across    R  7.5 m   1.5 g at 10.5 m/s
+       wide      T 2.5  15 m           R 12.4 m   1.5 g at 13.5 m/s
+       sweeping  T 3.5  21 m           R 17.4 m   1.5 g at 16.0 m/s
+
+     Not "medium", deliberately, and not "small/medium/large": the grade ladder
+     already has a MEDIUM in it, and a sloped turn's name is its size plus its
+     grade, so that would have produced "Right, medium, medium down" in the
+     palette. Tight, wide and sweeping are what the shapes are called anyway.
+
+     4.5 tiles is available and would give a 22.4 m radius, but it is 27 m of
+     park across a 240 m one — a preset side is 12 to 15 tiles, so two of them
+     would eat most of a leg. 3.5 is the largest that still leaves a circuit
+     room to have anything else in it.
+
+     The sloped variants are named <turn>-<slope> and generated rather than
+     written out: it is the same six shapes against the same six slopes, and
+     spelling out thirty-six near-identical lines invites one of them to be
      quietly wrong. */
   const TURN_SHAPES = [
-    { id: 'turn-left-tight',  label: 'Left, tight',  dir: -1, R: 1.5 },
-    { id: 'turn-right-tight', label: 'Right, tight', dir:  1, R: 1.5 },
-    { id: 'turn-left-wide',   label: 'Left, wide',   dir: -1, R: 2.5 },
-    { id: 'turn-right-wide',  label: 'Right, wide',  dir:  1, R: 2.5 }
+    { id: 'turn-left-tight',     label: 'Left, tight',      dir: -1, R: 1.5 },
+    { id: 'turn-right-tight',    label: 'Right, tight',     dir:  1, R: 1.5 },
+    { id: 'turn-left-wide',      label: 'Left, wide',       dir: -1, R: 2.5 },
+    { id: 'turn-right-wide',     label: 'Right, wide',      dir:  1, R: 2.5 },
+    { id: 'turn-left-sweeping',  label: 'Left, sweeping',   dir: -1, R: 3.5 },
+    { id: 'turn-right-sweeping', label: 'Right, sweeping',  dir:  1, R: 3.5 }
   ];
   const TURN_SLOPES = [
     { suffix: 'gentle-down', g: -GENTLE, label: 'gentle down' },
@@ -286,6 +412,8 @@
     turn('turn-right-tight', 'Right, tight', 1, 1.5),
     turn('turn-left-wide', 'Left, wide', -1, 2.5),
     turn('turn-right-wide', 'Right, wide', 1, 2.5),
+    turn('turn-left-sweeping', 'Left, sweeping', -1, 3.5),
+    turn('turn-right-sweeping', 'Right, sweeping', 1, 3.5),
 
     loop('loop-left', 'Loop, exits left', -1),
     loop('loop-right', 'Loop, exits right', 1),
@@ -311,9 +439,18 @@
      more — a quarter of the way to the ceiling from two clicks. Better said
      before the press than discovered after it. */
   RC.pieceCost = function (def) {
-    if (!def || def.kind !== 'straight') return '';
+    if (!def) return '';
     const parts = [];
-    if (def.L > 1) parts.push(`${def.L} tiles`);
+    // A turn's name says how wide it is across the grid, which since the turns
+    // were eased is no longer the radius it bends at — and the radius is what
+    // decides the sideways force, so it is the number worth saying out loud.
+    if (def.kind === 'turn') {
+      parts.push(`${(RC.turnRadius(def) * RC.TILE_M).toFixed(1)} m radius`);
+    } else if (def.kind !== 'straight') {
+      return '';
+    } else if (def.L > 1) {
+      parts.push(`${def.L} tiles`);
+    }
     if (def.dH) {
       parts.push(`${def.dH > 0 ? '+' : '−'}${Math.abs(def.dH) * RC.LEVEL_M} m`);
     }
@@ -396,9 +533,8 @@
   const LOOP_DRIFT_TAU = 0.25;
   function loopDrift(t) {
     const tau = LOOP_DRIFT_TAU;
-    const sr = x => x * x * x * (x * (6 * x - 15) + 10);
-    if (t < tau) return 0.5 * sr(t / tau);
-    if (t > 1 - tau) return 0.5 + 0.5 * sr((t - (1 - tau)) / tau);
+    if (t < tau) return 0.5 * smootherstep(t / tau);
+    if (t > 1 - tau) return 0.5 + 0.5 * smootherstep((t - (1 - tau)) / tau);
     return 0.5;
   }
 
@@ -409,16 +545,28 @@
      and at 20 m/s that is a 2.3 g spike on the trace, in and out within one
      sample. It looked like a fault in the ride and was really a fault here.
 
-     So shape the descent as a cubic that LEAVES AND ARRIVES at exactly the
-     declared grade and absorbs the rounding in the middle instead, where it
-     amounts to a few centimetres of extra dip spread over the whole piece.
-     h(t) = 2(m-1)t^3 - 3(m-1)t^2 + mt, where m is the grade's own drop as a
-     fraction of the rounded one: h(0)=0, h(1)=1, h'(0)=h'(1)=m. */
+     So carry the rounding on a SMOOTHERSTEP, which is zero to one with zero
+     first and second derivative at both ends, and let the grade itself carry
+     the rest:
+
+       h(t) = m*t + (1 - m) * smootherstep(t)
+
+     where m is the grade's own drop as a fraction of the rounded one. h(0)=0,
+     h(1)=1 and h'(0)=h'(1)=m, so the piece leaves and arrives at exactly the
+     declared grade — and h''(0)=h''(1)=0, so it also leaves and arrives with no
+     VERTICAL curvature, matching the constant-grade track either side of it
+     with no step at all.
+
+     That second derivative is why this is no longer the cubic it was. A cubic
+     can match the grade at both ends but not the curvature, so it left a step
+     of about 0.45 g at 20 m/s at the joints of a sloped turn — small, and
+     easily the largest thing left once the turn's own lateral step was eased
+     away. There is no reason for the last step on the track to be an artefact
+     of rounding. */
   function turnHeightFrac(def, t) {
-    const natural = def.R * Math.PI / 2 * def.gIn;   // levels the grade alone gives
+    const natural = RC.turnRun(def) * def.gIn;   // levels the grade alone gives
     const m = natural / def.dH;
-    const k = m - 1;
-    return (2 * k * t - 3 * k) * t * t + m * t;
+    return m * t + (1 - m) * smootherstep(t);
   }
 
   /* Height gained by parameter t, in LEVELS, on a straight piece.
@@ -504,16 +652,22 @@
         z: node.k + riseAt(def, t)
       };
     }
-    // A turn holds one grade, so its own profile is only ever about absorbing
-    // the rounding in dH; a flat turn has none to absorb.
+    /* An eased quarter turn, laid out along the entry direction u and the exit
+       direction v: the unit shape runs from (0, 0) to (TAU, TAU) in those two
+       axes, so scaling by R = T/TAU lands the exit on E + T*(u + v) exactly,
+       whichever way the turn goes. t is uniform in ARC LENGTH, as it was for
+       the circle, which is what lets the height profile below reason about
+       grade at all.
+
+       A turn holds one grade, so that profile is only ever about absorbing the
+       rounding in dH; a flat turn has none to absorb. */
     const dir2 = (node.dir + def.turn + 4) & 3;
     const u = D[node.dir], v = D[dir2];
-    const C = { x: E.x + def.R * v[0], y: E.y + def.R * v[1] };
-    const th = t * Math.PI / 2;
-    const c = Math.cos(th), s = Math.sin(th);
+    const R = def.R / SPIRAL_TAU;
+    const P = turnPoint(t * SPIRAL_S);
     return {
-      x: C.x + def.R * (-v[0] * c + u[0] * s),
-      y: C.y + def.R * (-v[1] * c + u[1] * s),
+      x: E.x + R * (u[0] * P.x + v[0] * P.y),
+      y: E.y + R * (u[1] * P.x + v[1] * P.y),
       z: node.k + (def.dH === 0 ? 0 : def.dH * turnHeightFrac(def, t))
     };
   };
@@ -549,7 +703,10 @@
       }
       return sampledLength(def, 24 * def.L);
     }
-    return Math.hypot(def.R * RC.TILE_M * Math.PI / 2, def.dH * RC.LEVEL_M);
+    // A turn: horizontal arc R*(pi/2 + 2*THETA) — the constant-radius middle
+    // plus the two spirals, which each turn THETA at half the full curvature
+    // and so are twice as long as the arc that would do the same.
+    return Math.hypot(RC.turnRun(def) * RC.TILE_M, def.dH * RC.LEVEL_M);
   };
 
   /* Tiles the piece passes over, by sampling the centreline. Used for bounds
@@ -603,13 +760,10 @@
       const def = BY_ID.get(p.defId);
       // Per tile for straights, so a long transition's curvature is resolved as
       // finely as a short one's rather than being averaged into a smooth lie.
-      const n = def.kind === 'straight' ? 8 * def.L : (def.kind === 'loop' ? 64 : 24);
-
-      // Hold full bank across joints where a banked turn meets another banked
-      // turn going the same way, so a multi-piece turn banks as one.
-      const dir = bankedTurnDir(p);
-      const rampIn = dir === 0 || bankedTurnDir(pieces[pi - 1]) !== dir;
-      const rampOut = dir === 0 || bankedTurnDir(pieces[pi + 1]) !== dir;
+      // A turn now spends its first and last fifth ramping curvature in and
+      // out, so it is sampled more finely than the circle needed: 32 puts six
+      // points across each spiral rather than four.
+      const n = def.kind === 'straight' ? 8 * def.L : (def.kind === 'loop' ? 64 : 32);
 
       for (let q = 0; q <= n; q++) {
         if (q === 0 && pi > 0) continue;            // joint shared with previous piece
@@ -622,9 +776,10 @@
             (c.z - prev.z) * RC.LEVEL_M
           );
         }
-        // Signed by turn direction: a right turn banks to the right.
+        // Signed by turn direction: a right turn banks to the right, and rolls
+        // in exactly as fast as the curvature does.
         const bank = p.bank && def.kind === 'turn'
-          ? def.turn * BANK_ANGLE * bankProfile(t, rampIn, rampOut)
+          ? def.turn * BANK_ANGLE * bankProfile(t)
           : 0;
         pts.push({ x: c.x, y: c.y, z: c.z, s, pi, t, bank, piece: p, def });
         prev = c;
@@ -1434,7 +1589,13 @@
      heuristic counting the fewest pieces that could possibly cover the
      remaining distance is admissible. */
 
-  /* Only plain geometry — no stations, brakes or launches in a filler run. */
+  /* Only plain geometry — no stations, brakes or launches in a filler run.
+
+     The sweeping turn is deliberately NOT here. Every id in this list widens
+     the search and raises MAX_ADVANCE, which the heuristic divides by — a
+     3.5-tile piece would weaken it by 40% and slow every auto-close, to offer a
+     corner too big to be much use in the short hop this is asked to find. The
+     filler's job is to close a circuit, not to design one. */
   const ROUTE_IDS = [
     'flat',
     'gentle-up', 'gentle-down', 'medium-up', 'medium-down', 'steep-up', 'steep-down',

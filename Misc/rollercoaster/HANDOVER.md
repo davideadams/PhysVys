@@ -224,8 +224,11 @@ If a display and the physics ever disagree, the physics is right.
       with no special-casing. Slopes are levels per tile — `GENTLE = 2` (27°),
       `STEEP = 6` (56°) — chosen **even** so that every height change
       `L*(gIn+gOut)/2` is an integer and the track stays grid-snapped. Quarter
-      turns use **half-integer radii** (1.5 and 2.5 tiles) because that is the only
-      way the arc's exit lands on a tile edge midpoint. Shipped: flat, gentle,
+      turns span a **half-integer number of tiles** (1.5, 2.5 and 3.5 — tight,
+      wide and sweeping) because that is the only way the exit lands on a tile
+      edge midpoint. That span, `def.R`, was the radius until the turns were
+      eased; it is now the grid parameter and `RC.turnRadius` is what bends, at
+      7.5, 12.4 and 17.4 m. Shipped: flat, gentle,
       steep, all four transitions each way, four quarter turns, station, brake,
       launch, chain-lift flag, undo, clear, circuit/shuttle status.
 - [x] **Phase 3 — Track rendering.** Chunky rails over a spine, sleepers coloured
@@ -287,21 +290,28 @@ The RCT-faithful alternative (bank as a fourth node dimension with explicit
 transitions) roughly triples the piece count for a difference students would not
 see.
 
-The bank ramp is **neighbour-aware** (`bankProfile(t, rampIn, rampOut)` in
-`track.js`, fed from `trackPath`). A lone banked turn ramps in and out within
-itself. But a run of banked turns in the *same direction* — two quarter turns
-making a 180°, say — holds full bank across the joints between them; the ramp at
-an end is suppressed when the neighbour on that side is a same-direction banked
-turn. An S-bend (opposite directions) still rolls through level at the joint,
-because it must. Getting this wrong (the original per-piece version) made a 180°
-flatten out in the middle and roll back up, which is jarring — there are tests
-for both cases now.
+**The bank profile is the curvature profile** (`bankProfile` in `track.js`): a
+turn is a spiral–arc–spiral, and the bank at any point is simply the fraction of
+its full curvature the turn has reached there. So the train rolls into the bend
+through the spiral and is at full bank exactly when the full sideways force is,
+which is the engineering reason spirals exist. Starting and finishing level falls
+out of the geometry rather than being a rule kept by hand.
+
+It used to be a ramp of its own, neighbour-aware so that a run of same-direction
+turns held full bank across the joints between them. That was wrong in a way that
+measured: the curvature arrived in one step at the joint while the bank was still
+rolling in, so the entry of a banked turn was, for a fifth of a second, an
+unbanked turn — a 15 m corner at 19.8 m/s spiked to 2.7 g however well it was
+banked. The neighbour-awareness went with it, because two eased quarters
+genuinely do go straight for an instant between them; the 180° that should be
+there instead is phase 5's job, not the bank profile's.
 
 The g-force maths needed **no changes at all**, because banking is a roll of the
 car frame and the forces were already a projection onto that frame.
 
-Numbers worth knowing: on a 6 m turn at 10 m/s, flat gives 1.70 g sideways;
-banked gives 0.49 g sideways and 1.91 g vertical. The *total* force is unchanged —
+Numbers worth knowing: on a tight turn (7.5 m radius) at 10 m/s, flat gives
+1.37 g sideways; banked gives 0.26 g sideways and 1.67 g vertical. The *total*
+force is unchanged —
 banking redirects it, it does not reduce it, and a test asserts that. At the ideal
 speed `v = √(rg)` lateral cancels entirely and vertical is exactly `1/cos 45°`,
 which is the banked-curve relationship from

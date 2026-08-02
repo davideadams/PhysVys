@@ -1,6 +1,6 @@
 # Geometry refactor: honest track at a workable scale
 
-Status: **Phases 1, 2, 3 and most of 6 done. Phases 4 and 5 not started.** The numbers below are
+Status: **Phases 1, 2, 3, 4 and most of 6 done. Phase 5 not started.** The numbers below are
 calculated but only cross-checked by hand — the sim is its own test rig, so
 expect to verify rather than trust. Phase 1 needed three corrections that the
 arithmetic had not predicted; they are recorded under it as a warning about how
@@ -249,6 +249,13 @@ reduced by `cos 45`:
 | tight, 9 m | 11.5 m/s | **16.6 m/s** |
 | wide, 15 m | 14.9 m/s | **21.4 m/s** |
 
+*Partly taken. `first-drop` banks its two fast corners; `gentle-hills` and
+`looper` still do not, and should. The radii here are pre-phase-4 — a tight turn
+is 7.46 m now and a wide one 12.43, so both columns come down by 9%. The banked
+column is also no longer an overstatement: until phase 4 the bank ramped in over
+the first quarter of the piece while the curvature arrived in full at the joint,
+so those figures were only true from a fifth of a second in.*
+
 Vertical at that speed is 2.9 g, well inside. Banking the preset turns closes
 most of the honesty gap on First Drop and Gentle Hills today.
 
@@ -408,18 +415,153 @@ valley only reaches 5 g at 4.0.
   `every slope can be reached from level in single steps`, `holding a slope
   selection walks up through the transitions`.
 
-## Phase 4 — spiral-eased turns
+## Phase 4 — spiral-eased turns — **DONE**
 
-**Baseline to beat, as of the end of phase 3.** Turn radii have not moved since
-the 6 m tile: 9 m tight, 15 m wide, binding at 11.5 and 14.9 m/s. Transitions
-are now 18.9 to 26.3 m, good for 19.7 to 22.5 m/s. So **every preset should now
-be limited by a turn** — confirm that from the Shape sections before starting,
-and the same reading afterwards is the measure of whether this phase worked.
+**Baseline it had to beat, as of the end of phase 3.** Turn radii had not moved
+since the 6 m tile: 9 m tight, 15 m wide, binding at 11.5 and 14.9 m/s.
+Transitions were 18.9 to 26.3 m, good for 19.7 to 22.5 m/s. So every preset was
+limited by a turn.
 
+### What it changed
 
-Quarter turns become **spiral–arc–spiral**: curvature ramps linearly 0 to 1/R,
+Quarter turns are **spiral–arc–spiral**: curvature ramps linearly 0 to 1/R,
 holds, ramps back to 0. Still symmetric, still exactly 90 deg, so the exit is
-still `E + T*(u + v)` and `exitNode` does not change.
+still `E + T*(u + v)`, `exitNode` did not change and **no saved track breaks**.
+
+`def.R` is now the grid parameter `T` and is no longer a radius. `RC.turnRadius`
+and `RC.turnRun` are what a reader should ask; the build window quotes the radius
+because that is what decides the sideways force, and it is not the number in the
+piece's name.
+
+**Two steps were removed, not reduced.** The turn's own lateral step is zero,
+because the spiral starts at zero curvature and constant-grade track is zero
+too. And `turnHeightFrac` — the profile that absorbs the rounding in a sloped
+turn's `dH` — went from a cubic to `m*t + (1-m)*smootherstep(t)`, which matches
+the *second* derivative at both ends as well as the first. The cubic left about
+0.45 g at 20 m/s at each joint of a sloped turn, which was the largest thing
+remaining once the lateral step was eased away.
+
+**`dH` was deliberately left alone.** An eased turn covers 4% more ground than
+the pi/2*T circle it replaces, so re-deriving `dH` from the real arc would move
+three of the twelve sloped turns by a level. It is a GRID quantity, and moving it
+would break every save a second time in two commits and would stop phase 5's swap
+of two quarters for one 180 from adding up. What the piece is named for is
+carried by its end grades, which are exact to the degree; the cost is that the
+average pitch of the worst piece (tight, medium) sits 1.4 deg shallow.
+
+### Banking
+
+Bank is now **the curvature profile itself** — `bankProfile(t)` is the fraction
+of full curvature the turn has reached — so the train rolls in through the
+spiral. The old smoothstep ramp over the first and last quarter, and all the
+neighbour-awareness that went with it, is gone.
+
+That lifts the constraint recorded below: on a tight 7.5 m corner at 10 m/s,
+banking now takes 1.37 g sideways down to 0.26, from the joint onwards rather
+than a fifth of a second later. `first-drop`'s two banked corners read 0.4 g.
+
+### The price, which is real and is not yet paid back
+
+Easing costs about one size class. `R = 0.8289 T`, so **the tight turn went from
+9 m to 7.46 m and the wide one from 15 m to 12.43 m** — 21% tighter, and lateral
+g is 21% higher at the same speed. Unbanked, the honest speeds fall from 11.5 and
+14.9 m/s to 10.5 and 13.5.
+
+So the phase's own measure — "every preset limited by a turn" — comes out worse
+on any preset that does not bank, and only `first-drop` does. Three things could
+answer that:
+
+1. **A third turn size — DONE, see below.** `T` = 3.5 tiles, `R` = 17.4 m,
+   honest to 16.0 m/s unbanked. Puts the top of the range back above where it
+   was before easing.
+2. **Bank the other presets' corners.** Free, and now correct at every point of
+   the piece rather than only in the middle of it.
+3. **Phase 5.** A 180 built as two halves is `R = 0.993 T` against `0.829 T` for
+   two eased quarters — a 20% larger radius in the same footprint, which is
+   exactly the size class easing cost.
+
+### Three turn sizes
+
+| | `T` | across | radius | 1.5 g at | banked 45 |
+| --- | --- | --- | --- | --- | --- |
+| tight | 1.5 | 9 m | 7.46 m | 10.5 m/s | 15.1 m/s |
+| wide | 2.5 | 15 m | 12.43 m | 13.5 m/s | 19.5 m/s |
+| **sweeping** | **3.5** | **21 m** | **17.41 m** | **16.0 m/s** | **23.1 m/s** |
+
+Named tight/wide/sweeping rather than small/medium/large because the grade
+ladder already has a MEDIUM in it and a sloped turn's name is its size plus its
+grade — "Right, medium, medium down" is not a palette entry anyone should have
+to read. The direction row is seven buttons now, ordered by how hard each bends
+with the tightest outermost, and the middle size is labelled "Wide left/right"
+where it used to be just "Left/Right".
+
+`T` = 4.5 is available and would give 22.4 m, but 27 m across a 240 m park is
+most of a preset's leg. 3.5 is the largest that leaves a circuit room to contain
+anything else.
+
+**Not added to `ROUTE_IDS`.** Every id there widens the search and raises
+`MAX_ADVANCE`, which the A* heuristic divides by; a 3.5-tile piece would weaken
+it by 40% and slow every auto-close, to offer a corner too big to help in the
+short hop the filler is asked to find.
+
+The open question below about sloped variants was answered by building them: all
+six grades exist at every size, because the palette resolves a turn by appending
+the grade to the flat id, so a missing one greys out a button for no reason a
+student can see. A sweeping steep turn does drop 33 m in a single click — but the
+build window now says "17.4 m radius, −33 m" before the press, which is what that
+readout is for.
+
+The route search is also worth a look: `routeCost` charges 1.25 for any turn, so
+auto-closed filler can put a 7.5 m corner on flat ground where the train is at
+full speed. On `gentle-hills` that is the tightest thing on the ride and nothing
+in the preset chose it.
+
+### One thing the extra 4% of track did break
+
+Phase 1 left a standing warning that anything lengthening the track again would
+need `mu` looked at, and it came due — though not where expected. An eased turn
+is 0.94 m longer, and `first-drop`'s summit corner is LEVEL track taken at chain
+speed, so the train has to coast a whole turn's length at 4 m/s before anything
+descends. At the test's `mu` of 0.05 that is only 16 m of coasting, so the extra
+0.94 m was enough to strand it on the corner, where it rolled back onto the chain
+and shuttled. The friction test now runs at 0.03. **Nothing a student can reach
+is near this** — the shipped `mu` of 0.013 coasts 63 m — but a level corner at
+the top of a lift is the thinnest margin on any preset, and it is thinner now.
+
+### The shape, and why it needed no Fresnel table
+
+With `θs` the deflection each spiral does:
+
+```
+R / T = 1 / (1 + θs + θs^2/6 - θs^3/30)
+```
+
+`θs` = **0.2 rad** — a quarter of the turn eased, three quarters still constant
+radius. More easement lowers jerk but raises peak lateral g, and lateral is the
+binding constraint.
+
+The plan below was to precompute a normalised unit table and interpolate it.
+**That would not have worked**, and the reason is worth keeping: `curvInside`
+measures a piece's curvature from three centreline points a thousandth of a
+parameter apart, which is a fraction of one table interval, so it would have read
+the chord between two knots and reported a turn as dead straight.
+
+It needs no table. `θs` is one small global constant, so the heading
+`psi = s^2/(2 Ls)` never exceeds 0.2 rad and the Fresnel integrals expand as
+power series that converge in three terms:
+
+```
+x = s - s^5/(40 Ls^2) + s^9/(3456 Ls^4)          good to ~1e-9 of a radius
+y = s^3/(6 Ls) - s^7/(336 Ls^3) + s^11/(42240 Ls^5)
+```
+
+The arc between the spirals is exact trigonometry, and the exit spiral is the
+entry one mirrored under `(x, y) -> (TAU - y, TAU - x)`. That same symmetry gives
+`TAU = x1 + y1 + cos θs - sin θs` outright rather than by integrating, which is
+what makes the geometry and the series above an independent cross-check on each
+other: 1.2063909 against the series' 1.2064000.
+
+### The plan as originally written, for its reasoning
 
 With `θs` the deflection each spiral does:
 
@@ -429,10 +571,6 @@ R / T = 1 / (1 + θs + θs^2/6 - θs^3/30)
 
 Cross-checked against direct Fresnel integration at `θs = π/4`: formula 0.5342,
 numerical 0.5348. Agreement to 0.1%.
-
-**Use `θs` = 0.2 rad** — a quarter of the turn eased, three quarters still
-constant radius. More easement lowers jerk but raises peak lateral g, and
-lateral is the binding constraint.
 
 At 6 m tiles, `R = 0.829 T`:
 
@@ -476,6 +614,11 @@ single global constant. Precompute a normalised unit table once at module load
 (64 points of `x/T`, `y/T`, `θ`, `κ*T`); `centreline` interpolates and scales by
 `T`, mirrored per direction. Keeps `centreline` O(1), which matters because it is
 called in tight loops.
+
+*Not what shipped. `curvInside` reads the centreline three points a thousandth of
+a parameter apart, which is a fraction of one table interval, so it would have
+measured the chord between two knots and reported every turn as dead straight.
+The power series above is both cheaper and exact.*
 
 ## Phase 5 — 180 degree turns, created automatically
 
@@ -541,15 +684,20 @@ the side`, and the resize family.
 
 ---
 
-## `MAX_H`
+## `MAX_H` — **decided: it stays at 60 m**
 
-Set it from the catalogue rather than independently. With phases 1 to 5 done the
-worst piece is usable to about 22 m/s, which is a drop of `v^2/2g`:
+The plan here was to set the ceiling from the catalogue: with the pieces good for
+about 22 m/s, that is a `v^2/2g` drop of 24 m, and a park permitting 60 m was
+letting a student reach speeds no piece could carry.
 
-> **`MAX_H` = 24** (was 60)
+**Overruled, deliberately.** Students need to be able to build uncomfortably
+fast, dangerously extreme track, because there is learning in it — building
+something far too fast and reading the report tell you *why* is the exercise. The
+Shape section names the piece that cannot take it; the ceiling is not the place
+to prevent it. `MAX_H` is 120 levels, which is still 60 m.
 
-Today the worst piece is honest to 10.7 m/s — a 6 m drop — in a park that
-permits 60 m. That gap is the whole problem in one line.
+The gap the plan was worried about is closed from the other end instead: the
+catalogue is honest to about 20.7 m/s now, against 10.7 when this was written.
 
 ## Breakages
 
@@ -595,26 +743,38 @@ students have recorded stop matching.
 - Given that a quadratic beats a quintic on peak g at equal length, is smooth
   onset worth 1.5x on every transition? Phase 2's readout should answer this
   before phase 3 commits to it.
-- Do the wide turns want sloped variants? A 4.5-tile steep turn would drop
-  `round(4.5 * π/2 * 6)` = 42 levels in one quarter, most of `MAX_H`. The
-  sloped-turn matrix should not stay 4 shapes x 4 grades; big radii want flat and
-  gentle only.
+- ~~Do the wide turns want sloped variants?~~ **Answered by building them.** All
+  six grades exist at all three sizes. The sweeping steep turn does drop 33 m in
+  one click, but the palette resolves a turn by appending the grade to the flat
+  id, so a missing variant is a button that greys out for no visible reason —
+  worse than an option a student can decline. The build window quotes the cost
+  before the press.
 - Does a 270 deg turn need the phase 5 treatment too, or is leaving the third
   quarter alone good enough?
 
 ## Suggested order
 
-Phases 1, 2, 3 and the loop retune from 6 are **done**. Bundling 3 and 6's
+Phases 1, 2, 3, 4 and the loop retune from 6 are **done**. Bundling 3 and 6's
 breaking halves together worked as intended: one `FORMAT` bump, one preset
-rebuild, one stale-save banner.
+rebuild, one stale-save banner. Phase 4 broke nothing at all.
 
-**Phase 4 is next**, and it has become the most valuable one left. It is
-save-safe (`T` stays the grid parameter, `exitNode` is untouched), it zeroes the
-lateral jolts the way phase 3 zeroed the vertical ones, and it lifts a real
-constraint that layout is currently working around — see the bank-ramp note
-under it, which is now the single worst thing measured on the catalogue.
+**Phase 5 is next, and phase 4 made the case for it stronger rather than
+weaker.** Easing cost exactly one size class on every turn, and a 180 built as
+two halves is the one thing that buys the class back — `R = 0.993 T` against
+`0.829 T`, a 20% larger radius in the same footprint, and no roll pulse in the
+middle of a helix. It is the direct answer to the "price" section under phase 4.
 
-Then phase 5, which depends on it, and then loop easements, which are all that
-is left of 6.
+Two smaller things are worth doing first because they are nearly free, and one is
+a decision rather than work:
 
-Suite is at **171 checks**, all passing, as of the end of phase 3.
+- **Bank the corners on `gentle-hills` and `looper`.** Only `first-drop` banks,
+  and banking is now correct from the joint onwards rather than a fifth of a
+  second in. This is the cheapest honesty win left.
+- **Make `routeCost` prefer wide turns.** Auto-closed filler charges 1.25 for any
+  turn, so it will put a 7.5 m corner on flat ground at full speed. Check the A*
+  heuristic stays admissible first.
+
+Then loop easements, which are all that is left of 6 — and the loop is now the
+only thing on the catalogue whose curvature steps off straight track at all.
+
+Suite is at **178 checks**, all passing, as of the end of phase 4.

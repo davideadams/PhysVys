@@ -106,6 +106,19 @@
 
   const near = (a, b, eps) => Math.abs(a - b) <= (eps || 1e-9);
 
+  /* Half the ceiling, in LEVELS: as much room to build downward as upward.
+
+     Tests that start "mid-air" used to say k: 30, which was half the ceiling
+     when a level was a metre and is a quarter of it now — so the ladder down to
+     steep plus a steep quarter turn ran out of ground and the piece was refused,
+     with the test reporting that as a build-rule failure.
+
+     Up here rather than beside the sloped-turn tests that first wanted it,
+     because check() runs each closure as it reaches it: a const declared later
+     in the file is in its temporal dead zone for every check above it, and the
+     failure reads as a missing function rather than a misplaced one. */
+  const midAir = () => Math.round(RC.MAX_H / 2);
+
   /* Release points in TILES, not metres, for the tests that want a place. */
   const tiles = n => n * RC.TILE_M;
 
@@ -252,6 +265,145 @@
     }
   });
 
+  /* ---- eased turns -------------------------------------------------------
+     A quarter turn is a spiral-arc-spiral, so the radius it BENDS at is no
+     longer the T it measures across the grid. Everything below is written from
+     T, THETA and the shape's own arithmetic rather than from metres, because
+     both numbers move if THETA is ever retuned. */
+  check('an eased turn still lands exactly where the grid says', () => {
+    /* The invariant the whole refactor is arranged around: the exit is
+       E + T*(u + v), so the node model, the collision checker and the
+       auto-closer never learn that the shape inside changed. Checked against
+       the CENTRELINE, not against exitNode, so the drawn track and the node
+       graph have to agree rather than each being right on its own. */
+    for (const def of RC.PIECES) {
+      if (def.kind !== 'turn') continue;
+      for (let dir = 0; dir < 4; dir++) {
+        const node = { i: 9, j: 9, dir, k: 20, g: def.gIn };
+        const end = RC.centreline(def, node, 1);
+        const exit = RC.exitNode(def, node);
+        const want = RC.entryPoint(exit);
+        if (!near(end.x, want.x, 1e-9) || !near(end.y, want.y, 1e-9)) {
+          return `${def.id} dir ${dir}: centreline ends at (${end.x.toFixed(4)}, ` +
+                 `${end.y.toFixed(4)}) but the node says (${want.x}, ${want.y})`;
+        }
+        if (!near(end.z, node.k + def.dH, 1e-9)) {
+          return `${def.id}: centreline ends at level ${end.z.toFixed(4)}, node says ${node.k + def.dH}`;
+        }
+      }
+    }
+  });
+
+  check('easing a turn buys smoothness with radius, at a known price', () => {
+    /* R/T = 1/(1 + THETA + THETA^2/6 - THETA^3/30) for a symmetric
+       spiral-arc-spiral through 90 degrees: the arc is shifted out from the
+       tangent by THETA^2/6 and each spiral adds about THETA of tangent length.
+       That series is the independent statement of the same shape the geometry
+       integrates, so agreeing to 0.1% is a real cross-check. */
+    const th = RC.SPIRAL_THETA;
+    const want = 1 + th + th * th / 6 - th * th * th / 30;
+    if (Math.abs(RC.SPIRAL_TAU - want) / want > 1e-3) {
+      return `TAU is ${RC.SPIRAL_TAU.toFixed(6)}, the series says ${want.toFixed(6)}`;
+    }
+    for (const id of ['turn-right-tight', 'turn-right-wide']) {
+      const def = RC.pieceDef(id);
+      const r = RC.turnRadius(def);
+      if (!(r < def.R)) return `${id} bends at ${r} tiles, no tighter than the ${def.R} it spans`;
+      if (!near(r * RC.SPIRAL_TAU, def.R, 1e-9)) return `${id}: radius and T disagree`;
+    }
+  });
+
+  check('the three turn sizes are a ladder a rider can feel', () => {
+    /* Three sizes, and each has to be a real step rather than a nominal one:
+       T must stay a half-integer or the exit misses the tile edge midpoint, the
+       radius must rise with it, and the speed the corner keeps a rider inside
+       the lateral limit must rise too — which is the only part of it anyone
+       notices. That speed is solved rather than searched, since v^2/R = 1.5 g
+       is the whole of it on level track. */
+    const sizes = RC.PIECES.filter(d => d.kind === 'turn' && d.dH === 0 && d.turn === 1);
+    if (sizes.length !== 3) return `${sizes.length} sizes of flat right turn, expected 3`;
+    sizes.sort((a, b) => a.R - b.R);
+
+    const speeds = [];
+    let prev = 0;
+    for (const def of sizes) {
+      if (!Number.isInteger(def.R * 2)) {
+        return `${def.id} spans ${def.R} tiles, which is not a half-integer — its exit ` +
+               `cannot land on a tile edge`;
+      }
+      const R = RC.turnRadius(def) * RC.TILE_M;
+      if (!(R > prev)) return `${def.id} bends at ${R.toFixed(1)} m, no wider than the size below it`;
+      prev = R;
+      speeds.push(Math.sqrt(RC.G_LIMITS.latHigh * 9.81 * R));
+    }
+    for (let n = 1; n < speeds.length; n++) {
+      if (!(speeds[n] > speeds[n - 1] + 1)) {
+        return `${sizes[n].id} is honest to ${speeds[n].toFixed(1)} m/s against ` +
+               `${speeds[n - 1].toFixed(1)} for the size below — too small a step to be a button`;
+      }
+    }
+    // And the ladder as a whole has to be worth climbing.
+    if (!(speeds[2] > speeds[0] * 1.4)) {
+      return `the widest turn carries ${speeds[2].toFixed(1)} m/s against the tightest's ` +
+             `${speeds[0].toFixed(1)} — barely a range`;
+    }
+  });
+
+  check('a turn ramps its curvature in, holds it, and ramps it out', () => {
+    // Sampled from the centreline itself rather than from turnKappa, which is
+    // the profile the bank reads and would only be agreeing with itself.
+    const def = RC.pieceDef('turn-right-wide');
+    const node = { i: 12, j: 12, dir: 0, k: 20, g: 0 };
+    const full = 1 / (RC.turnRadius(def) * RC.TILE_M);
+    // The spirals occupy THETA*2 radii out of the turn's whole SPIRAL_S.
+    const frac = 2 * RC.SPIRAL_THETA / (Math.PI / 2 + 2 * RC.SPIRAL_THETA);
+    const at = t => Math.abs(RC.curvInside(def, node, t).lat);
+
+    if (at(0.001) > full * 0.02) return `it starts at ${(100 * at(0.001) / full).toFixed(1)}% of full bend`;
+    if (at(0.999) > full * 0.02) return `it finishes at ${(100 * at(0.999) / full).toFixed(1)}% of full bend`;
+    // Linear across the spiral: half way along it, half the curvature.
+    const half = at(frac / 2);
+    if (Math.abs(half - full / 2) > full * 0.02) {
+      return `half way up the spiral it has reached ${(100 * half / full).toFixed(1)}%, expected 50%`;
+    }
+    // And flat through the middle, which is where the radius is quoted from.
+    for (const t of [frac + 0.02, 0.35, 0.5, 0.65, 1 - frac - 0.02]) {
+      if (Math.abs(at(t) - full) > full * 0.01) {
+        return `at t = ${t.toFixed(2)}, mid-arc, it bends at ` +
+               `${(1 / at(t)).toFixed(2)} m rather than ${(1 / full).toFixed(2)}`;
+      }
+    }
+  });
+
+  check('a sloped turn leaves and rejoins its grade with no vertical step', () => {
+    /* dH is rounded to a whole level, so the piece cannot descend at exactly
+       its named grade throughout — turnHeightFrac carries the difference on a
+       smootherstep, which is zero in its first AND second derivative at both
+       ends. So the turn joins constant-grade track at the same slope AND the
+       same (zero) vertical curvature. The cubic this replaced managed only the
+       first of those, and left about 0.45 g at 20 m/s at each joint. */
+    for (const id of ['turn-right-tight-medium-down', 'turn-right-wide-steep-down',
+                      'turn-left-tight-gentle-up']) {
+      const def = RC.pieceDef(id);
+      const node = { i: 12, j: 12, dir: 0, k: 60, g: def.gIn };
+      const h = 1e-5;
+      const grade = (a, b) => (RC.centreline(def, node, b).z - RC.centreline(def, node, a).z)
+                              / (h * RC.turnRun(def));
+      const gStart = grade(0, h), gEnd = grade(1 - h, 1);
+      if (!near(gStart, def.gIn, 2e-3)) return `${id}: entry grade ${gStart.toFixed(4)} != ${def.gIn}`;
+      if (!near(gEnd, def.gOut, 2e-3)) return `${id}: exit grade ${gEnd.toFixed(4)} != ${def.gOut}`;
+      // Vertical curvature just inside each end, against the turn's own bend.
+      const full = 1 / (RC.turnRadius(def) * RC.TILE_M);
+      for (const t of [0.001, 0.999]) {
+        const kv = Math.abs(RC.curvInside(def, node, t).vert);
+        if (kv > full * 0.02) {
+          return `${id} bends vertically to ${(1 / kv).toFixed(0)} m at t = ${t}, ` +
+                 `where the constant grade beside it is straight`;
+        }
+      }
+    }
+  });
+
   check('slope is continuous across a piece (ends match gIn/gOut)', () => {
     const h = 1e-5;
     for (const def of RC.PIECES) {
@@ -285,7 +437,11 @@
 
   section('Building');
   check('four same-radius turns return to the starting node', () => {
-    for (const id of ['turn-left-tight', 'turn-right-tight', 'turn-left-wide', 'turn-right-wide']) {
+    // Every flat turn in the catalogue, so a new size cannot be added without
+    // this noticing whether it closes on itself.
+    for (const def of RC.PIECES) {
+      if (def.kind !== 'turn' || def.dH !== 0) continue;
+      const id = def.id;
       RC.track.pieces = [];
       RC.track.start = { i: 20, j: 20, dir: 0, k: 0, g: 0 };
       RC.track.head = Object.assign({}, RC.track.start);
@@ -480,8 +636,12 @@
     if (!near(RC.pieceLength(flat), RC.TILE_M, 1e-6)) {
       return `flat piece is ${RC.pieceLength(flat)} m, expected ${RC.TILE_M}`;
     }
+    /* A turn is a spiral-arc-spiral, so its length is R*(pi/2 + 2*THETA): each
+       spiral turns THETA at half the full curvature and so runs twice as long
+       as the arc that would do the same bend. Written out from the shape's own
+       parameters rather than from RC.turnRun, which is the thing being checked. */
     const wide = RC.pieceDef('turn-right-wide');
-    const expect = 2.5 * RC.TILE_M * Math.PI / 2;
+    const expect = RC.turnRadius(wide) * RC.TILE_M * (Math.PI / 2 + 2 * RC.SPIRAL_THETA);
     if (!near(RC.pieceLength(wide), expect, 1e-6)) {
       return `wide turn is ${RC.pieceLength(wide)} m, expected ${expect.toFixed(3)}`;
     }
@@ -934,7 +1094,9 @@
     if (p.def.kind !== 'turn') return 'sample landed off the turn';
 
     const v = 10;
-    const R = 1.5 * RC.TILE_M;                 // tight turn radius, 9 m
+    // The radius it BENDS at, which since the turns were eased is not the 9 m
+    // it measures across the grid.
+    const R = RC.turnRadius(RC.pieceDef('turn-right-tight')) * RC.TILE_M;
     const expect = v * v / (R * 9.81);
     const g = RC.gForces(p, v, 0);
 
@@ -1047,7 +1209,7 @@
       const turnStart = path.pts.find(p => p.def.kind === 'turn').s;
       // Mid-arc, clear of the joints at either end.
       const p = RC.pathAt(turnStart + RC.pieceLength(RC.pieceDef(id)) / 2, false);
-      const want = sign / (2.5 * RC.TILE_M);
+      const want = sign / (RC.turnRadius(RC.pieceDef(id)) * RC.TILE_M);
       if (Math.abs(p.kLat - want) > Math.abs(want) * 0.02) {
         return `${id} reports ${p.kLat.toFixed(5)} sideways, expected ${want.toFixed(5)}`;
       }
@@ -1220,21 +1382,50 @@
     }
   });
 
-  check('a turn arrives with the whole of its curvature at once', () => {
+  check('an eased turn joins straight track with no step in it', () => {
+    /* This check used to assert the opposite — that a turn arrived with the
+       whole of 1/R at once — and it was true, and it was the largest single
+       fault on the catalogue. A quarter turn is a spiral-arc-spiral now, so its
+       curvature starts and finishes at zero and meets straight track, which is
+       also zero, with nothing in between. Not a smaller step: none.
+
+       The bar is a hundredth of what the unspiralled turn used to deliver,
+       which is a real bar rather than a floating-point one — the residue is the
+       curvature the spiral has genuinely reached a thousandth of a parameter
+       in, not noise. */
     RC.resetTrack();
     for (const id of ['flat', 'turn-right-wide', 'flat']) {
       if (!RC.place(id)) return `${id} refused`;
     }
+    const wide = RC.pieceDef('turn-right-wide');
+    const unspiralled = 1 / (RC.turnRadius(wide) * RC.TILE_M);
+    // Found by index rather than counted: resetTrack lays a station first, so
+    // "three pieces" is never what is actually on the track.
+    const ti = RC.track.pieces.findIndex(p => RC.pieceDef(p.defId).kind === 'turn');
+    if (ti < 1) return 'no turn was placed with track either side of it';
     const joints = RC.jointSteps();
-    // Straight -> turn, and turn -> straight: the same step, opposite ways.
-    const into = joints.find(j => RC.pieceDef(RC.track.pieces[j.pi].defId).kind === 'turn');
-    if (!into) return 'no joint found entering the turn';
-    const want = 1 / (2.5 * RC.TILE_M);
-    if (Math.abs(into.dLat - want) > want * 0.02) {
-      return `entering the turn steps ${into.dLat.toFixed(5)} sideways, expected ${want.toFixed(5)}`;
+    for (const [pi, where] of [[ti, 'entering'], [ti + 1, 'leaving']]) {
+      const j = joints.find(x => x.pi === pi);
+      if (!j) return `no joint recorded ${where} the turn`;
+      if (Math.abs(j.dLat) > unspiralled * 0.01) {
+        return `${where} the turn steps ${j.dLat.toFixed(5)} sideways, ` +
+               `which is ${(100 * Math.abs(j.dLat) / unspiralled).toFixed(1)}% of ` +
+               `a full ${unspiralled.toFixed(5)} — it is not easing`;
+      }
+      if (!near(j.dVert, 0, 1e-6)) return `${where} the turn steps ${j.dVert} vertically`;
     }
-    if (!near(into.dVert, 0, 1e-6)) return `it also steps ${into.dVert} vertically`;
-    // And the jolt that delivers goes as v^2, which is the whole lesson.
+  });
+
+  check('a jolt still goes as the square of the speed', () => {
+    // The lesson the jolt readout exists to teach, checked on a loop, which is
+    // the one thing left on the catalogue whose curvature steps off straight
+    // track — its own easements are the last of phase 6.
+    const bad = shapeTrack(['flat', 'loop-right', 'flat'], midAir());
+    if (bad) return bad;
+    const into = RC.jointSteps()
+      .find(j => RC.pieceDef(RC.track.pieces[j.pi].defId).kind === 'loop');
+    if (!into) return 'no joint found entering the loop';
+    if (!(into.dMag > 0.01)) return `the loop entry steps only ${into.dMag.toFixed(5)}`;
     const at10 = RC.jointStepG(into, 10), at20 = RC.jointStepG(into, 20);
     if (!near(at20 / at10, 4, 1e-6)) return `doubling the speed multiplied the jolt by ${at20 / at10}`;
   });
@@ -1293,7 +1484,7 @@
     if (geo.crestR === null) return 'a track that drops away from level reports no crest';
     if (geo.valleyR === null) return 'a track that levels out again reports no valley';
     if (geo.turnR === null) return 'a track with a turn on it reports no turn radius';
-    const want = 1.5 * RC.TILE_M;
+    const want = RC.turnRadius(RC.pieceDef('turn-right-tight')) * RC.TILE_M;
     if (Math.abs(geo.turnR - want) > want * 0.05) {
       return `tightest turn is ${geo.turnR.toFixed(2)} m, expected ${want.toFixed(2)}`;
     }
@@ -1304,12 +1495,16 @@
     }
   });
 
-  check('crossing a joint at speed records the jolt it delivered', () => {
-    // A station to be pushed out of, a hill to pick up speed down, then a
-    // corner to slam into.
-    const bad = shapeTrack(['station', 'station', 'station',
-                            'flat-to-gentle-down', 'gentle-down', 'gentle-down',
-                            'gentle-down-to-flat', 'turn-right-tight', 'flat', 'flat']);
+  /* A station to be pushed out of, a hill to pick up speed down, then a corner
+     to slam into. This was the jolt fixture and is now the no-jolt one: at the
+     end of phase 2 its three worst joints were 1.76, 1.53 and 1.36 g, all of
+     them steps this track no longer contains. */
+  const JOLT_TRACK = ['station', 'station', 'station',
+                      'flat-to-gentle-down', 'gentle-down', 'gentle-down',
+                      'gentle-down-to-flat', 'turn-right-tight', 'flat', 'flat'];
+
+  check('a track of straights and turns crosses its joints without a jolt', () => {
+    const bad = shapeTrack(JOLT_TRACK);
     if (bad) return bad;
     RC.sim.friction = false;
     RC.sim.cars = 4;
@@ -1317,28 +1512,51 @@
     RC.resetSim();                   // previous check left the release slider
     runFor(20);
 
+    if (!(RC.sim.maxV > 5)) return `the train barely moved (${RC.sim.maxV.toFixed(1)} m/s)`;
+    // A jolt of zero and a joint never crossed look identical in the readout,
+    // so insist the train did cross them before believing what they say.
+    const jolts = RC.worstJolts();
+    if (!jolts.length) return 'the train crossed no joints, so this proves nothing';
+    if (jolts[0].g > 0.1) {
+      const j = jolts[0];
+      return `${j.g.toFixed(2)} g arrives at once at ${j.s.toFixed(1)} m ` +
+             `(${j.joint.dVert.toFixed(4)} vertical, ${j.joint.dLat.toFixed(4)} sideways)`;
+    }
+  });
+
+  check('crossing a joint at speed records the jolt it delivered', () => {
+    /* A loop, and a steep enough drop to reach it at speed — the loop being the
+       one piece left whose curvature steps off the straight track before it,
+       since its easements are all that remains of phase 6. The bookkeeping is
+       what is under test: that a jolt is recorded at all, that it belongs to
+       the piece that caused it, and that it is filed at the joint's own
+       position rather than wherever the train happened to be sampled. */
+    const bad = shapeTrack(['station', 'station', 'station',
+                            'flat-to-gentle-down', 'gentle-to-medium-down',
+                            'medium-to-steep-down', 'steep-down',
+                            'steep-to-medium-down', 'medium-to-gentle-down',
+                            'gentle-down-to-flat', 'flat', 'loop-right', 'flat'],
+                           midAir());
+    if (bad) return bad;
+    RC.sim.friction = false;
+    RC.sim.cars = 4;
+    RC.sim.releaseS = null;
+    RC.resetSim();
+    runFor(20);
+
     const jolts = RC.worstJolts();
     if (!jolts.length) return 'the train crossed several joints and recorded none';
     const worst = jolts[0];
     if (!(worst.g > 0.5)) return `worst jolt is only ${worst.g.toFixed(3)} g`;
 
-    /* It belongs to the corner — but to EITHER end of it, and which one is not
-       obvious. Entering has the bigger step, since the curvature swings from
-       the transition's vertical bend straight into the turn's lateral one.
-       Leaving is the bigger jolt anyway, because the train is still speeding up
-       when its front car enters the turn: the rear cars are ten metres back and
-       still on the descent, and the mean slope over the cars is what drives it.
-       By the exit the whole train is level and moving faster, and v^2 more than
-       makes up the smaller step. So the check is that the turn is on one side
-       of the joint, not which side. */
     const pieces = RC.track.pieces;
-    const isTurn = i => pieces[i] && RC.pieceDef(pieces[i].defId).kind === 'turn';
-    if (!isTurn(worst.joint.pi) && !isTurn(worst.joint.pi - 1)) {
+    const isLoop = i => pieces[i] && RC.pieceDef(pieces[i].defId).kind === 'loop';
+    if (!isLoop(worst.joint.pi) && !isLoop(worst.joint.pi - 1)) {
       const def = RC.pieceDef(pieces[worst.joint.pi].defId);
-      return `the worst jolt was at a joint entering ${def.id}, with no turn either side`;
+      return `the worst jolt was at a joint entering ${def.id}, with no loop either side`;
     }
-    if (Math.abs(worst.joint.dLat) < Math.abs(worst.joint.dVert)) {
-      return 'the corner stepped more vertically than sideways';
+    if (Math.abs(worst.joint.dVert) < Math.abs(worst.joint.dLat)) {
+      return 'the loop stepped more sideways than vertically';
     }
     // Recorded where the joint is, not where the train happened to be sampled.
     if (Math.abs(worst.s - worst.joint.s) > 1e-9) {
@@ -1797,7 +2015,7 @@
 
   check('at the ideal speed a 45 degree bank cancels lateral g entirely', () => {
     // tan(theta) = v^2 / (r g), so at 45 degrees the ideal speed is v = sqrt(r g).
-    const R = 1.5 * RC.TILE_M;                  // tight turn, 9 m
+    const R = RC.turnRadius(RC.pieceDef('turn-right-tight')) * RC.TILE_M;
     const vIdeal = Math.sqrt(R * 9.81 * Math.tan(RC.BANK_ANGLE));
     const g = RC.gForces(bankedTurnSample('turn-right-tight', true), vIdeal, 0);
 
@@ -1812,33 +2030,76 @@
     }
   });
 
-  check('same-direction banked turns hold full bank across the joint', () => {
-    // Two right turns make a 180. The bank must stay full through the joint
-    // between them, not dip to level in the middle and roll back up.
+  check('the roll arrives exactly as fast as the bend does', () => {
+    /* The whole of the bank profile now: bank is the fraction of full curvature
+       the turn has reached, so the train rolls into the corner THROUGH the
+       spiral and is at full bank precisely when the full sideways force is.
+
+       It used to be a ramp of its own over the first and last quarter of the
+       piece, while curvature arrived in one step at the joint — so the entry of
+       a banked turn was, for a fifth of a second, an unbanked turn, and a 15 m
+       corner at 19.8 m/s spiked to 2.7 g however well it was banked. Checked
+       against the path's OWN reported curvature rather than against the profile
+       function, so the two have to agree about the shape rather than agreeing
+       with themselves. */
+    RC.resetTrack();
+    if (!RC.place('turn-right-tight', { bank: true })) return 'banked turn refused';
+    RC.place('flat');
+    const turnPts = RC.trackPath().pts.filter(p => p.def.kind === 'turn');
+    if (!turnPts.length) return 'no banked turn in the path';
+
+    const peakK = Math.max(...turnPts.map(p => Math.abs(p.kLat)));
+    if (!(peakK > 0)) return 'the turn reports no sideways curvature at all';
+    for (const p of turnPts) {
+      // The first and last points sit ON the joints, where the three-point
+      // curvature straddles the neighbouring straight and reads half of what
+      // the piece itself has; they are checked by the joint-step test instead.
+      if (p.t < 1e-9 || p.t > 1 - 1e-9) continue;
+      const want = Math.abs(p.kLat) / peakK;
+      const got = Math.abs(p.bank) / RC.BANK_ANGLE;
+      if (Math.abs(got - want) > 0.05) {
+        return `at t = ${p.t.toFixed(3)} the track has reached ${(100 * want).toFixed(0)}% ` +
+               `of its bend but ${(100 * got).toFixed(0)}% of its bank`;
+      }
+    }
+  });
+
+  check('two turns the same way roll level between them, for now', () => {
+    /* Two eased quarters both finish and start at zero curvature, so the train
+       genuinely goes straight for an instant between them and rolling level
+       there is the honest thing to draw. It is also a worse ride than one
+       continuous 180 would be, and phase 5 replaces the pair with exactly that
+       — at which point this check should be rewritten to say the bank holds.
+
+       Until then it is pinned, because the old code held full bank across this
+       joint deliberately, and silently going back to that would mean a rider
+       tipped 45 degrees on track with nothing to lean into: 0.7 g sideways from
+       gravity alone, out of a piece that is straight. */
     RC.resetTrack();
     RC.place('turn-right-tight', { bank: true });
     RC.place('turn-right-tight', { bank: true });
     RC.place('flat');
-    const pts = RC.trackPath().pts;
-    const turnPts = pts.filter(p => p.def.kind === 'turn');
-    if (!turnPts.length) return 'no banked turn in the path';
-
-    // Find the joint between the two turns (where piece index changes), and
-    // check the bank there is still (near) full, not near zero.
+    const turnPts = RC.trackPath().pts.filter(p => p.def.kind === 'turn');
     const pis = [...new Set(turnPts.map(p => p.pi))].sort((a, b) => a - b);
     if (pis.length !== 2) return `expected two turn pieces, saw ${pis.length}`;
+
     const jointS = Math.max(...turnPts.filter(p => p.pi === pis[0]).map(p => p.s));
     let nearest = turnPts[0];
     for (const p of turnPts) {
       if (Math.abs(p.s - jointS) < Math.abs(nearest.s - jointS)) nearest = p;
     }
-    if (Math.abs(nearest.bank) < RC.BANK_ANGLE * 0.9) {
-      return `bank at the joint is ${nearest.bank.toFixed(3)} rad — it unbanks in the middle`;
+    if (Math.abs(nearest.bank) > RC.BANK_ANGLE * 0.05) {
+      return `bank at the joint is ${nearest.bank.toFixed(3)} rad, and there is ` +
+             `no curvature there to justify it`;
     }
-    // Every point across both turns should be well-banked (the run holds it).
-    const midBanks = turnPts.filter(p => p.t > 0.2 && p.t < 0.8).map(p => Math.abs(p.bank));
-    if (Math.min(...midBanks) < RC.BANK_ANGLE * 0.9) {
-      return `a mid-turn point dropped to ${Math.min(...midBanks).toFixed(3)} rad`;
+    // Both turns still reach full bank in their own middles, and the same way.
+    for (const pi of pis) {
+      const mid = turnPts.filter(p => p.pi === pi && p.t > 0.4 && p.t < 0.6);
+      if (!mid.length) return `no mid-turn sample for piece ${pi}`;
+      if (Math.min(...mid.map(p => Math.abs(p.bank))) < RC.BANK_ANGLE * 0.99) {
+        return `turn ${pi} never reaches full bank in its middle`;
+      }
+      if (!(mid[0].bank > 0)) return `turn ${pi} banks the wrong way for a right-hander`;
     }
   });
 
@@ -3061,13 +3322,26 @@
         out = { v: Math.abs(RC.sim.v), th: RC.sim.eThermal };
         return true;
       });
-      return out;
+      return out || { failed: `at mu = ${mu} the train stopped at ${RC.sim.s.toFixed(0)} m ` +
+                              `of the ${mark.toFixed(0)} m mark` };
     };
+    /* The heavy figure is not free to choose. The chain drops the train at
+       4 m/s at the summit and the corner up there is LEVEL, so it has to coast
+       a whole turn's length before anything descends — and 4 m/s against
+       mu = 0.05 is only 16 m of coasting. Past that it stalls on the corner,
+       rolls back onto the chain and shuttles there for ever.
+
+       This was 0.05 and passed until phase 4 made the turn 0.94 m longer, which
+       says the margin was under a metre rather than that 0.05 is a limit worth
+       standing on. The claim under test is that more friction is slower and
+       hotter; 6x between the two runs shows that with room to spare. Nothing a
+       student can reach is near it — the shipped mu coasts 63 m. */
     const light = runMu(0.005);
-    const heavy = runMu(0.05);
+    const heavy = runMu(0.03);
     RC.sim.mu = RC.DEFAULT_MU;      // put the default back for later tests
     RC.sim.friction = false;
 
+    if (light.failed || heavy.failed) return light.failed || heavy.failed;
     if (!(heavy.th > light.th)) {
       return `more rolling resistance made less heat: ${light.th.toFixed(0)} J vs ${heavy.th.toFixed(0)} J`;
     }
@@ -3739,7 +4013,8 @@
   });
 
   section('Sloped turns');
-  const TURN_BASES = ['turn-left-tight', 'turn-left-wide', 'turn-right-wide', 'turn-right-tight'];
+  const TURN_BASES = ['turn-left-tight', 'turn-left-wide', 'turn-left-sweeping',
+                      'turn-right-sweeping', 'turn-right-wide', 'turn-right-tight'];
 
   /* Suffix and grade for every sloped variant, taken from the ladder. Written
      out as literals it said gentle was 2 and steep was 6, which stayed true
@@ -3752,14 +4027,6 @@
     const name = RC.slopeName(g).split(' ')[0];
     TURN_GRADES.push(['-' + name + '-down', -g], ['-' + name + '-up', g]);
   }
-
-  /* Half the ceiling, in LEVELS: as much room to build downward as upward.
-
-     Tests that start "mid-air" used to say k: 30, which was half the ceiling
-     when a level was a metre and is a quarter of it now — so the ladder down to
-     steep plus a steep quarter turn ran out of ground and the piece was refused,
-     with the test reporting that as a build-rule failure. */
-  const midAir = () => Math.round(RC.MAX_H / 2);
 
   check('every turn has a sloped variant the palette can name', () => {
     // The build palette resolves a turn by appending the slope to the flat id,
@@ -4007,7 +4274,7 @@
     for (const base of TURN_BASES) {
       for (const [suffix, g] of TURN_GRADES) {
         const def = RC.pieceDef(base + suffix);
-        const arcM = def.R * RC.TILE_M * Math.PI / 2;
+        const arcM = RC.turnRun(def) * RC.TILE_M;
         const truePitch = Math.atan2(def.dH * RC.LEVEL_M, arcM);
         const named = Math.atan2(g * RC.LEVEL_M, RC.TILE_M);
         const off = Math.abs(truePitch - named) * 180 / Math.PI;
@@ -4133,9 +4400,10 @@
     }
     /* Nothing here should bend tighter than the 2.5-tile turn itself, so the
        bar comes off the piece rather than being written out in metres — at 4 m
-       tiles that turn was 10 m and at 6 m it is 15 m. A little slack for the
-       sampling, which rounds the corner very slightly. */
-    const turnR = 2.5 * RC.TILE_M;
+       tiles that turn was 10 m, at 6 m it measured 15 m across, and now that
+       turns are eased it BENDS at 12.4. A little slack for the sampling, which
+       rounds the corner very slightly. */
+    const turnR = RC.turnRadius(RC.pieceDef('turn-right-wide')) * RC.TILE_M;
     const r = worst > 1e-9 ? 1 / worst : Infinity;
     if (r < turnR * 0.8) {
       return `something bends to a ${r.toFixed(1)} m radius at s = ${where.toFixed(1)} m; ` +
