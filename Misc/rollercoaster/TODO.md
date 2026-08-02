@@ -410,6 +410,13 @@ valley only reaches 5 g at 4.0.
 
 ## Phase 4 — spiral-eased turns
 
+**Baseline to beat, as of the end of phase 3.** Turn radii have not moved since
+the 6 m tile: 9 m tight, 15 m wide, binding at 11.5 and 14.9 m/s. Transitions
+are now 18.9 to 26.3 m, good for 19.7 to 22.5 m/s. So **every preset should now
+be limited by a turn** — confirm that from the Shape sections before starting,
+and the same reading afterwards is the measure of whether this phase worked.
+
+
 Quarter turns become **spiral–arc–spiral**: curvature ramps linearly 0 to 1/R,
 holds, ramps back to 0. Still symmetric, still exactly 90 deg, so the exit is
 still `E + T*(u + v)` and `exitNode` does not change.
