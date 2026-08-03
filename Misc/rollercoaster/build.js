@@ -384,10 +384,12 @@
       return;
     }
     const count = RC.track.pieces.length - cursor;
-    // Driven by where the head has got back to, not by a press count: undo
-    // takes one right angle off a long bend rather than removing it whole, so a
-    // 270 needs three presses to clear one piece.
-    while (RC.track.pieces.length > cursor) RC.undo();
+    /* One undoable step, however many pieces come off — and driven by where the
+       head has got back to rather than by a press count, since removing takes
+       one right angle off a long bend rather than the whole of it. */
+    RC.edit(() => {
+      while (RC.track.pieces.length > cursor) RC.removeLast();
+    });
     cursor = null;
     setStatus(`Removed ${count} piece${count === 1 ? '' : 's'}`);
     refresh();
@@ -412,6 +414,10 @@
   /* ---- refresh ---------------------------------------------------------- */
   function refresh() {
     const head = RC.track.head;
+    // Every path that changes the track comes through here, so it is also where
+    // the toolbar's undo/redo pair is kept honest — script.js registers the
+    // hook, and it is absent while the tests run headless.
+    if (RC.syncUndo) RC.syncUndo();
     // Guard against a cursor left dangling past a shrunken track.
     if (cursor !== null && cursor >= RC.track.pieces.length) cursor = null;
     const inspecting = cursor !== null;
@@ -654,9 +660,12 @@
     window.addEventListener('keydown', (e) => {
       if (e.target.matches('input, textarea')) return;
       if (e.key === 'Backspace' || e.key === 'Delete') {
+        // Delete, not undo: it takes the last piece off, and Ctrl+Z puts it
+        // back. They used to be the same call, which is why undo carried on
+        // deleting after a deletion instead of reversing it.
         e.preventDefault();
         cursor = null;
-        RC.undo();
+        RC.removeLast();
         refresh();
       } else if (e.key === 'Enter') {
         e.preventDefault();

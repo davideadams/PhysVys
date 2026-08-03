@@ -72,16 +72,6 @@
     cam.panY = -((minY + maxY) / 2) * cam.zoom;
   }
 
-  function resetView() {
-    cam.zoom = 1;
-    cam.rot = 0;
-    // Reset means "put my track back in front of me". Resetting the pan to the
-    // middle of the park instead would throw an edge-built track off screen,
-    // which is the opposite of what the button is for.
-    centreOnTrack();
-    state.dirty = true;
-  }
-
   function rotate(dir) {
     cam.rot = (cam.rot + dir + 4) & 3;
     state.dirty = true;
@@ -146,13 +136,53 @@
   }, { passive: false });
 
   /* ---- controls -------------------------------------------------------- */
-  document.getElementById('btn-rot-ccw').addEventListener('click', () => rotate(-1));
-  document.getElementById('btn-rot-cw').addEventListener('click', () => rotate(1));
+  const btnRotCcw = document.getElementById('btn-rot-ccw');
+  const btnRotCw = document.getElementById('btn-rot-cw');
+  // The markup ships a plain character so the buttons say something even if
+  // this never runs; the drawn glyph replaces it when there is one.
+  for (const [btn, name] of [[btnRotCcw, 'view-rotate-ccw'], [btnRotCw, 'view-rotate-cw']]) {
+    const svg = RC.icon(name);
+    if (svg) btn.innerHTML = svg;
+  }
+  btnRotCcw.addEventListener('click', () => rotate(-1));
+  btnRotCw.addEventListener('click', () => rotate(1));
   document.getElementById('btn-zoom-in').addEventListener('click', () =>
     setZoom(cam.zoom * 1.25, state.view.w / 2, state.view.h / 2));
   document.getElementById('btn-zoom-out').addEventListener('click', () =>
     setZoom(cam.zoom / 1.25, state.view.w / 2, state.view.h / 2));
-  document.getElementById('btn-view-reset').addEventListener('click', resetView);
+
+  /* ---- undo and redo ----------------------------------------------------
+     Both live on the toolbar rather than in the build window, because a
+     student who has just built something wrong looks at the top of the screen
+     for the way out of it, and because the build window can be closed. */
+  const btnUndo = document.getElementById('btn-undo');
+  const btnRedo = document.getElementById('btn-redo');
+
+  function afterEdit() {
+    RC.clearSelection();     // the piece it pointed at may not be there now
+    RC.refreshBuild();       // which resets the sim and syncs the pair below
+    state.dirty = true;
+  }
+  function syncUndo() {
+    btnUndo.disabled = !RC.canUndo();
+    btnRedo.disabled = !RC.canRedo();
+  }
+  RC.syncUndo = syncUndo;      // so a build or a load can refresh the pair
+
+  btnUndo.addEventListener('click', () => { if (RC.undo()) afterEdit(); });
+  btnRedo.addEventListener('click', () => { if (RC.redo()) afterEdit(); });
+
+  window.addEventListener('keydown', (e) => {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+    if (e.target.matches('input, textarea, select')) return;
+    const k = e.key.toLowerCase();
+    // Ctrl+Y and Ctrl+Shift+Z both redo, because both are muscle memory
+    // depending on what else the student uses.
+    const redo = k === 'y' || (k === 'z' && e.shiftKey);
+    if (k !== 'z' && k !== 'y') return;
+    e.preventDefault();
+    if (redo ? RC.redo() : RC.undo()) afterEdit();
+  });
 
   const btnHeights = document.getElementById('btn-heights');
   btnHeights.addEventListener('click', () => {

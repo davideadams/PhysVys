@@ -63,6 +63,26 @@
       head('7.74 4.90 L12.47 8.22 L7.04 10.63')
     ),
 
+    /* ---- rotating the view ----------------------------------------------
+       A ground tile with an arrow swinging over it, because that is what the
+       button does — the park turns under a fixed camera, in quarter turns.
+
+       A bare curved arrow was not enough. The same glyph meant "put the train
+       back at the station" one group along the toolbar, and a lone arrow says
+       "again" or "back" at least as readily as it says "turn this". The tile is
+       drawn at the real 2:1 isometric ratio, so it is recognisably one of the
+       tiles on screen rather than a generic square. */
+    'view-rotate-cw': svg(
+      `<path d="M5 10 A9 9 0 0 1 19 10"/>` +
+      head('21.0 12.5 L17.1 11.5 L20.9 8.5') +
+      `<path d="M12 12.8 L19 16.4 L12 20 L5 16.4 Z" stroke-width="1.6"/>`
+    ),
+    'view-rotate-ccw': svg(
+      `<path d="M19 10 A9 9 0 0 0 5 10"/>` +
+      head('3.0 12.5 L3.1 8.5 L6.9 11.5') +
+      `<path d="M12 12.8 L19 16.4 L12 20 L5 16.4 Z" stroke-width="1.6"/>`
+    ),
+
     /* ---- slope, seen from the side, travelling left to right ------------ */
     'slope-level': svg(
       `<path d="M3.5 12 H16.5"/>` +

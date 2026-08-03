@@ -696,6 +696,10 @@
     RC.track.start = { i: 20, j: 12, dir: 0, k: k == null ? 0 : k, g: g || 0 };
     RC.track.head = Object.assign({}, RC.track.start);
     RC.version++;
+    // Laying a track out from underneath is not an edit, so it leaves no undo
+    // step — and any left over from an earlier check would step back onto a
+    // track that is no longer there.
+    RC.clearHistory();
   }
   const lastDef = () => RC.pieceDef(RC.track.pieces[RC.track.pieces.length - 1].defId);
 
@@ -787,15 +791,15 @@
     const afterThree = Object.assign({}, RC.track.head);
     if (lastDef().shape.quarters !== 3) return 'the three corners did not become a 270';
 
-    if (!RC.undo()) return 'undo refused on a 270';
-    if (RC.track.pieces.length !== 1) return 'undo removed the whole bend';
+    if (!RC.removeLast()) return 'remove refused on a 270';
+    if (RC.track.pieces.length !== 1) return 'removing took the whole bend';
     if (lastDef().shape.quarters !== 2) return `a 270 came apart into ${lastDef().id}`;
-    if (!RC.track.pieces[0].bank) return 'the demoted bend lost its bank';
+    if (!RC.track.pieces[0].bank) return 'the shortened bend lost its bank';
 
-    if (!RC.undo()) return 'undo refused on a 180';
+    if (!RC.removeLast()) return 'remove refused on a 180';
     if (lastDef().shape.quarters !== 1) return `a 180 came apart into ${lastDef().id}`;
 
-    // Rebuilding gets back to exactly where undoing started.
+    // Rebuilding gets back to exactly where removing started.
     RC.place('turn-right-tight', { bank: true });
     RC.place('turn-right-tight', { bank: true });
     for (const key of ['i', 'j', 'dir', 'k', 'g']) {
@@ -804,8 +808,69 @@
       }
     }
 
-    if (!RC.undo() || !RC.undo() || !RC.undo()) return 'undo ran out early';
-    if (RC.track.pieces.length !== 0) return `${RC.track.pieces.length} pieces left after undoing all three`;
+    if (!RC.removeLast() || !RC.removeLast() || !RC.removeLast()) return 'removing ran out early';
+    if (RC.track.pieces.length !== 0) return `${RC.track.pieces.length} pieces left after removing all three`;
+  });
+
+  check('undo reverses the last edit, whatever kind of edit it was', () => {
+    /* The distinction the whole thing turns on. Undo used to BE the remove, so
+       deleting a piece and then pressing undo deleted another one instead of
+       putting it back. Removing is an edit now, and undo reverses edits. */
+    openStart();
+    RC.place('flat');
+    RC.place('flat');
+    RC.place('flat');
+    if (RC.track.pieces.length !== 3) return 'three pieces did not go down';
+
+    // A deletion, then undo, which must put it back rather than delete more.
+    RC.removeLast();
+    if (RC.track.pieces.length !== 2) return 'remove did not take a piece off';
+    if (!RC.undo()) return 'undo refused after a deletion';
+    if (RC.track.pieces.length !== 3) {
+      return `undo left ${RC.track.pieces.length} pieces after a deletion — it is still deleting`;
+    }
+
+    // And a placement, which it must reverse the other way.
+    if (!RC.undo()) return 'undo refused after a placement';
+    if (RC.track.pieces.length !== 2) return 'undo did not reverse the placement';
+    if (!RC.redo()) return 'redo refused';
+    if (RC.track.pieces.length !== 3) return 'redo did not put the placement back';
+  });
+
+  check('a grouped edit is one press of undo, not thirty', () => {
+    /* Clearing the track and removing a section are each many changes and one
+       decision. RC.edit brackets them so the student gets the decision back,
+       not the changes one at a time. */
+    openStart();
+    for (let n = 0; n < 5; n++) RC.place('flat');
+    const before = JSON.stringify(RC.track.pieces);
+
+    RC.edit(() => { while (RC.track.pieces.length > 1) RC.removeLast(); });
+    if (RC.track.pieces.length !== 1) return 'the grouped removal did not happen';
+    if (!RC.undo()) return 'undo refused after a grouped edit';
+    if (JSON.stringify(RC.track.pieces) !== before) {
+      return `one undo restored ${RC.track.pieces.length} pieces, expected all 5 back`;
+    }
+  });
+
+  check('a fresh edit forks the future, and opening a track ends it', () => {
+    openStart();
+    RC.place('flat');
+    RC.place('flat');
+    if (!RC.undo()) return 'undo refused';
+    if (!RC.canRedo()) return 'nothing to redo after an undo';
+
+    RC.place('turn-right-tight');          // a different future
+    if (RC.canRedo()) return 'the old redo survived a fresh piece being placed';
+    if (RC.redo()) return 'redo went ahead anyway';
+
+    // Opening a track is not an edit to the one that was there, so both stacks
+    // go with it — there is nothing sensible to step back to.
+    openStart();
+    RC.place('flat');
+    if (!RC.canUndo()) return 'nothing to undo after placing a piece';
+    RC.loadPrefab('first-drop');
+    if (RC.canUndo() || RC.canRedo()) return 'the history survived a preset being opened';
   });
 
   check('a hill returns to its starting height', () => {
@@ -852,8 +917,8 @@
     const before = Object.assign({}, RC.track.head);
     RC.place('flat-to-gentle-up');
     RC.place('gentle-up');
-    RC.undo();
-    RC.undo();
+    RC.removeLast();
+    RC.removeLast();
     if (!RC.sameNode(RC.track.head, before)) {
       const h = RC.track.head;
       return `head (${h.i},${h.j},dir ${h.dir},k ${h.k},g ${h.g}) != (${before.i},${before.j},dir ${before.dir},k ${before.k},g ${before.g})`;
@@ -978,7 +1043,7 @@
     RC.place('flat');
     const after = RC.trackPath().total;
     if (!(after > before)) return `length did not grow: ${before} -> ${after}`;
-    RC.undo();
+    RC.removeLast();
     const back = RC.trackPath().total;
     if (!near(back, before, 1e-9)) return `after undo ${back} != ${before}`;
   });
@@ -1538,6 +1603,7 @@
     RC.track.start = { i: 6, j: 20, dir: 0, k: k == null ? 20 : k, g: 0 };
     RC.track.head = Object.assign({}, RC.track.start);
     RC.version++;
+    RC.clearHistory();       // see openStart: this is not an edit
     for (const id of ids) {
       const why = RC.canPlace(RC.pieceDef(id), RC.track.head).why;
       if (!RC.place(id)) return `${id} refused: ${why}`;
@@ -1843,7 +1909,7 @@
       return `${RC.jointSteps().length} joints for ${n} pieces on a closed circuit, expected ${n}`;
     }
     // Open the circuit again and the closing joint goes with it.
-    RC.undo();
+    RC.removeLast();
     if (RC.jointSteps().length !== RC.track.pieces.length - 1) {
       return `${RC.jointSteps().length} joints for ${RC.track.pieces.length} pieces on open track`;
     }

@@ -415,6 +415,11 @@
       const res = RC.completeTrack({ maxExpand: 300000 });
       if (!res.ok) return { ok: false, why: `${prefab.name}: could not close the circuit — ${res.why}` };
     }
+    // Choosing a preset is opening a track, not editing the old one — so there
+    // is nothing sensible for undo to go back to. (On the failure paths above
+    // the history is left alone deliberately: the track is in a half-built
+    // state and being able to step out of it is worth more.)
+    RC.clearHistory && RC.clearHistory();
     return { ok: true, closed: RC.sameNode(RC.track.head, RC.track.start), shuttle: !!prefab.shuttle };
   };
 })();

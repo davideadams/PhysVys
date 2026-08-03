@@ -17,12 +17,22 @@
   <div class="tb-sep"></div>
 
   <div class="tb-group" role="group" aria-label="View">
-    <button class="tb-btn" id="btn-rot-ccw" type="button" title="Rotate view left">⟲</button>
-    <button class="tb-btn" id="btn-rot-cw"  type="button" title="Rotate view right">⟳</button>
+    <!-- Glyphs are injected from icons.js: see 'view-rotate-cw' there for why
+         these are drawn tiles rather than the bare ⟲ ⟳ they used to be. -->
+    <button class="tb-btn tb-icon" id="btn-rot-ccw" type="button"
+            title="Turn the park anticlockwise"><span class="tb-fallback">⟲</span></button>
+    <button class="tb-btn tb-icon" id="btn-rot-cw"  type="button"
+            title="Turn the park clockwise"><span class="tb-fallback">⟳</span></button>
     <button class="tb-btn" id="btn-zoom-out" type="button" title="Zoom out">−</button>
     <button class="tb-btn" id="btn-zoom-in"  type="button" title="Zoom in">+</button>
-    <button class="tb-btn" id="btn-view-reset" type="button" title="Reset view">Reset</button>
     <button class="tb-btn" id="btn-heights" type="button" title="Show each piece's height above the ground">Heights</button>
+  </div>
+
+  <div class="tb-sep"></div>
+
+  <div class="tb-group" role="group" aria-label="Edit">
+    <button class="tb-btn" id="btn-undo" type="button" title="Undo (Ctrl+Z)">↶</button>
+    <button class="tb-btn" id="btn-redo" type="button" title="Redo (Ctrl+Y)">↷</button>
   </div>
 
   <div class="tb-sep"></div>
@@ -350,7 +360,9 @@
       the friction model.
     </p>
     <p>
-      <strong>View.</strong> Drag to pan, scroll to zoom, ⟲ ⟳ to rotate the park.
+      <strong>View.</strong> Drag to pan, scroll to zoom, and the two tile buttons
+      turn the park a quarter at a time. <strong>Undo</strong> and
+      <strong>redo</strong> are ↶ ↷ on the toolbar, or Ctrl+Z and Ctrl+Y.
     </p>
     <p>
       <strong>Building.</strong> Track grows from the yellow arrow. Pick a direction and

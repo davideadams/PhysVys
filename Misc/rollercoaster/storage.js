@@ -128,6 +128,9 @@
     RC.track.pieces = pieces;
     RC.track.head = head;
     RC.version++;
+    // Opening a track is not an edit to the one that was there, so there is
+    // nothing sensible for undo to go back to.
+    RC.clearHistory && RC.clearHistory();
     return { ok: true, count: pieces.length };
   };
 

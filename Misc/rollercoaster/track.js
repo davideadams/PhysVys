@@ -1731,6 +1731,7 @@
     const head = RC.track.head;
     const check = RC.canPlace(def, head);
     if (!check.ok) return false;
+    mark();                              // after the check: a refusal is not an edit
     RC.track.pieces.push({
       defId,
       node: { i: head.i, j: head.j, dir: head.dir, k: head.k, g: head.g },
@@ -1773,18 +1774,95 @@
     return { ok: true, pieces, start, head };
   };
 
+  /* ---- undo and redo ----------------------------------------------------
+     UNDO REVERSES THE LAST THING THE STUDENT DID, whatever that was. It used to
+     mean "take the last piece off", which is a different thing wearing the same
+     name and reads as a bug the moment you delete a section: pressing undo
+     carried on deleting rather than putting the section back. Removing track is
+     an EDIT now (RC.removeLast, on Backspace and the build window's button) and
+     undo reverses edits, including that one.
+
+     Both stacks are whole-track snapshots. Inverse operations were tried for
+     undo and are a trap: "what was removed" is not recoverable from what is
+     left, and a merge means one press can change two pieces. Snapshots are JSON,
+     which is what the save format already is — small, cheap, and immune to any
+     structure sharing a reference with the live track.
+
+     mark() is called by every edit before it changes anything, and clears the
+     redo stack because a fresh edit forks the future. RC.edit groups several
+     changes into one step, which is what makes "Finish track" and "remove this
+     section" one press of undo each rather than thirty. */
+  const MAX_UNDO = 100;
+  let undoStack = [], redoStack = [], editDepth = 0;
+
+  function snapshot() {
+    return JSON.stringify({
+      start: RC.track.start, head: RC.track.head, pieces: RC.track.pieces
+    });
+  }
+  function restore(json) {
+    const d = JSON.parse(json);
+    RC.track.start = d.start;
+    RC.track.head = d.head;
+    RC.track.pieces = d.pieces;
+    RC.version++;
+  }
+
+  function mark() {
+    if (editDepth) return;                 // already inside a grouped edit
+    undoStack.push(snapshot());
+    if (undoStack.length > MAX_UNDO) undoStack.shift();
+    redoStack.length = 0;
+  }
+
+  /* Run fn as ONE undoable step, however many edits it makes inside. */
+  RC.edit = function (fn) {
+    mark();
+    editDepth++;
+    try { return fn(); } finally { editDepth--; }
+  };
+
+  /* Opening a different track is not an edit to this one — there is nothing
+     sensible to undo back to, so both stacks go. Called by the loaders. */
+  RC.clearHistory = function () {
+    undoStack.length = 0;
+    redoStack.length = 0;
+    editDepth = 0;
+  };
+
+  RC.canUndo = () => undoStack.length > 0;
+  RC.canRedo = () => redoStack.length > 0;
+
   RC.undo = function () {
+    if (!undoStack.length) return false;
+    redoStack.push(snapshot());
+    restore(undoStack.pop());
+    return true;
+  };
+
+  RC.redo = function () {
+    if (!redoStack.length) return false;
+    undoStack.push(snapshot());
+    restore(redoStack.pop());
+    return true;
+  };
+
+  /* Take the last piece off — the EDIT, not the undo. A long bend loses one
+     right angle rather than vanishing, so a 270 takes three presses to clear
+     what three presses built. Deriving the shorter bend from the longer one
+     rather than remembering what was merged is what lets this work on a track
+     this session never built: a 180 opened from a save comes apart exactly like
+     one just placed. */
+  RC.removeLast = function () {
     const t = RC.track;
     if (!t.pieces.length) return false;
+    mark();
+
     const last = t.pieces[t.pieces.length - 1];
     const def = BY_ID.get(last.defId);
 
-    /* A long bend was two or three presses, so one undo takes one right angle
-       back off it rather than deleting the lot. Demoting rather than
-       remembering what was merged is what makes this survive a save and a
-       reload: the shorter bend is derived from the longer one, so a 180 loaded
-       from disk comes apart exactly like one just built. It can only ever
-       shrink the footprint back to a state the track was already in. */
+    // Shrinking a long bend can only ever return the footprint to a state the
+    // track was already in, so it needs no collision check of its own.
     const shorter = def && def.kind === 'turn' ? BY_ID.get(SHORTER.get(last.defId)) : null;
     if (shorter) {
       t.pieces[t.pieces.length - 1] = {
@@ -1905,6 +1983,7 @@
       return { ok: false, why: 'A bigger loop would hit other track' };
     }
 
+    mark();                               // every check passed, so this is an edit
     p.node.loopR = newR;
     p.node.loopL = newL;
     if (isEnd) RC.track.head = exit;      // the grown footprint moved the head
@@ -2146,36 +2225,46 @@
     const route = RC.findRouteHome(limits);
     if (!route.ok) return route;
 
-    const before = RC.track.pieces.length;
-    for (const id of route.ids) {
-      if (!RC.place(id)) {
-        while (RC.track.pieces.length > before) RC.undo();
-        return { ok: false, why: 'The route it found ran into the track on the way' };
+    // One undoable step however many pieces it lays: a student who does not
+    // like the filler wants it gone in one press, not thirty.
+    return RC.edit(() => {
+      const before = RC.track.pieces.length;
+      for (const id of route.ids) {
+        if (!RC.place(id)) {
+          while (RC.track.pieces.length > before) RC.removeLast();
+          return { ok: false, why: 'The route it found ran into the track on the way' };
+        }
       }
-    }
-    if (!sameNode(RC.track.head, RC.track.start)) {
-      while (RC.track.pieces.length > before) RC.undo();
-      return { ok: false, why: 'The route it found did not close the circuit' };
-    }
-    return { ok: true, added: route.ids.length };
+      if (!sameNode(RC.track.head, RC.track.start)) {
+        while (RC.track.pieces.length > before) RC.removeLast();
+        return { ok: false, why: 'The route it found did not close the circuit' };
+      }
+      return { ok: true, added: route.ids.length };
+    });
   };
 
   /* ---- setup ----------------------------------------------------------
      Start every park with a short station, so there is always something to
      build from and the first load isn't a blank field. */
   RC.resetTrack = function () {
-    const t = RC.track;
-    t.pieces = [];
-    RC.demo = null;          // any comparison tracks go with the old layout
-    // ...and with them the car count a demo borrowed to run point masses.
-    RC.returnDemoCars && RC.returnDemoCars();
-    RC.version++;
-    // Near the middle of the park, so it's on screen at the default zoom and
-    // there's room to build in every direction.
-    t.start = { i: 16, j: 19, dir: 0, k: 0, g: FLAT };
-    t.head = Object.assign({}, t.start);
-    for (let n = 0; n < 3; n++) RC.place('station');
-    return t;
+    // One undoable step, so Clear is recoverable from — it is the single most
+    // destructive button on the page. The loaders call it too and then wipe the
+    // history behind themselves, since opening another track is not an edit to
+    // this one.
+    return RC.edit(() => {
+      const t = RC.track;
+      t.pieces = [];
+      RC.demo = null;          // any comparison tracks go with the old layout
+      // ...and with them the car count a demo borrowed to run point masses.
+      RC.returnDemoCars && RC.returnDemoCars();
+      RC.version++;
+      // Near the middle of the park, so it's on screen at the default zoom and
+      // there's room to build in every direction.
+      t.start = { i: 16, j: 19, dir: 0, k: 0, g: FLAT };
+      t.head = Object.assign({}, t.start);
+      for (let n = 0; n < 3; n++) RC.place('station');
+      return t;
+    });
   };
 
   RC.clearToStation = RC.resetTrack;

@@ -114,6 +114,14 @@ html, body {
   transition: background 0.12s, color 0.12s;
 }
 .tb-btn:hover { background: white; }
+/* A button holding a drawn glyph rather than a character: the icon is a 24px
+   block, so the button has to centre it and stop padding for text. */
+.tb-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.25rem;
+}
 .tb-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
 .tb-btn:disabled { opacity: 0.35; cursor: default; }
 .tb-btn:disabled:hover { background: rgba(255,255,255,0.7); }

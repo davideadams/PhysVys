@@ -309,15 +309,27 @@ joints in it to hold bank across.** Place a second banked corner the same way
 round and `mergeRun` folds both into a 180; a third makes a 270. The exit node is
 identical either way, so the head does not move and a closed circuit stays
 closed. Nothing in the palette says "90 / 180 / 270" — a student finds out by
-placing the second one. Undo takes one right angle off rather than removing the
+placing the second one.
+
+**Removing and undoing are different things**, and conflating them was a real
+bug: undo used to *be* the removal, so deleting a section and pressing undo
+deleted more instead of putting it back. `RC.removeLast` is the edit (Backspace,
+and the build window's Remove); `RC.undo` reverses the last edit of any kind,
+including that one. Both stacks are whole-track JSON snapshots — inverse
+operations are a trap here, since what was removed is not recoverable from what
+is left and one press can change two pieces. `RC.edit(fn)` groups several changes
+into one step, which is what makes Clear, Finish track and Remove-section each a
+single press of undo. Opening a track calls `RC.clearHistory`.
+
+Removing takes one right angle off rather than the
 lot, and derives the shorter bend from the longer, so a 180 loaded from a save
 comes apart exactly like one just built.
 
 The g-force maths needed **no changes at all**, because banking is a roll of the
 car frame and the forces were already a projection onto that frame.
 
-Numbers worth knowing: on a tight turn (7.5 m radius) at 10 m/s, flat gives
-1.37 g sideways; banked gives 0.26 g sideways and 1.67 g vertical. The *total*
+Numbers worth knowing: on a tight turn (8.6 m radius) at 10 m/s, flat gives
+1.19 g sideways; banked gives 0.13 g sideways and 1.55 g vertical. The *total*
 force is unchanged —
 banking redirects it, it does not reduce it, and a test asserts that. At the ideal
 speed `v = √(rg)` lateral cancels entirely and vertical is exactly `1/cos 45°`,
