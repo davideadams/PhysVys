@@ -476,9 +476,11 @@ answer that:
    was before easing.
 2. **Bank the other presets' corners.** Free, and now correct at every point of
    the piece rather than only in the middle of it.
-3. **Phase 5.** A 180 built as two halves is `R = 0.993 T` against `0.829 T` for
-   two eased quarters — a 20% larger radius in the same footprint, which is
-   exactly the size class easing cost.
+3. ~~**Phase 5.**~~ A 180 was going to buy a 20% larger radius in the same
+   footprint. It no longer does, and deliberately: its easement is now solved so
+   it bends at *exactly* its corners' radius, because a bend that appears when
+   you place a second corner has no business being a different size from the
+   corners you placed. Consistency beat the free 20%.
 
 ### Three turn sizes
 
@@ -628,25 +630,55 @@ in the catalogue now has a `-180` twin (flat and all six grades) and a `-270`
 the same spiral, because the exit spiral is the entry one rotated by the
 deflection and flipped — so neither cost any new integration.
 
-Each extra right angle of arc between the spirals buys back exactly one `θs` of
-tangent length, which is tidier than expected:
+Writing `P = y₁ + cos θ` and `Q = x₁ − sin θ` for the entry spiral's far end,
+the three shapes come out as
 
-| | tangent length / R | R / T | wide turn |
-| --- | --- | --- | --- |
-| quarter | `1 + θs + θs²/6 − θs³/30` | 0.8289 | 12.4 m |
-| 180 | `1 + θs²/6` | 0.9934 | 14.9 m |
-| 270 | `1 − θs + θs²/6 + θs³/30` | 1.2393 | 18.6 m |
+```
+tau(quarter) = P + Q      tau(180) = P      tau(270) = P − Q      R = T/tau
+```
 
-A 270 in a footprint no wider than the 180's.
+**The easement angle is solved per shape, so a bend matches the corners it
+replaces.** `tau(180) = P` is the only one with no linear term in `θ`, so there
+is exactly one easement making a 180 bend at its corners' radius — `P(θ) =
+tau(quarter)` puts it at **1.139 rad, 65°**. A long easement and a better one:
+the spiral is nearly six times the quarter's, so the same peak force arrives that
+much more gently.
 
-**The 270 is flat only**, and two arguments agree on it. Its path is 29% longer
-than the three quarters whose `dH` it must match exactly, so a "steep" 270 would
-average 36 degrees against the 45 it is named for, with its middle sagging to 27
-— past the rule that a substituted piece may hide at most half a rung of the
-grade ladder (4.7 degrees). And a turn descending through `Φ` at pitch `θ` loads
-`2Φ tan θ` at the bottom *whatever radius it is drawn at*, so a descending 270 is
-3.1 g at medium and 9.4 at steep and widening it does nothing. Three sloped
-quarters still build that descent; the merge simply declines to fold them.
+**The 270 cannot match, and that is the grid rather than a choice.** `P − Q` is
+at most 1, reached only at `θ = 0`, while `P + Q` is at least 1 for the same
+reason — so a 270 landing where three corners land is *forced* wider than `T`
+while a corner is forced narrower, and they coincide only with no easement
+anywhere. The nearest a real easement gets is 21%, and only by vanishing. So its
+`θ` is solved on the other axis: give it the easement whose **jerk** matches a
+quarter's, and take the radius that falls out.
+
+| | `θ` | tau | R / T | wide turn |
+| --- | --- | --- | --- | --- |
+| quarter | 0.200 | 1.20640 | 0.8289 | 12.4 m |
+| 180 | 1.139 | 1.20640 | 0.8289 | **12.4 m** |
+| 270 | 0.109 | 0.89266 | 1.1202 | 16.8 m |
+
+A 270 stays 35% wider than the corners it replaces, which is the safe direction
+to be wrong in — gentler, never sharper.
+
+**Long bends are flat only, and matching the radius is what decided it.** A long
+bend's `dH` is pinned to its corners' or the merge would move the track, while
+its path is longer than theirs — so its height profile sags in the middle and it
+reads below the grade it names. At the old short easement a 180 ran 7.7% long and
+sat 3.5° low, inside the rule that a substituted piece may hide at most half a
+rung of the grade ladder (4.7°). At the easement that matches its corners' radius
+it runs **37% long**, putting a "medium" 180 at 12.6° against 18.4 and sagging
+its middle to 7.2 with a full g of vertical wobble at 20 m/s. A consistent radius
+is worth more than a sloped variant nobody had built.
+
+The 270 was already flat for the same arithmetic plus a physical argument: a turn
+descending through `Φ` at pitch `θ` loads `2Φ tan θ` at the bottom *whatever
+radius it is drawn at*, so a descending 270 is 3.1 g at medium and 9.4 at steep,
+and widening it does nothing.
+
+Nothing is lost. Sloped corners still build every descent they did, and the merge
+declines to fold them — so every sloped bend a student can build is one radius per
+size, the same as every flat one.
 
 **One correction to the plan.** The halves below cannot be pieces. A half ends at
 `R * (cx + 1, cy)`, which for `T` = 2.5 is 2.98 tiles forward and 2.5 across —
@@ -901,4 +933,4 @@ Three smaller things, none of them blocking:
   moved; the phase 4 baseline is pinned above and nothing has been measured
   against it since the third turn size and the merge landed.
 
-Suite is at **191 checks**, all passing, at the end of the refactor.
+Suite is at **193 checks**, all passing, at the end of the refactor.

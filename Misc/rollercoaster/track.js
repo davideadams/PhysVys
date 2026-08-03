@@ -65,33 +65,35 @@
   const SPIRAL_THETA = 0.2;
   const SPIRAL_LS = 2 * SPIRAL_THETA;                 // spiral length, in radii
 
-  /* Where the entry spiral has reached after arc length s, in radii, measured
-     from its start with the heading along +x.
+  /* Where a spiral deflecting THETA has reached after arc length s, in radii,
+     measured from its start with the heading along +x.
 
      A clothoid has no closed form and the usual answer is a precomputed Fresnel
-     table. It needs none HERE, because THETA is one small global constant: the
-     heading psi = s^2/(2*Ls) never exceeds 0.2 rad, so expanding cos and sin as
-     power series and integrating term by term gives
+     table. It needs none here. The heading is psi = s^2/(4*theta), so expanding
+     cos and sin as power series and integrating term by term collapses to one
+     series in psi for both coordinates:
 
-       x = s - s^5/(40 Ls^2) + s^9/(3456 Ls^4) - ...
-       y = s^3/(6 Ls) - s^7/(336 Ls^3) + s^11/(42240 Ls^5) - ...
+       x = s * SUM  psi^m / ((2m+1) m!)   over even m
+       y = s * SUM  psi^m / ((2m+1) m!)   over odd m
 
-     and the terms kept are already good to about 1e-9 of a radius — the next
-     one is 3e-9. So the spiral stays closed-form and centreline stays cheap
-     enough for the sampling loops that call it.
+     with the sign running +, +, -, -, +, + as m climbs, which is the two
+     alternating series interleaved. Fourteen terms hold to about 1e-12 out to
+     psi = 1.2, which covers the longest easement in the catalogue — the 180's,
+     which is 65 degrees.
 
      That accuracy is not a nicety. curvInside measures a piece's curvature from
      three centreline points a thousandth of a parameter apart, so an
      interpolated table would be read across the chords between its own knots
      and would report a turn as dead straight. */
-  function spiralPoint(s) {
-    const L2 = SPIRAL_LS * SPIRAL_LS, L4 = L2 * L2;
-    const s2 = s * s, s3 = s2 * s, s5 = s3 * s2, s7 = s5 * s2, s9 = s7 * s2;
-    return {
-      x: s - s5 / (40 * L2) + s9 / (3456 * L4),
-      y: s3 / (6 * SPIRAL_LS) - s7 / (336 * L2 * SPIRAL_LS)
-         + s9 * s2 / (42240 * L4 * SPIRAL_LS)
-    };
+  function spiralPoint(s, theta) {
+    const psi = s * s / (4 * theta);          // the heading here, in radians
+    let x = 0, y = 0, term = 1, sign = 1;     // term = psi^m / m!
+    for (let m = 0; m < 14; m++) {
+      const c = sign * term / (2 * m + 1);
+      if (m % 2) { y += c; sign = -sign; } else { x += c; }
+      term *= psi / (m + 1);
+    }
+    return { x: s * x, y: s * y };
   }
 
   /* The entry spiral's far end, the centre of the constant-radius arc that
@@ -104,7 +106,7 @@
      entry spiral finishes gives TAU = x1 + y1 + cos(THETA) - sin(THETA)
      outright. At 0.2 rad that is 1.20639, so R = 0.8289 T: a tight turn is
      7.46 m rather than 9, and a wide one 12.43 m rather than 15. */
-  const SPIRAL_END = spiralPoint(SPIRAL_LS);
+  const SPIRAL_END = spiralPoint(SPIRAL_LS, SPIRAL_THETA);
 
   /* A turn shape: spiral in, constant-radius arc, spiral out, deflecting
      DEFLECT radians in all. Only two exist — the quarter every corner is built
@@ -139,19 +141,21 @@
      For the quarter that gives ex = ey = 1.20639, the familiar TAU. For the
      half it gives ex = 0 and ey = 2 * cy, so a 180 finishes directly abeam of
      where it started, exactly as two quarters do. */
-  function turnShape(deflect) {
-    const cx = SPIRAL_END.x - Math.sin(SPIRAL_THETA);
-    const cy = SPIRAL_END.y + Math.cos(SPIRAL_THETA);
-    const ax = cx + Math.sin(deflect - SPIRAL_THETA);
-    const ay = cy - Math.cos(deflect - SPIRAL_THETA);
-    const dx = Math.cos(deflect) * SPIRAL_END.x + Math.sin(deflect) * SPIRAL_END.y;
-    const dy = Math.sin(deflect) * SPIRAL_END.x - Math.cos(deflect) * SPIRAL_END.y;
+  function turnShape(deflect, theta) {
+    const Ls = 2 * theta;
+    const e = spiralPoint(Ls, theta);
+    const cx = e.x - Math.sin(theta);
+    const cy = e.y + Math.cos(theta);
+    const ax = cx + Math.sin(deflect - theta);
+    const ay = cy - Math.cos(deflect - theta);
+    const dx = Math.cos(deflect) * e.x + Math.sin(deflect) * e.y;
+    const dy = Math.sin(deflect) * e.x - Math.cos(deflect) * e.y;
     const ey = ay + dy;
     return {
-      deflect, cx, cy, ax, ay,
+      deflect, theta, Ls, cx, cy, ax, ay,
       ex: ax + dx, ey,
       quarters: Math.round(deflect / (Math.PI / 2)),
-      S: deflect + 2 * SPIRAL_THETA,
+      S: deflect + 2 * theta,
       tau: ey / Math.round(1 - Math.cos(deflect))
     };
   }
@@ -162,23 +166,60 @@
      one 180 eases only at its OUTER ends and holds full curvature the whole way
      through. A 270 does the same again over three right angles.
 
-     Spending no spirals in the middle is also worth radius, and by a strikingly
-     tidy amount — each extra right angle of arc buys back exactly one THETA of
-     tangent length:
+     THE EASEMENT ANGLE IS SOLVED PER SHAPE, so that a bend replacing a run of
+     corners bends at the same radius they did. Writing P = y1 + cos(theta) and
+     Q = x1 - sin(theta) for the entry spiral's far end, the three shapes come
+     out as
 
-       quarter  tau = 1 + t + t^2/6 - t^3/30 = 1.20640   R = 0.8289 T
-       half     tau = 1 +     t^2/6          = 1.00667   R = 0.9934 T
-       270      tau = 1 - t + t^2/6 + t^3/30 = 0.80693   R = 1.2393 T
+       tau(quarter) = P + Q      tau(180) = P      tau(270) = P - Q
 
-     So at 2.5 tiles across, a corner bends at 12.4 m, a 180 at 14.9 and a 270
-     at 18.6 — the 270 in a footprint no wider than the 180's.
+     with R = T/tau. Q is about theta, so tau(180) is the only one with no
+     linear term: there is exactly one easement that makes a 180 match its
+     corners, and solving P(theta) = tau(quarter) finds it at 1.139 rad, 65
+     degrees. A long easement, and a better one — the spiral is nearly six times
+     the quarter's, so the jerk is that much lower at the same peak force.
 
-     Nothing places either yet. Doing that is phase 5's second piece of work,
-     where a run of same-direction banked corners is silently replaced by one
-     continuous bend. */
-  const QUARTER = turnShape(Math.PI / 2);
-  const HALF = turnShape(Math.PI);
-  const THREE_QUARTER = turnShape(3 * Math.PI / 2);
+     THE 270 CANNOT MATCH, and that is a fact about the grid rather than a
+     choice. tau(270) = P - Q is at most 1, reached only at theta = 0, while
+     tau(quarter) = P + Q is at least 1 for the same reason — so a 270 landing
+     where three corners land is forced WIDER than T while a corner is forced
+     narrower, and they coincide only with no easement at all. The best a real
+     easement can do is 21% wide, and only by making the easement vanish. So its
+     theta is solved on the other axis instead: give it the easement whose JERK
+     matches a quarter's, which is what an easement is for, and take the radius
+     that falls out.
+
+       quarter  theta 0.200   tau 1.20640   R = 0.8289 T   12.4 m
+       180      theta 1.139   tau 1.20640   R = 0.8289 T   12.4 m
+       270      theta 0.109   tau 0.89266   R = 1.1202 T   16.8 m
+
+     at 2.5 tiles across. A 270 stays 35% wider than the corners it replaces,
+     which is the safe direction to be wrong in — it is gentler, not sharper. */
+  const QUARTER = turnShape(Math.PI / 2, SPIRAL_THETA);
+
+  /* Bisection rather than a written-down constant: tau climbs with theta, so
+     one root, and it moves if SPIRAL_THETA ever does. */
+  function solveTheta(f, lo, hi) {
+    for (let n = 0; n < 60; n++) {
+      const mid = (lo + hi) / 2;
+      if (f(mid) < 0) lo = mid; else hi = mid;
+    }
+    return (lo + hi) / 2;
+  }
+  const HALF = turnShape(Math.PI, solveTheta(
+    th => turnShape(Math.PI, th).tau - QUARTER.tau, 1e-6, 2));
+
+  /* Equal jerk: dk/ds is 1/(2*theta*R^2) and R is T/tau, so matching a
+     quarter's means theta = THETA * (tau/tau_quarter)^2. tau depends on theta,
+     so iterate — it converges in a handful of passes from either side. */
+  const THREE_QUARTER = (function () {
+    let th = SPIRAL_THETA;
+    for (let n = 0; n < 40; n++) {
+      const tau = turnShape(3 * Math.PI / 2, th).tau;
+      th = SPIRAL_THETA * (tau * tau) / (QUARTER.tau * QUARTER.tau);
+    }
+    return turnShape(3 * Math.PI / 2, th);
+  })();
 
   RC.SPIRAL_THETA = SPIRAL_THETA;
   RC.SPIRAL_TAU = QUARTER.tau;
@@ -186,21 +227,21 @@
   /* The point at arc length s along a unit-radius turn of that shape, starting
      at the origin heading +x. */
   function turnPoint(shape, s) {
-    if (s <= SPIRAL_LS) return spiralPoint(s);
-    if (s >= shape.S - SPIRAL_LS) {
-      const p = spiralPoint(shape.S - s);       // the exit spiral, mirrored
+    if (s <= shape.Ls) return spiralPoint(s, shape.theta);
+    if (s >= shape.S - shape.Ls) {
+      const p = spiralPoint(shape.S - s, shape.theta);   // the exit spiral
       const c = Math.cos(shape.deflect), n = Math.sin(shape.deflect);
       return { x: shape.ex - (c * p.x + n * p.y), y: shape.ey - (n * p.x - c * p.y) };
     }
-    const psi = SPIRAL_THETA + (s - SPIRAL_LS);
+    const psi = shape.theta + (s - shape.Ls);
     return { x: shape.cx + Math.sin(psi), y: shape.cy - Math.cos(psi) };
   }
 
   /* How much of its full curvature the turn has reached at arc length s: zero
      at both ends, one through the middle, linear across each spiral. */
   function turnKappa(shape, s) {
-    if (s <= SPIRAL_LS) return s / SPIRAL_LS;
-    if (s >= shape.S - SPIRAL_LS) return (shape.S - s) / SPIRAL_LS;
+    if (s <= shape.Ls) return s / shape.Ls;
+    if (s >= shape.S - shape.Ls) return (shape.S - s) / shape.Ls;
     return 1;
   }
 
@@ -393,11 +434,10 @@
     { suffix: 'steep-up',    g: STEEP,   label: 'steep up' }
   ];
 
-  /* The bends longer than a quarter, and which grades each is offered on. See
-     longTurns below for why the 270 is flat only. */
+  /* The bends longer than a quarter. Both are FLAT ONLY — see longTurns. */
   const LONG_BENDS = [
-    { suffix: '-180', label: ', 180', shape: HALF, slopes: TURN_SLOPES },
-    { suffix: '-270', label: ', 270', shape: THREE_QUARTER, slopes: [] }
+    { suffix: '-180', label: ', 180', shape: HALF },
+    { suffix: '-270', label: ', 270', shape: THREE_QUARTER }
   ];
 
   function slopedTurns() {
@@ -411,45 +451,42 @@
     return out;
   }
 
-  /* The same catalogue again as 180s and 270s, named <turn>-180[-<slope>] and
-     <turn>-270. Nothing places one yet — they exist so that phase 5's
-     substitution has something to substitute, and so the geometry can be tested
-     before anything depends on it.
+  /* The same catalogue again as 180s and 270s, named <turn>-180 and <turn>-270,
+     for a run of same-direction banked corners to be merged into.
 
-     A long turn's dH has to be exactly as many times the quarter's as it turns
-     right angles, or the substitution would move the track. Its path is longer
-     than that many quarters, though, because it is bending at a wider radius —
-     7.7% for a 180, 29% for a 270 — so the height profile has to sag in the
-     middle to make the same total, and the piece comes out gentler on AVERAGE
-     than the grade it is named for. The ends are exact either way, so nothing
-     kinks; only the average moves, and only ever downward.
+     BOTH ARE FLAT ONLY, and the reason is the same one that decides the
+     easement angles above. A long bend's dH must be exactly as many times the
+     quarter's as it turns right angles, or the merge would move the track — but
+     its PATH is longer than that many quarters, so the height profile has to
+     sag in the middle to make the same total and the piece ends up gentler on
+     average than the grade it is named for. The ends stay exact, so nothing
+     kinks; only the average moves.
 
-     For a 180 that is at most 3.5 degrees, against a quarter's 1.4 — and the
-     thing a rider is comparing it to is the pair of quarters it replaced, which
-     are themselves 1.4 low, so what they would feel is nearer 2. Acceptable:
-     the rule is that a substituted piece may not sit more than half a rung of
-     the grade ladder below its name, and half of flat-to-gentle is 4.7 degrees.
+     How much longer decides whether that is tolerable, and matching the radius
+     is what makes it not. A 180 at the old short easement ran 7.7% long and sat
+     3.5 degrees below its name — inside the rule that a substituted piece may
+     hide at most half a rung of the grade ladder, 4.7 degrees. At the easement
+     that matches its corners' radius it runs 37% long, which puts a "medium"
+     180 at 12.6 degrees against 18.4 and sags its middle to 7.2 with a full g
+     of vertical wobble at 20 m/s. That is not a piece that means what it says,
+     and a consistent radius is worth more than a sloped variant nobody has
+     built: sloped corners simply do not merge now, and stay corners at exactly
+     the corner radius.
 
-     THE 270 FAILS THAT RULE AND SO IT IS FLAT ONLY. 29% of extra path puts a
-     "steep" 270 at 36 degrees, 8.6 below its name, with its middle sagging to
-     27 — a piece that does not mean what it says. The physics agrees from the
-     other side: a turn descending through PHI at pitch theta loads
+     The 270 was already flat only, for the same arithmetic plus a physical
+     argument: a turn descending through PHI at pitch theta loads
      2*PHI*tan(theta) at the bottom whatever radius it is drawn at, so a
-     descending 270 is 1.6 g at gentle, 3.1 at medium and 9.4 at steep, and
-     widening it does nothing at all. Nothing is taken away by leaving them out
-     — three sloped quarters build the same descent, and phase 5 simply will not
-     merge them. */
+     descending 270 is 3.1 g at medium and 9.4 at steep, and widening it does
+     nothing at all.
+
+     Nothing is taken away. Sloped corners still build every descent they built
+     before, at a radius that now matches what the palette says. */
   function longTurns() {
     const out = [];
     for (const sh of TURN_SHAPES) {
       for (const b of LONG_BENDS) {
         out.push(turn(sh.id + b.suffix, sh.label + b.label,
                       sh.dir, sh.R, FLAT, b.shape));
-        for (const sl of b.slopes) {
-          out.push(turn(sh.id + b.suffix + '-' + sl.suffix,
-                        sh.label + b.label + ', ' + sl.label,
-                        sh.dir, sh.R, sl.g, b.shape));
-        }
       }
     }
     return out;
@@ -576,13 +613,13 @@
   /* Forward and upward position, in metres, at parameter t. */
   function loopPoint(sh, t) {
     if (t <= sh.te) {
-      const p = spiralPoint(SPIRAL_LS * t / sh.te);
+      const p = spiralPoint(SPIRAL_LS * t / sh.te, SPIRAL_THETA);
       return { u: sh.re * p.x, w: sh.re * p.y };
     }
     if (t >= 1 - sh.te) {
       // The exit easement is the entry one again, run backwards out of a tangent
       // that has come the whole way round to horizontal.
-      const p = spiralPoint(SPIRAL_LS * (1 - t) / sh.te);
+      const p = spiralPoint(SPIRAL_LS * (1 - t) / sh.te, SPIRAL_THETA);
       return { u: sh.reach - sh.re * p.x, w: sh.re * p.y };
     }
     const phi = sh.th + (t - sh.te) / (1 - 2 * sh.te) * (2 * Math.PI - 2 * sh.th);
