@@ -302,9 +302,16 @@ turns held full bank across the joints between them. That was wrong in a way tha
 measured: the curvature arrived in one step at the joint while the bank was still
 rolling in, so the entry of a banked turn was, for a fifth of a second, an
 unbanked turn — a 15 m corner at 19.8 m/s spiked to 2.7 g however well it was
-banked. The neighbour-awareness went with it, because two eased quarters
-genuinely do go straight for an instant between them; the 180° that should be
-there instead is phase 5's job, not the bank profile's.
+banked.
+
+**A run of same-direction banked corners is now one piece, so there are no
+joints in it to hold bank across.** Place a second banked corner the same way
+round and `mergeRun` folds both into a 180; a third makes a 270. The exit node is
+identical either way, so the head does not move and a closed circuit stays
+closed. Nothing in the palette says "90 / 180 / 270" — a student finds out by
+placing the second one. Undo takes one right angle off rather than removing the
+lot, and derives the shorter bend from the longer, so a 180 loaded from a save
+comes apart exactly like one just built.
 
 The g-force maths needed **no changes at all**, because banking is a roll of the
 car frame and the forces were already a projection onto that frame.

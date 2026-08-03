@@ -384,7 +384,10 @@
       return;
     }
     const count = RC.track.pieces.length - cursor;
-    for (let n = 0; n < count && RC.track.pieces.length > 0; n++) RC.undo();
+    // Driven by where the head has got back to, not by a press count: undo
+    // takes one right angle off a long bend rather than removing it whole, so a
+    // 270 needs three presses to clear one piece.
+    while (RC.track.pieces.length > cursor) RC.undo();
     cursor = null;
     setStatus(`Removed ${count} piece${count === 1 ? '' : 's'}`);
     refresh();

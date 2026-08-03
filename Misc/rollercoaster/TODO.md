@@ -1,6 +1,6 @@
 # Geometry refactor: honest track at a workable scale
 
-Status: **Phases 1, 2, 3, 4 and most of 6 done. Phase 5 not started.** The numbers below are
+Status: **All six phases done.** The numbers below are
 calculated but only cross-checked by hand — the sim is its own test rig, so
 expect to verify rather than trust. Phase 1 needed three corrections that the
 arithmetic had not predicted; they are recorded under it as a warning about how
@@ -620,7 +620,83 @@ a parameter apart, which is a fraction of one table interval, so it would have
 measured the chord between two knots and reported every turn as dead straight.
 The power series above is both cheaper and exact.*
 
-## Phase 5 — 180 degree turns, created automatically
+## Phase 5 — 180 and 270 degree turns, created automatically — **DONE**
+
+**All three steps shipped.** Every turn
+in the catalogue now has a `-180` twin (flat and all six grades) and a `-270`
+(flat only), at all three sizes. `turnShape(deflect)` generates all three from
+the same spiral, because the exit spiral is the entry one rotated by the
+deflection and flipped — so neither cost any new integration.
+
+Each extra right angle of arc between the spirals buys back exactly one `θs` of
+tangent length, which is tidier than expected:
+
+| | tangent length / R | R / T | wide turn |
+| --- | --- | --- | --- |
+| quarter | `1 + θs + θs²/6 − θs³/30` | 0.8289 | 12.4 m |
+| 180 | `1 + θs²/6` | 0.9934 | 14.9 m |
+| 270 | `1 − θs + θs²/6 + θs³/30` | 1.2393 | 18.6 m |
+
+A 270 in a footprint no wider than the 180's.
+
+**The 270 is flat only**, and two arguments agree on it. Its path is 29% longer
+than the three quarters whose `dH` it must match exactly, so a "steep" 270 would
+average 36 degrees against the 45 it is named for, with its middle sagging to 27
+— past the rule that a substituted piece may hide at most half a rung of the
+grade ladder (4.7 degrees). And a turn descending through `Φ` at pitch `θ` loads
+`2Φ tan θ` at the bottom *whatever radius it is drawn at*, so a descending 270 is
+3.1 g at medium and 9.4 at steep and widening it does nothing. Three sloped
+quarters still build that descent; the merge simply declines to fold them.
+
+**One correction to the plan.** The halves below cannot be pieces. A half ends at
+`R * (cx + 1, cy)`, which for `T` = 2.5 is 2.98 tiles forward and 2.5 across —
+not a tile edge midpoint, so it is not a node and cannot be one. Easing the entry
+and holding curvature to the end is precisely what stops it landing where the
+quarter lands, and varying the spiral deflection to fix it only works at
+`θs` = 0, which is the unspiralled circle. **So a 180 is ONE piece** spanning the
+node range of two quarters, and everything after got simpler for it: there is no
+unpaired half to repair on load, and undo shortens the bend rather than leaving
+half a turn.
+
+`dH` is `quarters * round(T * pi/2 * g)`, pinned to the quarters it replaces so
+the swap cannot move the track. The 180's path is 7.7% longer, so a sloped one
+sits up to 3.5 degrees below its named grade against a quarter's 1.4 — gentler,
+never steeper, ends exact so nothing kinks, and about 2 degrees against the
+quarters a rider is actually comparing it to.
+
+### The swap
+
+`mergeRun` runs after every successful `RC.place` and folds the last two pieces
+into one longer bend when they are the same size, the same way round, the same
+grade, the same chain state, both banked, and the second is a plain quarter. The
+merged piece's exit node is identical by construction, so the head does not move
+and a closed circuit stays closed; its footprint is not, since it bends wider, so
+collision is rechecked against everything except the pieces it replaces.
+
+`LONGER` and `SHORTER` are built by walking the catalogue rather than by splicing
+ids at the call site, which is what makes the edges free:
+
+- **Three in a row** become a 270, or stop at 180 + quarter when sloped, because
+  a sloped 270 has no entry in `LONGER` and the merge declines without needing to
+  know why.
+- **Four in a row** stops at 270 + quarter. There is no 360: its lateral offset
+  is zero, so `tau` would divide by zero and its exit is its entry. A four-corner
+  helix is `2 * 2pi * tan θ` of lateral g whatever radius it is drawn at, and
+  that is the ride report's business rather than the geometry's.
+
+**Undo demotes rather than remembers.** One press takes one right angle off a
+long bend, so a 270 needs three presses to clear the track three presses built.
+The shorter bend is derived from the longer one, which is what makes a 180 loaded
+from a save come apart exactly like one just built — no bookkeeping to persist,
+nothing to repair on load. `removeFromCursor` in `build.js` now loops until the
+head is back rather than counting presses, which it had to stop doing for the
+same reason.
+
+**Loading does not re-merge.** `applyTrackData` builds pieces directly rather
+than through `RC.place`, so a track saved with two quarters in it loads with two
+quarters. They are perfectly good pieces; silently rewriting someone's saved
+track on load would be a worse surprise than leaving it.
+
 
 Two eased quarters in the same direction both start and end at `κ = 0`, so the
 train briefly goes **straight** between them. A 180 deg bend reads as a subtle S
@@ -628,10 +704,13 @@ and a four-quarter helix pulses 0 to 2.3 g four times, which rides worse than
 today.
 
 **The fix is also a UX win, and it improves the geometry.** When the user places
-a second banked curve in the same direction, replace *both* pieces with the two
-halves of a single 180 deg turn — easements only at the outer ends, constant
-radius throughout the middle. The user never chooses "90 or 180"; it just works,
-the way flat track does. They find out when they place the second piece.
+a second banked curve in the same direction, replace *both* pieces with a single
+180 deg turn — easements only at the outer ends, constant radius throughout the
+middle. The user never chooses "90 or 180"; it just works, the way flat track
+does. They find out when they place the second piece.
+
+*The plan below said "the two halves of" a 180. It cannot be two pieces — see
+the correction above.*
 
 Why it is geometrically better, not just smoother: a 180 deg turn whose parallel
 tangents are `2T` apart has
@@ -651,25 +730,67 @@ nodes as the two quarters they replace, and they do — quarter 1 ends at
 either way. So the substitution is invisible to the node model, the collision
 checker and the auto-closer.
 
-Details to get right:
+Details to get right — all now settled, see above:
 
-- The halves are **not** free-standing pieces. Half A ends at `κ = 1/R`, half B
-  starts there. A lone half is curvature-broken, so `applyTrackData` should
-  reject or repair an unpaired one.
-- Undo must restore the quarter, not leave half a 180.
-- Three in a row: leave the third as a quarter. Four in a row is a full helix,
-  which is 5.6 g at any radius, and the warning system should catch that rather
-  than the geometry enabling it.
-- `RC.features()` already merges consecutive same-job pieces, so the report will
-  say "Turn 1" for the pair without changes.
+- ~~The halves are **not** free-standing pieces~~ — there are no halves; a 180 is
+  one piece, so there is nothing for `applyTrackData` to repair.
+- ~~Undo must restore the quarter~~ — it demotes the bend by one right angle.
+- ~~Three in a row: leave the third as a quarter~~ — three make a 270 when flat,
+  and stop at 180 + quarter when sloped. Four stops at 270 + quarter, since a 360
+  has no exit to land on; the helix is left to the warning system as planned.
+- `RC.features()` already merges consecutive same-job pieces, so the report says
+  "Turn 1" for the bend without changes.
 
-## Phase 6 — loop retune **DONE**, easements not started
+## Phase 6 — loop retune and easements — **DONE**
 
-The teardrop is already a clothoid in shape, but `r(0) = A + B = R`, so
-curvature **steps** off the straight before it. It needs its own entry and exit
-easements, or a redefinition with `r -> infinity` at `φ = 0`.
+The teardrop is a clothoid in shape, but `r(0) = A + B = R`, so its curvature
+**stepped** off the straight before it: 4.19 g arriving at once on Looper, and
+the last such step anywhere on the catalogue.
 
-Also retune while in there:
+It now carries the same clothoid easement a turn does, in the vertical plane.
+The tangent still turns through exactly `2π` over the piece — `θs` at each end
+and `2π − 2θs` through the body — so the loop still comes back level, and the
+entry easement's rise is exactly the exit easement's fall, so it still leaves at
+the height it entered. Both joints are now under 2% of the bare `1/R`.
+
+**The plan's other option cannot work.** Redefining the teardrop with
+`r → ∞` at `φ = 0` fails because tangent angle stops being a usable parameter
+where the track is straight: `r ~ 1/φ` makes the forward integral diverge
+logarithmically and the loop reaches infinitely far ahead. An easement has to be
+measured in arc length, which is what a clothoid is.
+
+So `t` runs uniformly in **arc length** through each easement and uniformly in
+**tangent angle** through the body. Uniform angle throughout would be worse than
+it sounds: `φ` goes as `s²` along a clothoid, so a thousandth of a parameter in
+is a quarter of the way along the easement, and both the sampling and the jolt
+readout would report a step that is not there.
+
+**How much `t` the easement gets is not a free choice, and getting it wrong hurt
+somewhere unrelated.** The obvious answer — its share of the arc length — runs
+the easement at the loop's *mean* rate, while the body starts at its widest and
+therefore fastest. That compressed `t` by a quarter exactly where `loopDrift`
+lays on the sideways offset, and since curvature goes as the square of forward
+distance, the drift's own bend went from a 14 m radius to **8 m** — tighter than
+any turn in the catalogue, out of a change that was supposed to be about the
+vertical. Sizing it to match `ds/dt` across the seam instead gives
+
+```
+te = Ls / (2π − 2θs + 2Ls) = θs / (π + θs)
+```
+
+the same number for every size of loop, and leaves the sideways bend at 16 m —
+better than before the easements existed. The sideways drift is a real feature of
+the piece and has to be paid for in forward distance; squeezing that distance is
+the one thing that makes it sharply worse.
+
+**Two things fell out.** The loop reaches 14.2 m forward of its own accord rather
+than `Bπ` = 10.2, because a clothoid runs nearly straight where it meets the
+track — so `loopDrift` has only 9.8 m to smear across the bottom instead of 13.8,
+which was the distortion phase 1 flagged as marginal. And the loop is 0.5%
+taller, since the entry easement lifts the body clear of the ground before the
+teardrop starts; `RC.loopHeight` is no longer `R(1+a)`.
+
+Retuned earlier in the phase:
 
 - `LOOP_R` default 7 m -> **10 m**: 13.5 m tall, bottom load 5.1 g instead of
   6.8 g at 20 m/s.
@@ -749,32 +870,35 @@ students have recorded stop matching.
   id, so a missing variant is a button that greys out for no visible reason —
   worse than an option a student can decline. The build window quotes the cost
   before the press.
-- Does a 270 deg turn need the phase 5 treatment too, or is leaving the third
-  quarter alone good enough?
+- ~~Does a 270 deg turn need the phase 5 treatment too?~~ **Yes, and it is
+  built** — a continuous 270 is a 1.2393 T radius against 0.8289 for quarters,
+  the widest corner in the catalogue, in a footprint no bigger than a 180's.
+  Flat only; see phase 5 for why.
 
 ## Suggested order
 
-Phases 1, 2, 3, 4 and the loop retune from 6 are **done**. Bundling 3 and 6's
-breaking halves together worked as intended: one `FORMAT` bump, one preset
-rebuild, one stale-save banner. Phase 4 broke nothing at all.
+**All six phases are done.** Bundling 3 and 6's breaking halves together worked
+as intended: one `FORMAT` bump, one preset rebuild, one stale-save banner.
+Nothing since has broken a save.
 
-**Phase 5 is next, and phase 4 made the case for it stronger rather than
-weaker.** Easing cost exactly one size class on every turn, and a 180 built as
-two halves is the one thing that buys the class back — `R = 0.993 T` against
-`0.829 T`, a 20% larger radius in the same footprint, and no roll pulse in the
-middle of a helix. It is the direct answer to the "price" section under phase 4.
+**There is no piece left on the catalogue whose curvature steps.** Every joint
+reads zero on both axes to within the width of the measurement — which is what
+the whole refactor was for, and it means the jolt readout now has nothing to
+report on a well-built ride. That is the intended end state, but it is worth
+knowing that the readout is no longer exercised by anything a student can build,
+so a regression in it would be quiet.
 
-Two smaller things are worth doing first because they are nearly free, and one is
-a decision rather than work:
+Three smaller things, none of them blocking:
 
-- **Bank the corners on `gentle-hills` and `looper`.** Only `first-drop` banks,
-  and banking is now correct from the joint onwards rather than a fifth of a
-  second in. This is the cheapest honesty win left.
+- **Bank the corners on `gentle-hills` and `looper`.** Only `first-drop` banks.
+  Banking is correct from the joint onwards now, and a banked run merges into one
+  continuous bend, so this is both cheaper and better than it was. The cheapest
+  honesty win left.
 - **Make `routeCost` prefer wide turns.** Auto-closed filler charges 1.25 for any
   turn, so it will put a 7.5 m corner on flat ground at full speed. Check the A*
   heuristic stays admissible first.
+- **Re-take the Shape readings.** Every preset's binding constraint should have
+  moved; the phase 4 baseline is pinned above and nothing has been measured
+  against it since the third turn size and the merge landed.
 
-Then loop easements, which are all that is left of 6 — and the loop is now the
-only thing on the catalogue whose curvature steps off straight track at all.
-
-Suite is at **178 checks**, all passing, as of the end of phase 4.
+Suite is at **191 checks**, all passing, at the end of the refactor.

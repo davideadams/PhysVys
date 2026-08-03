@@ -64,7 +64,6 @@
      quarter of the bend is eased and three quarters is still constant radius. */
   const SPIRAL_THETA = 0.2;
   const SPIRAL_LS = 2 * SPIRAL_THETA;                 // spiral length, in radii
-  const SPIRAL_S = Math.PI / 2 + 2 * SPIRAL_THETA;    // whole turn, in radii
 
   /* Where the entry spiral has reached after arc length s, in radii, measured
      from its start with the heading along +x.
@@ -106,30 +105,102 @@
      outright. At 0.2 rad that is 1.20639, so R = 0.8289 T: a tight turn is
      7.46 m rather than 9, and a wide one 12.43 m rather than 15. */
   const SPIRAL_END = spiralPoint(SPIRAL_LS);
-  const SPIRAL_CX = SPIRAL_END.x - Math.sin(SPIRAL_THETA);
-  const SPIRAL_CY = SPIRAL_END.y + Math.cos(SPIRAL_THETA);
-  const SPIRAL_TAU = SPIRAL_END.x + SPIRAL_END.y
-                   + Math.cos(SPIRAL_THETA) - Math.sin(SPIRAL_THETA);
-  RC.SPIRAL_THETA = SPIRAL_THETA;
-  RC.SPIRAL_TAU = SPIRAL_TAU;
 
-  /* A unit-radius quarter turn: the point at arc length s along it, starting at
-     the origin heading +x and finishing at (TAU, TAU) heading +y. */
-  function turnPoint(s) {
+  /* A turn shape: spiral in, constant-radius arc, spiral out, deflecting
+     DEFLECT radians in all. Only two exist — the quarter every corner is built
+     from, and the half a 180 is — and they share every line of this, because
+     the only thing that differs between them is how much arc sits between the
+     two spirals.
+
+     Everything here is in RADII; multiply by the radius to get tiles.
+
+       cx, cy   centre of the constant-radius arc
+       ax, ay   where the exit spiral leaves that arc
+       ex, ey   where the turn finishes, measured along the entry direction and
+                the direction one right angle over
+       S        arc length
+       tau      lateral extent divided by the LATERAL TILE MULTIPLIER, which is
+                what ties the shape to the grid: scaling by T/tau lands the exit
+                exactly where the node model expects it, whatever the shape.
+
+     That multiplier is read off the circle the eased turn stands in for. A
+     unit circle through DEFLECT ends at (sin DEFLECT, 1 - cos DEFLECT), which
+     is (1,1) for a quarter, (0,2) for a half and (-1,1) for a 270 — the same
+     numbers chaining that many quarter turns gives. The eased shape lands on
+     the same RAY as the circle and only the scale differs, so dividing by
+     1 - cos DEFLECT is the whole of the grid fit.
+
+     The exit spiral is the entry spiral again, run backwards into the exit
+     heading. Its heading a distance w from the far end is exactly
+     DEFLECT - psi(w), so its displacement is the entry spiral's rotated by
+     DEFLECT and flipped — which is why there is one spiralPoint and not two,
+     and why a 180 costs no new integration at all.
+
+     For the quarter that gives ex = ey = 1.20639, the familiar TAU. For the
+     half it gives ex = 0 and ey = 2 * cy, so a 180 finishes directly abeam of
+     where it started, exactly as two quarters do. */
+  function turnShape(deflect) {
+    const cx = SPIRAL_END.x - Math.sin(SPIRAL_THETA);
+    const cy = SPIRAL_END.y + Math.cos(SPIRAL_THETA);
+    const ax = cx + Math.sin(deflect - SPIRAL_THETA);
+    const ay = cy - Math.cos(deflect - SPIRAL_THETA);
+    const dx = Math.cos(deflect) * SPIRAL_END.x + Math.sin(deflect) * SPIRAL_END.y;
+    const dy = Math.sin(deflect) * SPIRAL_END.x - Math.cos(deflect) * SPIRAL_END.y;
+    const ey = ay + dy;
+    return {
+      deflect, cx, cy, ax, ay,
+      ex: ax + dx, ey,
+      quarters: Math.round(deflect / (Math.PI / 2)),
+      S: deflect + 2 * SPIRAL_THETA,
+      tau: ey / Math.round(1 - Math.cos(deflect))
+    };
+  }
+
+  /* A 180 is not two quarters end to end, and that is the whole point of it.
+     Two eased quarters ease down to zero curvature and back up where they meet,
+     so the train goes briefly straight and a banked pair rolls level and back;
+     one 180 eases only at its OUTER ends and holds full curvature the whole way
+     through. A 270 does the same again over three right angles.
+
+     Spending no spirals in the middle is also worth radius, and by a strikingly
+     tidy amount — each extra right angle of arc buys back exactly one THETA of
+     tangent length:
+
+       quarter  tau = 1 + t + t^2/6 - t^3/30 = 1.20640   R = 0.8289 T
+       half     tau = 1 +     t^2/6          = 1.00667   R = 0.9934 T
+       270      tau = 1 - t + t^2/6 + t^3/30 = 0.80693   R = 1.2393 T
+
+     So at 2.5 tiles across, a corner bends at 12.4 m, a 180 at 14.9 and a 270
+     at 18.6 — the 270 in a footprint no wider than the 180's.
+
+     Nothing places either yet. Doing that is phase 5's second piece of work,
+     where a run of same-direction banked corners is silently replaced by one
+     continuous bend. */
+  const QUARTER = turnShape(Math.PI / 2);
+  const HALF = turnShape(Math.PI);
+  const THREE_QUARTER = turnShape(3 * Math.PI / 2);
+
+  RC.SPIRAL_THETA = SPIRAL_THETA;
+  RC.SPIRAL_TAU = QUARTER.tau;
+
+  /* The point at arc length s along a unit-radius turn of that shape, starting
+     at the origin heading +x. */
+  function turnPoint(shape, s) {
     if (s <= SPIRAL_LS) return spiralPoint(s);
-    if (s >= SPIRAL_S - SPIRAL_LS) {
-      const p = spiralPoint(SPIRAL_S - s);       // the exit spiral, mirrored
-      return { x: SPIRAL_TAU - p.y, y: SPIRAL_TAU - p.x };
+    if (s >= shape.S - SPIRAL_LS) {
+      const p = spiralPoint(shape.S - s);       // the exit spiral, mirrored
+      const c = Math.cos(shape.deflect), n = Math.sin(shape.deflect);
+      return { x: shape.ex - (c * p.x + n * p.y), y: shape.ey - (n * p.x - c * p.y) };
     }
     const psi = SPIRAL_THETA + (s - SPIRAL_LS);
-    return { x: SPIRAL_CX + Math.sin(psi), y: SPIRAL_CY - Math.cos(psi) };
+    return { x: shape.cx + Math.sin(psi), y: shape.cy - Math.cos(psi) };
   }
 
   /* How much of its full curvature the turn has reached at arc length s: zero
      at both ends, one through the middle, linear across each spiral. */
-  function turnKappa(s) {
+  function turnKappa(shape, s) {
     if (s <= SPIRAL_LS) return s / SPIRAL_LS;
-    if (s >= SPIRAL_S - SPIRAL_LS) return (SPIRAL_S - s) / SPIRAL_LS;
+    if (s >= shape.S - SPIRAL_LS) return (shape.S - s) / SPIRAL_LS;
     return 1;
   }
 
@@ -137,8 +208,8 @@
      and the horizontal distance it covers, both in tiles. def.R is the grid
      parameter T and is no longer a radius — every reader that wants one of
      these should say so. */
-  RC.turnRadius = def => def.R / SPIRAL_TAU;
-  RC.turnRun = def => def.R * SPIRAL_S / SPIRAL_TAU;
+  RC.turnRadius = def => def.R / def.shape.tau;
+  RC.turnRun = def => def.R * def.shape.S / def.shape.tau;
 
   /* Banking is a single angle, applied to turns only, and its profile is now
      simply how much of its curvature the turn has reached — so the train rolls
@@ -161,8 +232,9 @@
   const BANK_ANGLE = 45 * Math.PI / 180;
   RC.BANK_ANGLE = BANK_ANGLE;
 
-  function bankProfile(t) {
-    return turnKappa(t * SPIRAL_S);
+  function bankProfile(t, shape) {
+    shape = shape || QUARTER;
+    return turnKappa(shape, t * shape.S);
   }
   RC.bankProfile = bankProfile;
 
@@ -264,11 +336,16 @@
      for one 180 stop adding up. What the piece is named for is carried by its
      end grades, which are exact; what the grid needs is a number that does not
      move. */
-  function turn(id, label, dir, R, g) {
+  function turn(id, label, dir, R, g, shape) {
     g = g || FLAT;
+    shape = shape || QUARTER;
     return {
       id, label, kind: 'turn', gIn: g, gOut: g,
-      turn: dir, R, dH: Math.round(R * Math.PI / 2 * g),
+      turn: dir, R, shape,
+      // Per right angle, so a 180 moves the head exactly as far as the two
+      // quarters it stands in for. That is what lets one be swapped for the
+      // other without the node model noticing.
+      dH: shape.quarters * Math.round(R * Math.PI / 2 * g),
       // A chain can be put on a corner that climbs, the same as on a straight
       // one: a lift hill is allowed to bend. Only on a climb, though — a chain
       // hauls a train up, and there is nothing for it to do on the way down.
@@ -316,12 +393,63 @@
     { suffix: 'steep-up',    g: STEEP,   label: 'steep up' }
   ];
 
+  /* The bends longer than a quarter, and which grades each is offered on. See
+     longTurns below for why the 270 is flat only. */
+  const LONG_BENDS = [
+    { suffix: '-180', label: ', 180', shape: HALF, slopes: TURN_SLOPES },
+    { suffix: '-270', label: ', 270', shape: THREE_QUARTER, slopes: [] }
+  ];
+
   function slopedTurns() {
     const out = [];
     for (const sh of TURN_SHAPES) {
       for (const sl of TURN_SLOPES) {
         out.push(turn(sh.id + '-' + sl.suffix, sh.label + ', ' + sl.label,
                       sh.dir, sh.R, sl.g));
+      }
+    }
+    return out;
+  }
+
+  /* The same catalogue again as 180s and 270s, named <turn>-180[-<slope>] and
+     <turn>-270. Nothing places one yet — they exist so that phase 5's
+     substitution has something to substitute, and so the geometry can be tested
+     before anything depends on it.
+
+     A long turn's dH has to be exactly as many times the quarter's as it turns
+     right angles, or the substitution would move the track. Its path is longer
+     than that many quarters, though, because it is bending at a wider radius —
+     7.7% for a 180, 29% for a 270 — so the height profile has to sag in the
+     middle to make the same total, and the piece comes out gentler on AVERAGE
+     than the grade it is named for. The ends are exact either way, so nothing
+     kinks; only the average moves, and only ever downward.
+
+     For a 180 that is at most 3.5 degrees, against a quarter's 1.4 — and the
+     thing a rider is comparing it to is the pair of quarters it replaced, which
+     are themselves 1.4 low, so what they would feel is nearer 2. Acceptable:
+     the rule is that a substituted piece may not sit more than half a rung of
+     the grade ladder below its name, and half of flat-to-gentle is 4.7 degrees.
+
+     THE 270 FAILS THAT RULE AND SO IT IS FLAT ONLY. 29% of extra path puts a
+     "steep" 270 at 36 degrees, 8.6 below its name, with its middle sagging to
+     27 — a piece that does not mean what it says. The physics agrees from the
+     other side: a turn descending through PHI at pitch theta loads
+     2*PHI*tan(theta) at the bottom whatever radius it is drawn at, so a
+     descending 270 is 1.6 g at gentle, 3.1 at medium and 9.4 at steep, and
+     widening it does nothing at all. Nothing is taken away by leaving them out
+     — three sloped quarters build the same descent, and phase 5 simply will not
+     merge them. */
+  function longTurns() {
+    const out = [];
+    for (const sh of TURN_SHAPES) {
+      for (const b of LONG_BENDS) {
+        out.push(turn(sh.id + b.suffix, sh.label + b.label,
+                      sh.dir, sh.R, FLAT, b.shape));
+        for (const sl of b.slopes) {
+          out.push(turn(sh.id + b.suffix + '-' + sl.suffix,
+                        sh.label + b.label + ', ' + sl.label,
+                        sh.dir, sh.R, sl.g, b.shape));
+        }
       }
     }
     return out;
@@ -361,20 +489,113 @@
      13.5 m tall, and 5.1 g at the bottom at 20 m/s against 6.8 g before.
 
      LOOP_LEN follows from it. The footprint has to hold 2R = 20 m, so four tiles
-     of 6 m rather than three. That costs shape: the teardrop's own forward reach
-     is B*pi, about 10.2 m, and loopDrift smears the remaining 13.8 m across the
-     bottom, more than the 10.8 m that phase 1 already found marginal. Watch the
-     teardrop test — if the top stops being the tightest part of the curve, this
-     is why. */
+     of 6 m rather than three. That used to cost shape: the bare teardrop reaches
+     only B*pi forward, about 10.2 m, so loopDrift had to smear the remaining
+     13.8 m across the bottom — more than the 10.8 m that phase 1 already found
+     marginal. Easing the ends fixed that as a side effect, since a clothoid runs
+     nearly straight where it meets the track: the shape now reaches 14.2 m of
+     its own accord and only 9.8 m is left to smear. */
   const LOOP_LEN = 4;      // tiles advanced
   const LOOP_LAT = 1;      // tiles sideways
   const LOOP_R = 10;       // metres — the bottom radius of curvature
   const LOOP_A = 0.35;     // top radius = LOOP_A * R; the teardrop's pointiness
   RC.LOOP_R = LOOP_R;
   RC.LOOP_A = LOOP_A;
-  /* The clothoid's own forward reach before the grid-snapping drift is added,
-     so the drift can be computed to land the exit on L tiles exactly. */
-  RC.loopHeight = (R, a) => R * (1 + (a == null ? LOOP_A : a));
+
+  /* ---- loop easements ----------------------------------------------------
+     The teardrop has r(0) = A + B = R, so until this the curvature STEPPED from
+     nothing to 1/R the instant the straight ended — 4.19 g arriving at once on
+     the Looper preset, and the last such step anywhere on the catalogue.
+
+     It is eased with the same clothoid a turn uses, laid in the vertical plane:
+     curvature ramps linearly from zero to the teardrop's own 1/r at the angle
+     the body starts from, so the two meet with nothing in between. The tangent
+     still turns through exactly 2*pi over the whole piece — THETA at each end
+     and 2*pi - 2*THETA through the body — so the loop still comes back level,
+     and the entry easement's rise is exactly the exit easement's fall, so it
+     still leaves at the height it entered.
+
+     THE OTHER OPTION IN THE PLAN CANNOT WORK. Redefining the teardrop with
+     r -> infinity at phi = 0 fails because tangent angle stops being a usable
+     parameter where the track is straight: r ~ 1/phi makes the forward integral
+     diverge logarithmically and the loop reaches infinitely far ahead. An
+     easement has to be measured in arc length, which is what a clothoid is.
+
+     So t runs uniformly in ARC LENGTH through each easement and uniformly in
+     TANGENT ANGLE through the body, each given the share of t its share of the
+     length deserves. Uniform angle throughout would be worse than it sounds:
+     phi goes as s^2 along a clothoid, so a thousandth of a parameter in is a
+     quarter of the way along the easement, and both the sampling and the jolt
+     readout would report a step that is not there. */
+  function bodyU(phi, A, B) {
+    return A * Math.sin(phi) + B * (phi / 2 + Math.sin(2 * phi) / 4);
+  }
+  function bodyW(phi, A, B) {
+    return A * (1 - Math.cos(phi)) + B * Math.sin(phi) * Math.sin(phi) / 2;
+  }
+
+  /* Everything about a loop of this size that does not depend on t. Memoised on
+     one entry, because centreline is called in a tight loop and always with the
+     same size all the way round the piece. */
+  let loopShapeCache = null;
+  function loopShape(R, a) {
+    if (loopShapeCache && loopShapeCache.R === R && loopShapeCache.a === a) {
+      return loopShapeCache;
+    }
+    const th = SPIRAL_THETA;
+    const A = R * (1 + a) / 2, B = R * (1 - a) / 2;
+    const re = A + B * Math.cos(th);            // radius where the body begins
+    loopShapeCache = {
+      R, a, A, B, th, re,
+      /* Share of t each easement gets, chosen so that ds/dt MATCHES ACROSS THE
+         SEAM: the easement runs at ease/te and the body starts at re*dphi/dt,
+         and setting those equal gives te = Ls/(2pi - 2*THETA + 2*Ls), which is
+         the same number for every size of loop.
+
+         Sizing it by share of arc length instead — the obvious choice — quietly
+         made the ride worse. It ran the easement at the loop's MEAN rate while
+         the body starts at its widest and therefore fastest, so t was
+         compressed by a quarter right where the sideways drift is steepest, and
+         the drift's own bend went from a 14 m radius to 8. That bend is a real
+         feature of the piece (a loop steps one tile sideways) and it has to be
+         paid for in forward distance; squeezing the forward distance is the one
+         thing that makes it sharply worse, since curvature goes as the square
+         of it. */
+      te: SPIRAL_LS / (2 * Math.PI - 2 * th + 2 * SPIRAL_LS),
+      jx: re * SPIRAL_END.x,                    // where the entry hands over
+      jy: re * SPIRAL_END.y,
+      // The shape's own forward reach, before the grid-snapping drift is added,
+      // so the drift can be sized to land the exit on L tiles exactly.
+      reach: 2 * re * SPIRAL_END.x - 2 * A * Math.sin(th)
+             + B * (Math.PI - th - Math.sin(2 * th) / 2),
+      top: re * SPIRAL_END.y + 2 * A - bodyW(th, A, B)
+    };
+    return loopShapeCache;
+  }
+
+  /* Forward and upward position, in metres, at parameter t. */
+  function loopPoint(sh, t) {
+    if (t <= sh.te) {
+      const p = spiralPoint(SPIRAL_LS * t / sh.te);
+      return { u: sh.re * p.x, w: sh.re * p.y };
+    }
+    if (t >= 1 - sh.te) {
+      // The exit easement is the entry one again, run backwards out of a tangent
+      // that has come the whole way round to horizontal.
+      const p = spiralPoint(SPIRAL_LS * (1 - t) / sh.te);
+      return { u: sh.reach - sh.re * p.x, w: sh.re * p.y };
+    }
+    const phi = sh.th + (t - sh.te) / (1 - 2 * sh.te) * (2 * Math.PI - 2 * sh.th);
+    return {
+      u: sh.jx + bodyU(phi, sh.A, sh.B) - bodyU(sh.th, sh.A, sh.B),
+      w: sh.jy + bodyW(phi, sh.A, sh.B) - bodyW(sh.th, sh.A, sh.B)
+    };
+  }
+
+  /* The height of the top, in metres. Not R(1+a) any more: the entry easement
+     lifts the body clear of the ground before the teardrop starts, and the body
+     then climbs from THETA rather than from nothing. About half a percent. */
+  RC.loopHeight = (R, a) => loopShape(R, a == null ? LOOP_A : a).top;
 
   function loop(id, label, side) {
     return {
@@ -421,9 +642,33 @@
     straight('station', 'Station', FLAT, FLAT, { station: true }),
     straight('brake', 'Brake run', FLAT, FLAT, { brake: true }),
     straight('launch', 'Launch', FLAT, FLAT, { launch: true })
-  ].concat(slopedTurns());
+  ].concat(slopedTurns()).concat(longTurns());
 
   const BY_ID = new Map(PIECES.map(p => [p.id, p]));
+
+  /* ---- runs of corners --------------------------------------------------
+     Two banked corners the same way round are not two corners; they are one
+     180 that the builder happened to ask for in two presses. So that is what
+     they become, silently, the moment the second one is placed — and a third
+     makes a 270. The student never chooses "90, 180 or 270" any more than they
+     choose how long a piece of flat track is; it just works.
+
+     LONGER maps a bend to the same bend with one more right angle in it, and
+     SHORTER back again. Built by walking the catalogue rather than by splicing
+     ids at the call site, so a bend that does not exist — a sloped 270 — simply
+     has no entry and the merge declines without needing to know why. */
+  const LONGER = new Map(), SHORTER = new Map();
+  for (const sh of TURN_SHAPES) {
+    const grades = [''].concat(TURN_SLOPES.map(s => '-' + s.suffix));
+    for (const g of grades) {
+      const chain = [sh.id + g, sh.id + '-180' + g, sh.id + '-270' + g];
+      for (let n = 0; n + 1 < chain.length; n++) {
+        if (!BY_ID.has(chain[n]) || !BY_ID.has(chain[n + 1])) continue;
+        LONGER.set(chain[n], chain[n + 1]);
+        SHORTER.set(chain[n + 1], chain[n]);
+      }
+    }
+  }
   RC.PIECES = PIECES;
   RC.pieceDef = id => BY_ID.get(id);
 
@@ -503,16 +748,21 @@
         k, g: def.gOut
       };
     }
-    // Turn: the exit is displaced by R along both the entry and exit
-    // directions, which is what makes the quarter-circle land on a grid edge.
+    /* Turn: laid out along the entry direction u and the direction v one right
+       angle over, which is where the shape's own (ex, ey) are measured. A
+       quarter lands on E + T(u + v); a 180 on E + 2T*v, directly abeam. Either
+       way the exit is a whole number of half-tiles along both axes, which is
+       what makes it a grid node at all. */
     const dir2 = (node.dir + def.turn + 4) & 3;
-    const u = D[node.dir], v = D[dir2];
+    const dirOut = (node.dir + def.turn * def.shape.quarters + 4) & 3;
+    const u = D[node.dir], v = D[dir2], w = D[dirOut];
     const E = entryPoint(node);
-    const px = E.x + def.R * (u[0] + v[0]);
-    const py = E.y + def.R * (u[1] + v[1]);
+    const R = def.R / def.shape.tau;
+    const px = E.x + R * (def.shape.ex * u[0] + def.shape.ey * v[0]);
+    const py = E.y + R * (def.shape.ex * u[1] + def.shape.ey * v[1]);
     // Convert that exit point back into "about to enter tile (i, j)".
-    const cx = px + 0.5 * v[0], cy = py + 0.5 * v[1];
-    return { i: Math.round(cx - 0.5), j: Math.round(cy - 0.5), dir: dir2, k, g: def.gOut };
+    const cx = px + 0.5 * w[0], cy = py + 0.5 * w[1];
+    return { i: Math.round(cx - 0.5), j: Math.round(cy - 0.5), dir: dirOut, k, g: def.gOut };
   };
 
   /* Drift 0 -> 1 for BOTH the loop's forward advance and its sideways offset,
@@ -627,21 +877,20 @@
       // Per-piece size if set (resized loops), else the definition's default.
       const R = node.loopR != null ? node.loopR : def.R;
       const a = node.loopA != null ? node.loopA : def.a;
-      const A = R * (1 + a) / 2, B = R * (1 - a) / 2;
-      const phi = 2 * Math.PI * t;
-      // Clothoid teardrop in the vertical plane, in metres.
-      const uc = A * Math.sin(phi) + B * (phi / 2 + Math.sin(2 * phi) / 4);
-      const wc = A * (1 - Math.cos(phi)) + B * Math.sin(phi) * Math.sin(phi) / 2;
+      // Eased clothoid teardrop in the vertical plane, in metres.
+      const sh = loopShape(R, a);
+      const p = loopPoint(sh, t);
       // Forward + sideways drift, confined to the bottom of the loop (loopDrift)
       // so the piece advances L tiles and grid-snaps without distorting the
-      // upper body; uc(1) = B*pi is the shape's own forward reach.
+      // upper body. Smootherstep, so it is flat in its first two derivatives at
+      // t = 0 and adds no curvature of its own where the easement starts.
       const L = node.loopL != null ? node.loopL : def.L;
-      const fwdM = uc + (L * RC.TILE_M - B * Math.PI) * loopDrift(t);
+      const fwdM = p.u + (L * RC.TILE_M - sh.reach) * loopDrift(t);
       const lat = def.lat * loopDrift(t);
       return {
         x: E.x + d[0] * (fwdM / RC.TILE_M) + latDir[0] * lat,
         y: E.y + d[1] * (fwdM / RC.TILE_M) + latDir[1] * lat,
-        z: node.k + wc / RC.LEVEL_M
+        z: node.k + p.w / RC.LEVEL_M
       };
     }
     if (def.kind === 'straight') {
@@ -663,8 +912,8 @@
        rounding in dH; a flat turn has none to absorb. */
     const dir2 = (node.dir + def.turn + 4) & 3;
     const u = D[node.dir], v = D[dir2];
-    const R = def.R / SPIRAL_TAU;
-    const P = turnPoint(t * SPIRAL_S);
+    const R = def.R / def.shape.tau;
+    const P = turnPoint(def.shape, t * def.shape.S);
     return {
       x: E.x + R * (u[0] * P.x + v[0] * P.y),
       y: E.y + R * (u[1] * P.x + v[1] * P.y),
@@ -715,7 +964,8 @@
     const seen = new Map();
     // Per TILE, not per piece: a four-tile transition sampled eight times could
     // step clean over a tile it passes through and call the ground free.
-    const N = def.kind === 'straight' ? 8 * def.L : (def.kind === 'loop' ? 48 : 20);
+    const N = def.kind === 'straight' ? 8 * def.L
+            : (def.kind === 'loop' ? 48 : 20 * def.shape.quarters);
     for (let s = 0; s <= N; s++) {
       const p = RC.centreline(def, node, s / N);
       const i = Math.floor(p.x), j = Math.floor(p.y);
@@ -763,7 +1013,11 @@
       // A turn now spends its first and last fifth ramping curvature in and
       // out, so it is sampled more finely than the circle needed: 32 puts six
       // points across each spiral rather than four.
-      const n = def.kind === 'straight' ? 8 * def.L : (def.kind === 'loop' ? 64 : 32);
+      // A loop spends a sixteenth of its parameter on each easement, so 96
+      // rather than 64 keeps six points across one — the same resolution a
+      // turn's spiral gets.
+      const n = def.kind === 'straight' ? 8 * def.L
+              : (def.kind === 'loop' ? 96 : 32 * def.shape.quarters);
 
       for (let q = 0; q <= n; q++) {
         if (q === 0 && pi > 0) continue;            // joint shared with previous piece
@@ -779,7 +1033,7 @@
         // Signed by turn direction: a right turn banks to the right, and rolls
         // in exactly as fast as the curvature does.
         const bank = p.bank && def.kind === 'turn'
-          ? def.turn * BANK_ANGLE * bankProfile(t)
+          ? def.turn * BANK_ANGLE * bankProfile(t, def.shape)
           : 0;
         pts.push({ x: c.x, y: c.y, z: c.z, s, pi, t, bank, piece: p, def });
         prev = c;
@@ -1287,7 +1541,8 @@
 
   function interiorCells(def, node) {
     const cells = [];
-    const n = def.kind === 'straight' ? 10 * def.L : 24;
+    const n = def.kind === 'straight' ? 10 * def.L
+            : (def.kind === 'turn' ? 24 * def.shape.quarters : 24);
     for (let q = 0; q <= n; q++) {
       const t = q / n;
       if (t < 0.2 || t > 0.8) continue;
@@ -1320,12 +1575,16 @@
     return m;
   }
 
-  function collidesWith(def, node, occ, skipPi) {
+  /* skipFrom: ignore that piece and everything after it. Placing skips the one
+     at the head, which legitimately shares its joint tile; merging a run of
+     corners skips the whole run, since the piece being tested is standing in
+     for exactly those. */
+  function collidesWith(def, node, occ, skipFrom) {
     for (const c of interiorCells(def, node)) {
       const arr = occ.get(c.i + ',' + c.j);
       if (!arr) continue;
       for (const e of arr) {
-        if (e.pi === skipPi) continue;
+        if (e.pi >= skipFrom) continue;
         if (Math.abs(e.z - c.z) < CLEARANCE) return true;
       }
     }
@@ -1364,6 +1623,45 @@
     return { ok: true, exit };
   };
 
+  /* Would these two placed pieces read as one longer bend? Everything has to
+     match, because the merged piece has one id and therefore one of each: the
+     same size, the same way round, the same grade, the same chain, and banked —
+     the roll pulsing to level and back between two eased quarters is the fault
+     being fixed, and an unbanked pair has no pulse to fix. The second must be a
+     plain quarter, so a 180 and a 180 do not become a 360 that has no exit. */
+  function sameRun(aDef, a, bDef, b) {
+    return a.bank && b.bank && !!a.lift === !!b.lift &&
+           aDef.kind === 'turn' && bDef.kind === 'turn' &&
+           aDef.turn === bDef.turn && aDef.R === bDef.R && aDef.gIn === bDef.gIn &&
+           bDef.shape.quarters === 1;
+  }
+
+  /* Fold the last two pieces into one longer bend, if they are a run and the
+     bend that would replace them fits. Its exit node is identical by
+     construction — that is what the whole shape is arranged around — but it
+     bends at a WIDER radius and so covers different ground, which has to be
+     checked against everything except the pieces it is standing in for. */
+  function mergeRun() {
+    const pieces = RC.track.pieces;
+    const n = pieces.length;
+    if (n < 2) return;
+    const prev = pieces[n - 2], last = pieces[n - 1];
+    const prevDef = BY_ID.get(prev.defId), lastDef = BY_ID.get(last.defId);
+    if (!sameRun(prevDef, prev, lastDef, last)) return;
+    const merged = BY_ID.get(LONGER.get(prev.defId));
+    if (!merged) return;              // no such bend — a sloped 270, say
+
+    for (const t of RC.pieceTiles(merged, prev.node)) {
+      if (!RC.inBounds(t.i, t.j)) return;
+    }
+    if (collidesWith(merged, prev.node, occupancy(), n - 2)) return;
+
+    pieces.splice(n - 2, 2, {
+      defId: merged.id, node: prev.node, lift: prev.lift, bank: true
+    });
+    RC.version++;
+  }
+
   RC.place = function (defId, opts) {
     const def = BY_ID.get(defId);
     if (!def) return false;
@@ -1378,6 +1676,7 @@
     });
     RC.track.head = check.exit;
     RC.version++;
+    mergeRun();
     return true;
   };
 
@@ -1414,7 +1713,26 @@
   RC.undo = function () {
     const t = RC.track;
     if (!t.pieces.length) return false;
-    const last = t.pieces.pop();
+    const last = t.pieces[t.pieces.length - 1];
+    const def = BY_ID.get(last.defId);
+
+    /* A long bend was two or three presses, so one undo takes one right angle
+       back off it rather than deleting the lot. Demoting rather than
+       remembering what was merged is what makes this survive a save and a
+       reload: the shorter bend is derived from the longer one, so a 180 loaded
+       from disk comes apart exactly like one just built. It can only ever
+       shrink the footprint back to a state the track was already in. */
+    const shorter = def && def.kind === 'turn' ? BY_ID.get(SHORTER.get(last.defId)) : null;
+    if (shorter) {
+      t.pieces[t.pieces.length - 1] = {
+        defId: shorter.id, node: last.node, lift: last.lift, bank: last.bank
+      };
+      t.head = RC.exitNode(shorter, last.node);
+      RC.version++;
+      return true;
+    }
+
+    t.pieces.pop();
     t.head = { i: last.node.i, j: last.node.j, dir: last.node.dir, k: last.node.k, g: last.node.g };
     RC.version++;
     return true;
@@ -1452,7 +1770,10 @@
   function loopFootprintFor(R, def) {
     return Math.max(def.L, Math.ceil(2 * R / RC.TILE_M));
   }
-  /* Largest radius (metres) a fixed footprint of L tiles can hold. */
+  /* Largest radius (metres) a fixed footprint of L tiles can hold. Deliberately
+     stricter than the shape needs: an eased loop reaches 1.416 R forward on its
+     own, so L tiles would hold R up to 0.706*L*TILE_M, but pricing it at 2R
+     leaves the drift room to work with rather than squeezing it to nothing. */
   function loopMaxRForFootprint(L) {
     return Math.min(LOOP_R_MAX, L * RC.TILE_M / 2);
   }
