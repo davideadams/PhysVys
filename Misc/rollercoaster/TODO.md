@@ -462,6 +462,10 @@ than a fifth of a second later. `first-drop`'s two banked corners read 0.4 g.
 
 ### The price, which is real and is not yet paid back
 
+*Superseded — `θ` was later cut from 0.2 to 0.05, which takes the numbers below
+from a 17% loss to 4.8%. See phase 5 for why, and for the exchange rate between
+easement and radius. The reasoning here is what it looked like at 0.2.*
+
 Easing costs about one size class. `R = 0.8289 T`, so **the tight turn went from
 9 m to 7.46 m and the wide one from 15 m to 12.43 m** — 21% tighter, and lateral
 g is 21% higher at the same speed. Unbanked, the honest speeds fall from 11.5 and
@@ -486,9 +490,12 @@ answer that:
 
 | | `T` | across | radius | 1.5 g at | banked 45 |
 | --- | --- | --- | --- | --- | --- |
-| tight | 1.5 | 9 m | 7.46 m | 10.5 m/s | 15.1 m/s |
-| wide | 2.5 | 15 m | 12.43 m | 13.5 m/s | 19.5 m/s |
-| **sweeping** | **3.5** | **21 m** | **17.41 m** | **16.0 m/s** | **23.1 m/s** |
+| tight | 1.5 | 9 m | 8.57 m | 11.2 m/s | 16.2 m/s |
+| wide | 2.5 | 15 m | 14.28 m | 14.5 m/s | 20.9 m/s |
+| **sweeping** | **3.5** | **21 m** | **19.99 m** | **17.2 m/s** | **24.7 m/s** |
+
+*Radii at `θ` = 0.05; they were 7.46, 12.43 and 17.41 at the 0.2 this shipped
+with.*
 
 Named tight/wide/sweeping rather than small/medium/large because the grade
 ladder already has a MEDIUM in it and a sloped turn's name is its size plus its
@@ -637,48 +644,82 @@ the three shapes come out as
 tau(quarter) = P + Q      tau(180) = P      tau(270) = P − Q      R = T/tau
 ```
 
-**The easement angle is solved per shape, so a bend matches the corners it
-replaces.** `tau(180) = P` is the only one with no linear term in `θ`, so there
-is exactly one easement making a 180 bend at its corners' radius — `P(θ) =
-tau(quarter)` puts it at **1.139 rad, 65°**. A long easement and a better one:
-the spiral is nearly six times the quarter's, so the same peak force arrives that
-much more gently.
+`Q ≈ θ` and `P ≈ 1`, which is the whole of it: **a corner comes out under its
+tile span and a longer bend comes out over it.**
 
-**The 270 cannot match, and that is the grid rather than a choice.** `P − Q` is
-at most 1, reached only at `θ = 0`, while `P + Q` is at least 1 for the same
-reason — so a 270 landing where three corners land is *forced* wider than `T`
-while a corner is forced narrower, and they coincide only with no easement
-anywhere. The nearest a real easement gets is 21%, and only by vanishing. So its
-`θ` is solved on the other axis: give it the easement whose **jerk** matches a
-quarter's, and take the radius that falls out.
+- On a **90°** bend the tangents are perpendicular, so easing pushes both of them
+  outward and the box grows in both directions. A corner in a fixed square gives
+  up about `θ` of its radius to pay for it.
+- On a **180** the tangents are parallel. Starting to turn earlier does not change
+  the gap between two parallel lines; the only cost is the shift `Rθ²/6`.
 
-| | `θ` | tau | R / T | wide turn |
+So the corner is the odd one out, not the 180. Deleting the two internal
+easements when a run merges is *exactly* what widens the bend — each was carrying
+`Q·R` of reach toward the far node, at a point where the track is heading exactly
+the way the bend has to go — so the radius grows by one `θ` per joint removed.
+
+**`θ` is 0.05, and it is a floor rather than a preference.** The tile footprint is
+the mandate: a three-tile corner should be a three-tile bend, near enough that
+nobody has to think about it. Every radian of easement is radius given away, and
+what it buys is onset time — the easement is `2θR` long, crossed at about
+`√(1.5gR)`, so it lasts roughly `2θ` seconds while costing about `θ` of radius.
+**One percent of radius buys twenty milliseconds.** Three limits bite together
+around 0.05:
+
+| limit | why |
+| --- | --- |
+| trace at 60 Hz | 0.1 s is six frames and draws as a ramp; 0.02 s draws as an edge |
+| path sampling | the easement must span ≥ 2 points or `pathAt` interpolates across it |
+| `CURV_EPS` | the readout's residue is `ε(π/2 + 2θ)/(2θ)` — 1.7% at 0.05, 8% at 0.01 |
+
+The last two are constants and were moved to suit: turns are sampled at 96 points
+per right angle (`≈ 4.8/θ` for six points across a spiral) and `CURV_EPS` went to
+1e-4. The onset time cannot be bought back at any resolution.
+
+| | tau | R / T | wide turn | vs corner |
 | --- | --- | --- | --- | --- |
-| quarter | 0.200 | 1.20640 | 0.8289 | 12.4 m |
-| 180 | 1.139 | 1.20640 | 0.8289 | **12.4 m** |
-| 270 | 0.109 | 0.89266 | 1.1202 | 16.8 m |
+| quarter | 1.05041 | 0.9520 | 14.28 m | — |
+| 180 | 1.00042 | 0.9996 | 14.99 m | +5.0% |
+| 270 | 0.95042 | 1.0522 | 15.78 m | +10.5% |
 
-A 270 stays 35% wider than the corners it replaces, which is the safe direction
-to be wrong in — gentler, never sharper.
+**The loop keeps `θ` = 0.2, separately.** It is not fighting for a tile footprint
+— its shape is the teardrop and the easement is added at the ends — so length
+costs it nothing, and it has the biggest step on the catalogue to remove (4.19 g
+against a corner's 1.5). At 0.05 its easement would be under a metre.
 
-**Long bends are flat only, and matching the radius is what decided it.** A long
-bend's `dH` is pinned to its corners' or the merge would move the track, while
-its path is longer than theirs — so its height profile sags in the middle and it
-reads below the grade it names. At the old short easement a 180 ran 7.7% long and
-sat 3.5° low, inside the rule that a substituted piece may hide at most half a
-rung of the grade ladder (4.7°). At the easement that matches its corners' radius
-it runs **37% long**, putting a "medium" 180 at 12.6° against 18.4 and sagging
-its middle to 7.2 with a full g of vertical wobble at 20 m/s. A consistent radius
-is worth more than a sloped variant nobody had built.
+### What was tried and dropped
 
-The 270 was already flat for the same arithmetic plus a physical argument: a turn
+Matching the radius exactly *is* possible for a 180: `tau(180) = P` has no linear
+term, so `P(θ) = tau(quarter)` has exactly one root. It was built and measured,
+and it is not worth it. A long spiral runs a long way nearly straight before it
+bends, which shoves the whole arc forward — the bend swept **5.2 tiles deep where
+the pair it replaced swept 3.0**, so it refused to merge whenever there was track
+a couple of tiles in front. It also made the piece 37% longer than its corners,
+which a sloped variant's height profile cannot absorb, so sloped 180s had to go.
+Shrinking `θ` gets 80% of the benefit for none of that.
+
+The **270 cannot match at all**, and that is the grid rather than a choice.
+`P − Q ≤ 1` with equality only at `θ = 0`, while `P + Q ≥ 1` for the same reason
+— so a 270 landing where three corners land is *forced* wider than `T` while a
+corner is forced narrower. They coincide only with no easement anywhere.
+
+**Banking cannot hide it either.** Lateral force is `(v²/R)cos φ − g sin φ`: two
+terms against one angle, so no bank makes two radii feel alike at more than one
+speed. Every principled rule for choosing `φ` comes out constant anyway —
+"balanced at the speed its own radius is honest to" is `tan φ = 1.5` for every
+size, since `R` cancels.
+
+**The 270 is flat only**, on the physics rather than the arithmetic: a turn
 descending through `Φ` at pitch `θ` loads `2Φ tan θ` at the bottom *whatever
 radius it is drawn at*, so a descending 270 is 3.1 g at medium and 9.4 at steep,
-and widening it does nothing.
-
-Nothing is lost. Sloped corners still build every descent they did, and the merge
-declines to fold them — so every sloped bend a student can build is one radius per
-size, the same as every flat one.
+and widening it does nothing. Three sloped corners still build that descent; the
+merge declines to fold them into one piece that would make it look considered.
+The 180 has no such problem and is offered on every grade — at 0.05 its path is
+1.9% longer than its corners', so it reads 1.3° off its name against a corner's
+own 1.0. **Off, not below**: it inherits the corners' `dH` rounding and adds a
+little length of its own, the two partly cancel, and which way they land varies
+by combination — most sloped bends come out a shade gentle, the tight gentle one
+a shade steep. The ends are exact in every case, so nothing kinks.
 
 **One correction to the plan.** The halves below cannot be pieces. A half ends at
 `R * (cx + 1, cy)`, which for `T` = 2.5 is 2.98 tiles forward and 2.5 across —
@@ -691,10 +732,17 @@ unpaired half to repair on load, and undo shortens the bend rather than leaving
 half a turn.
 
 `dH` is `quarters * round(T * pi/2 * g)`, pinned to the quarters it replaces so
-the swap cannot move the track. The 180's path is 7.7% longer, so a sloped one
-sits up to 3.5 degrees below its named grade against a quarter's 1.4 — gentler,
-never steeper, ends exact so nothing kinks, and about 2 degrees against the
-quarters a rider is actually comparing it to.
+the swap cannot move the track. *Figures below are at the 0.2 easement this
+shipped with; at 0.05 the 180's path is 1.9% longer rather than 7.7% and the
+worst error is 1.3°.* The 180's path being longer pulls the average pitch down
+while the rounding pushes either way, so a sloped one sat up to 3.5 degrees off
+its named grade against a quarter's 1.4 — ends exact, so nothing kinks, and about
+2 degrees against the quarters a rider is actually comparing it to.
+
+**"Below its name" was wrong and a test caught it.** The direction depends on
+which way `round` went for that combination; the tight gentle 180 comes out
+steeper than its name, not gentler. The assertion pins the size of the error now
+and not its sign.
 
 ### The swap
 

@@ -228,7 +228,7 @@ If a display and the physics ever disagree, the physics is right.
       wide and sweeping) because that is the only way the exit lands on a tile
       edge midpoint. That span, `def.R`, was the radius until the turns were
       eased; it is now the grid parameter and `RC.turnRadius` is what bends, at
-      7.5, 12.4 and 17.4 m. Shipped: flat, gentle,
+      8.6, 14.3 and 20.0 m. Shipped: flat, gentle,
       steep, all four transitions each way, four quarter turns, station, brake,
       launch, chain-lift flag, undo, clear, circuit/shuttle status.
 - [x] **Phase 3 — Track rendering.** Chunky rails over a spine, sleepers coloured

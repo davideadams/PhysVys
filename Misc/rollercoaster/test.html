@@ -425,16 +425,17 @@
     }
   });
 
-  check('each shape eases by whatever makes its radius come out right', () => {
+  check('the three shapes scale as P+Q, P and P-Q', () => {
     /* Writing P = y1 + cos(theta) and Q = x1 - sin(theta) for the entry
        spiral's far end, the three shapes are
 
          tau(quarter) = P + Q    tau(180) = P    tau(270) = P - Q
 
-       and R = T/tau. Stated here as an independent series and checked against
-       the geometry the code integrates, so the two have to agree rather than
-       one of them being the definition of the other. Each shape carries its own
-       theta now, so the series is evaluated at whichever one it chose. */
+       and R = T/tau. Q is about theta and P is about 1, which is the whole of
+       why a corner comes out under its tile span and a longer bend over it.
+       Stated here as an independent series and checked against the geometry the
+       code integrates, so the two have to agree rather than one of them being
+       the definition of the other. */
     const P = t => 1 + t * t / 6 - Math.pow(t, 4) / 168;
     const Q = t => t - t * t * t / 30 + Math.pow(t, 5) / 1080;
     const series = { 1: t => P(t) + Q(t), 2: t => P(t), 3: t => P(t) - Q(t) };
@@ -448,52 +449,51 @@
     }
   });
 
-  check('a 180 bends at exactly the radius of the corners it replaces', () => {
-    /* The point of solving theta per shape. tau(180) = P has no linear term in
-       theta while tau(quarter) = P + Q does, so there is exactly one easement
-       that makes the two agree — and a bend that appears when you place a
-       second corner has no business being a different size from the corners you
-       placed. Exact, not close: the same tau, so the same R for every size. */
-    for (const size of ['tight', 'wide', 'sweeping']) {
-      const q = RC.pieceDef('turn-right-' + size);
-      const h = RC.pieceDef('turn-right-' + size + '-180');
-      if (!near(RC.turnRadius(h), RC.turnRadius(q), 1e-9)) {
-        return `a ${size} 180 bends at ${(RC.turnRadius(h) * RC.TILE_M).toFixed(3)} m ` +
-               `against its corners' ${(RC.turnRadius(q) * RC.TILE_M).toFixed(3)}`;
+  check('a turn bends at very nearly the radius its tile span implies', () => {
+    /* The mandate is the FOOTPRINT: a corner spanning three tiles should be a
+       three-tile bend, near enough that nobody has to think about it. It cannot
+       be exact — easing a 90 degree bend pushes both its tangents outward, so
+       the radius has to give up about THETA to pay for it — which is the whole
+       reason THETA is 0.05 and not something more generous.
+
+       Checked as a fraction of the span rather than in metres, since it is the
+       same fraction at every size. */
+    for (const id of ['turn-right-tight', 'turn-right-wide', 'turn-right-sweeping']) {
+      const def = RC.pieceDef(id);
+      const shortfall = 1 - RC.turnRadius(def) / def.R;
+      if (shortfall > 0.06) {
+        return `${id} spans ${def.R} tiles but bends at ${RC.turnRadius(def).toFixed(3)}, ` +
+               `${(100 * shortfall).toFixed(1)}% short`;
       }
-    }
-    // It buys that with easement length, not with force: the spiral is nearly
-    // six times as long, so the same peak g arrives far more gently.
-    const h = RC.pieceDef('turn-right-wide-180');
-    const q = RC.pieceDef('turn-right-wide');
-    if (!(h.shape.theta > q.shape.theta * 4)) {
-      return `the 180 eases by ${h.shape.theta.toFixed(3)} rad against the corner's ` +
-             `${q.shape.theta.toFixed(3)} — not the long easement that buys the radius`;
+      if (!(shortfall > 0)) return `${id} bends no tighter than its span, so it is not eased`;
     }
   });
 
-  check('a 270 is as close to its corners as the grid allows, and wider', () => {
-    /* tau(270) = P - Q is at most 1, reached only at theta = 0, while
-       tau(quarter) = P + Q is at least 1 for the same reason. So a 270 landing
-       where three corners land is FORCED wider than T and a corner is forced
-       narrower, and the two meet only with no easement anywhere. It cannot be
-       fixed, so the easement is spent on the other axis instead — matching a
-       quarter's jerk — and the radius is whatever falls out.
+  check('a long bend is a little wider than its corners, and that is forced', () => {
+    /* Deleting the two internal easements is what makes it wider — each was
+       carrying Q*R of reach toward the far node, at a point where the track is
+       heading exactly the way the bend has to go. Take them away and the shape
+       falls short, so the radius grows to make it up: one THETA per joint
+       removed.
 
-       Wider is the safe direction: the bend a student gets is gentler than the
-       corners they pressed, never sharper. */
-    const q = RC.pieceDef('turn-right-wide');
-    const w = RC.pieceDef('turn-right-wide-270');
-    const ratio = RC.turnRadius(w) / RC.turnRadius(q);
-    if (!(ratio > 1)) return `a 270 bends tighter than its corners (${ratio.toFixed(3)}x)`;
-    if (ratio > 1.45) {
-      return `a 270 is ${ratio.toFixed(2)}x its corners — the easement is being spent badly`;
-    }
-    // Equal jerk with a quarter is the rule that set its easement: dk/ds is
-    // 1/(2*theta*R^2), so theta/R^2 has to match.
-    const jerk = def => 1 / (2 * def.shape.theta * Math.pow(RC.turnRadius(def), 2));
-    if (Math.abs(jerk(w) / jerk(q) - 1) > 0.01) {
-      return `a 270 ramps its curvature at ${(jerk(w) / jerk(q)).toFixed(3)}x a corner's rate`;
+           180  x (P+Q)/P     ~ 1 + THETA
+           270  x (P+Q)/(P-Q) ~ 1 + 2 THETA
+
+       There is no arrangement that removes the twists and keeps the radius. The
+       length has to live either in the outer spirals — which was built, and put
+       the swept footprint 73% deeper — or in the radius. Wider is the safe
+       direction anyway: the bend is gentler than the corners pressed for it,
+       never sharper. */
+    const th = RC.SPIRAL_THETA;
+    const q = RC.turnRadius(RC.pieceDef('turn-right-wide'));
+    for (const [suffix, want] of [['-180', 1 + th], ['-270', 1 + 2 * th]]) {
+      const r = RC.turnRadius(RC.pieceDef('turn-right-wide' + suffix));
+      const ratio = r / q;
+      if (!(ratio > 1)) return `a ${suffix.slice(1)} bends tighter than its corners`;
+      if (Math.abs(ratio - want) > 0.01) {
+        return `a ${suffix.slice(1)} is ${ratio.toFixed(4)}x its corners, ` +
+               `expected about ${want.toFixed(4)}`;
+      }
     }
   });
 
@@ -538,34 +538,52 @@
     }
   });
 
-  check('long bends are offered on the flat only', () => {
-    /* A long bend's dH must be exactly as many times the quarter's as it turns
-       right angles, or merging would move the track — but its PATH is longer
-       than that many quarters, so its height profile has to sag in the middle
-       to make the same total and the piece comes out gentler on average than
-       the grade it is named for.
+  check('a 270 is offered on the flat only', () => {
+    /* On the physics, not the arithmetic. A turn descending through PHI at
+       pitch theta loads 2*PHI*tan(theta) at the bottom WHATEVER RADIUS IT IS
+       DRAWN AT, so a descending 270 is 3.1 g at medium and 9.4 at steep and
+       widening it does nothing. Three sloped corners still build that descent;
+       the merge declines to fold them into one piece that would make it look
+       like a considered element.
 
-       Matching the radius is what makes that intolerable. A 180 at the old
-       short easement ran 7.7% long and sat 3.5 degrees below its name, inside
-       the half-rung rule; at the easement that matches its corners it runs 37%
-       long, which puts a "medium" 180 at 12.6 degrees against 18.4 and sags its
-       middle to 7.2. A consistent radius is worth more than a sloped variant.
-
-       The 270 was already flat for the same arithmetic plus a physical
-       argument: a turn descending through PHI at pitch theta loads
-       2*PHI*tan(theta) at the bottom whatever radius it is drawn at, so a
-       descending 270 is 3.1 g at medium and 9.4 at steep.
-
-       Nothing is lost — sloped corners still build every descent they did, and
-       now at exactly the radius the palette quotes for them. */
+       The 180 has no such problem at 2*PI*tan(theta) and is offered on every
+       grade — its path is only 1.9% longer than the corners whose dH it
+       inherits, so it reads 1.3 degrees off its name against a corner's 1.0. */
     for (const def of RC.PIECES) {
-      if (def.kind === 'turn' && def.shape.quarters > 1 && def.gIn !== 0) {
-        return `${def.id} exists, and a sloped long bend cannot mean what it says`;
+      if (def.kind === 'turn' && def.shape.quarters === 3 && def.gIn !== 0) {
+        return `${def.id} exists, and a descending 270 cannot be rescued by radius`;
       }
     }
-    for (const id of ['turn-right-wide-180', 'turn-right-wide-270']) {
-      if (!RC.pieceDef(id)) return `no flat ${id} either`;
+    for (const suffix of ['', '-gentle-down', '-steep-up']) {
+      if (!RC.pieceDef('turn-right-wide-180' + suffix)) {
+        return `no turn-right-wide-180${suffix}`;
+      }
     }
+  });
+
+  check('a sloped long bend sits as close to its name as a corner does', () => {
+    /* dH is pinned to the corners' or merging would move the track, so a long
+       bend inherits their rounding and adds a little of its own: its path is
+       1.9% longer than theirs, which pulls the average pitch down, while
+       rounding dH to a whole level pushes either way. The two partly cancel and
+       WHICH WAY THEY LAND VARIES BY COMBINATION — the tight gentle bend comes
+       out 0.27 degrees steep, most of the rest come out shallow. So this pins
+       the size of the error and not its sign.
+
+       The bar is a corner's own worst case, not the half-rung rule (4.7
+       degrees) that decides whether a piece may exist at all: the pieces do far
+       better than the principle and there is no reason to let that slip
+       quietly. The ends are exact in every case, so nothing kinks. */
+    let worst = 0, worstId = '';
+    for (const long of longTurns()) {
+      if (!long.gIn) continue;
+      const truePitch = Math.abs(Math.atan2(long.dH * RC.LEVEL_M, RC.turnRun(long) * RC.TILE_M));
+      const named = Math.abs(Math.atan2(long.gIn * RC.LEVEL_M, RC.TILE_M));
+      const off = Math.abs(named - truePitch) * 180 / Math.PI;
+      if (off > worst) { worst = off; worstId = long.id; }
+    }
+    if (!worstId) return 'no sloped long bends exist to check';
+    if (worst > 1.5) return `${worstId} sits ${worst.toFixed(2)} deg off its named slope`;
   });
 
   check('a long bend moves the head exactly as far as its corners did', () => {
@@ -745,29 +763,22 @@
     }
   });
 
-  check('a sloped run of corners is left as corners', () => {
-    /* Not an omission. A long bend's path is longer than the corners it stands
-       in for while its dH is pinned to theirs, so a sloped one sags in the
-       middle and reads well below the grade it names — and at the easement that
-       makes a 180 match its corners' radius, badly enough to matter. There is
-       no sloped long bend for the merge to reach for, so it declines, and a
-       sloped run stays corners at exactly the radius the palette quotes.
-
-       Which is the consistent answer, not a lesser one: every sloped bend a
-       student can build is one radius per size, the same as every flat one. */
+  check('a sloped run stops at the 180, because there is no sloped 270', () => {
+    /* Not an omission: a descending 270 loads 3.1 g at medium and 9.4 at steep
+       whatever radius it is drawn at, so widening it does nothing. The run
+       simply declines to grow, and the third corner stays a corner. */
     openStart(60, RC.SLOPE.GENTLE);
     for (let n = 0; n < 3; n++) {
       if (!RC.place('turn-right-tight-gentle-up', { bank: true })) return `corner ${n + 1} refused`;
     }
-    if (RC.track.pieces.length !== 3) {
-      return `${RC.track.pieces.length} pieces, expected three corners`;
+    if (RC.track.pieces.length !== 2) {
+      return `${RC.track.pieces.length} pieces, expected a sloped 180 and a corner`;
     }
-    for (const p of RC.track.pieces) {
-      if (RC.pieceDef(p.defId).shape.quarters !== 1) return `${p.defId} is not a corner`;
-    }
+    if (RC.pieceDef(RC.track.pieces[0].defId).shape.quarters !== 2) return 'the first pair did not merge';
+    if (lastDef().shape.quarters !== 1) return `the third corner became ${lastDef().id}`;
   });
 
-  check('undo takes one right angle off a long bend at a time', () => {
+  check('removing takes one right angle off a long bend at a time', () => {
     /* Otherwise one press would delete track the student laid in three. The
        shorter bend is DERIVED from the longer one rather than remembered, so a
        180 loaded from a save comes apart exactly like one just built. */
@@ -2483,27 +2494,26 @@
     const pis = [...new Set(turnPts.map(p => p.pi))];
     if (pis.length !== 1) return `${pis.length} turn pieces — the pair did not merge`;
 
-    /* Halfway is exactly where the two corners used to meet. Both the bend and
-       the roll must be at full there, and everywhere between the easements.
+    /* Halfway is exactly where the two corners used to meet, and both the bend
+       and the roll must be at full there.
 
-       Where the easements END is taken from the shape rather than guessed: a
-       180 eases over 65 degrees at each side now, which is what buys it its
-       corners' radius, so its constant-radius middle is a smaller slice of the
-       parameter than a corner's is — and t = 0.5, the joint that mattered,
-       still sits inside it. */
+       Checked over the middle HALF rather than right up to the easements. The
+       sample nearest each seam has a three-point stencil that straddles it and
+       averages in some of the ramp, which is a measurement artefact rather than
+       a dip — and the shorter the easement, the bigger a fraction of it one
+       stencil covers. The middle half is well clear of that, contains t = 0.5,
+       and the assertion that the easements themselves ramp properly belongs to
+       the curvature tests rather than here. */
     const shape = turnPts[0].def.shape;
     const edge = shape.Ls / shape.S;
-    if (!(edge < 0.5)) return 'the 180 has no constant-radius middle left at all';
+    if (!(edge < 0.25)) return `the easement covers ${(100 * edge).toFixed(0)}% of the bend`;
     const full = Math.max(...turnPts.map(p => Math.abs(p.kLat)));
     for (const p of turnPts) {
-      if (p.t < edge || p.t > 1 - edge) continue;
+      if (p.t < 0.25 || p.t > 0.75) continue;
       if (Math.abs(p.bank) < RC.BANK_ANGLE * 0.999) {
         return `bank dips to ${Math.abs(p.bank).toFixed(3)} rad at t = ${p.t.toFixed(2)}`;
       }
-      // 2% rather than nothing only because the sample nearest each seam has a
-      // three-point stencil that straddles it and averages in a little of the
-      // easement. A real dip would be nothing like that small.
-      if (Math.abs(p.kLat) < full * 0.98) {
+      if (Math.abs(p.kLat) < full * 0.999) {
         return `the bend slackens to ${(1 / Math.abs(p.kLat)).toFixed(1)} m at t = ${p.t.toFixed(2)}`;
       }
       if (!(p.bank > 0)) return 'the bend banks the wrong way for a right-hander';
