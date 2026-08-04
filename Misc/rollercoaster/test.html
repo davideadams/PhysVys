@@ -4672,6 +4672,84 @@
     if (RC.build.lift) return 'the chain is still armed and will come back on the next climb';
   });
 
+  check('a chain can be put on a climb after it is built, and taken off', () => {
+    /* The comparison is most of the lesson: run the ride with the chain, run it
+       without, watch where the energy comes from. Demolishing a twelve-piece
+       lift to find out would be a poor way to ask the question.
+
+       It applies to the whole CLIMB rather than the one piece picked. A lift
+       hill is a run of pieces and nobody thinks of it as anything else. */
+    const lift = ['flat-to-gentle-up', 'gentle-to-medium-up', 'medium-up', 'medium-up',
+                  'medium-to-gentle-up', 'gentle-up-to-flat'];
+    const bad = shapeTrack(['flat'].concat(lift).concat(['flat', 'flat']), 4);
+    if (bad) return bad;
+    const first = 1, last = lift.length;          // the climb, after the flat
+
+    /* Picked from the middle of the climb: the run has to reach both ends of
+       it, and stop at the flat track either side.
+
+       Both ends of it means THE TRANSITIONS TOO. flat-to-gentle-up and
+       gentle-up-to-flat are the bottom and the top of a lift hill, and a chain
+       that stopped short of either would leave the train to coast onto the hill
+       and coast off it — which is not a lift hill, it is a lift hill with the
+       ends filed off. Named here rather than left to the count, because "the
+       run is six pieces" would still pass if the run had picked the wrong six. */
+    const run = RC.chainRun(3);
+    if (!run) return 'the middle of a climb reports no run';
+    if (run.from !== first || run.to !== last) {
+      return `the run is pieces ${run.from}..${run.to}, expected ${first}..${last}`;
+    }
+    const ids = RC.track.pieces.slice(run.from, run.to + 1).map(p => p.defId);
+    for (const id of ['flat-to-gentle-up', 'gentle-up-to-flat']) {
+      if (ids.indexOf(id) < 0) return `the climb's run left out ${id}`;
+    }
+
+    const res = RC.setChain(3, true);
+    if (!res.ok) return res.why;
+    if (res.count !== lift.length) return `${res.count} pieces chained, expected ${lift.length}`;
+    for (let i = 0; i < RC.track.pieces.length; i++) {
+      const want = i >= first && i <= last;
+      if (!!RC.track.pieces[i].lift !== want) {
+        return `piece ${i} ${RC.track.pieces[i].lift ? 'has' : 'has no'} chain, ` +
+               `and it is ${want ? 'on' : 'off'} the climb`;
+      }
+    }
+
+    // One press of undo, not twelve — it was one decision.
+    if (!RC.undo()) return 'undo refused after chaining a climb';
+    if (RC.track.pieces.some(p => p.lift)) return 'undo left part of the chain behind';
+
+    // And off again, which is the half that could not be done at all before.
+    RC.setChain(3, true);
+    const off = RC.setChain(3, false);
+    if (!off.ok || !off.changed) return 'taking the chain off did nothing';
+    if (RC.track.pieces.some(p => p.lift)) return 'the chain did not come off';
+
+    // Asking for what is already true is not an edit and must not cost a press.
+    const again = RC.setChain(3, false);
+    if (!again.ok) return again.why;
+    if (again.changed) return 'setting the chain to what it already was counted as a change';
+
+    // Flat and falling track cannot carry one, and say so rather than silently
+    // doing nothing.
+    if (RC.chainRun(0)) return 'flat track reports a climb to chain';
+    const no = RC.setChain(0, true);
+    if (no.ok) return 'flat track accepted a chain';
+    if (!no.why) return 'refusing to chain flat track gave no reason';
+
+    /* And a transition on its own is a climb — the smallest one there is. A
+       student levelling off at the top has built gentle-up-to-flat, and the
+       chain has to be able to reach it. */
+    const solo = shapeTrack(['flat', 'flat-to-gentle-up', 'gentle-up-to-flat', 'flat'], 4);
+    if (solo) return solo;
+    const two = RC.chainRun(1);
+    if (!two || two.from !== 1 || two.to !== 2) {
+      return `a bare pair of transitions reports ${two ? `${two.from}..${two.to}` : 'no climb'}`;
+    }
+    if (!RC.setChain(2, true).ok) return 'the top transition would not take a chain';
+    if (!RC.track.pieces[1].lift) return 'chaining from the top did not reach the bottom';
+  });
+
   check('a chain on a curving lift hauls the train up it', () => {
     RC.track.pieces = [];
     RC.track.start = { i: 8, j: 20, dir: 0, k: 5, g: RC.SLOPE.GENTLE };

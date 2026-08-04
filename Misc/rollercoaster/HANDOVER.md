@@ -230,7 +230,11 @@ If a display and the physics ever disagree, the physics is right.
       eased; it is now the grid parameter and `RC.turnRadius` is what bends, at
       8.6, 14.3 and 20.0 m. Shipped: flat, gentle,
       steep, all four transitions each way, four quarter turns, station, brake,
-      launch, chain-lift flag, undo, clear, circuit/shuttle status.
+      launch, chain-lift flag, undo, clear, circuit/shuttle status. The chain is
+      changeable after the fact (`RC.setChain`) and applies to the whole climb —
+      `RC.chainRun` finds it as the contiguous span of `liftable` pieces, which
+      is exactly the hill — so a ride can be run with and without its lift
+      without demolishing anything.
 - [x] **Phase 3 — Track rendering.** Chunky rails over a spine, sleepers coloured
       by piece type, chain dogs on lift hills, station platforms, support bents
       with zig-zag cross-bracing. Spaced evenly in **metres** off the arc-length

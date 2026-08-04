@@ -159,8 +159,12 @@
   const btnRedo = document.getElementById('btn-redo');
 
   function afterEdit() {
-    RC.clearSelection();     // the piece it pointed at may not be there now
-    RC.refreshBuild();       // which resets the sim and syncs the pair below
+    /* The selection is deliberately KEPT. refresh() already clamps a cursor
+       left past the end of a shortened track, so nothing dangles — and dropping
+       it would break the one loop this is most used for: pick a hill, put a
+       chain on it, run the ride, undo, run it again. Losing the piece on every
+       press would mean re-finding it each time. */
+    RC.refreshBuild();       // resets the sim and syncs the undo pair below
     state.dirty = true;
   }
   function syncUndo() {

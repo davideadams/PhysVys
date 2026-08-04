@@ -361,10 +361,22 @@ html, body {
 .rct-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
 
 .rct-btn-wide {
-  flex: 0 0 auto;
   padding: 0 0.6rem;
   font-size: 0.74rem;
   font-weight: 700;
+}
+
+/* The slope row is a GRID rather than a flex row, so the chain bar can drop to
+   a second line and span exactly the columns of the grades it may go on. As a
+   flex item it wrapped to a line of its own and sat under the wrong end of the
+   row, which said nothing about what it applied to — and it only started
+   wrapping at all when the ladder gained its fourth rung and the row went from
+   five buttons to seven. The column count and the bar's span are both set from
+   SLOPES in build.js, so they follow the ladder rather than being written down
+   here twice. */
+.rct-grid {
+  display: grid;
+  gap: 0.28rem;
 }
 
 /* Icons are stroked in currentColor, so the button's own colour drives them

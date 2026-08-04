@@ -320,6 +320,8 @@
       dirBtns.set(d.id, b);
     }
 
+    // One column per grade, so the chain bar below can span the uphill ones.
+    slopeRow.style.gridTemplateColumns = `repeat(${SLOPES.length}, minmax(34px, 1fr))`;
     for (const s of SLOPES) {
       const b = makeBtn(slopeRow, s.icon, s.label, fromMenu(() => {
         sel.slope = s.g;
@@ -330,19 +332,52 @@
       slopeBtns.set(s.g, b);
     }
 
-    // Chain lift lives with the slope controls, as it does in RCT.
+    /* Chain lift lives with the slope controls, as it does in RCT — but as a
+       bar UNDER the grades it can actually go on rather than a button squeezed
+       in beside them. The slope row is a seven-column grid and this sits in the
+       second row of it, spanning exactly the uphill columns, so what it applies
+       to is visible rather than something to be remembered. Which columns those
+       are is counted from SLOPES, not written down, since the grade ladder has
+       gained a rung twice now.
+
+       Deliberately a word and not an icon: it toggles a property of a piece
+       rather than choosing a shape, so it should not look like the shape
+       buttons above it. */
+    /* Which grade buttons a chain can be reached from: every grade some
+       liftable piece EXITS at, since the slope row picks the slope you want to
+       be travelling at once the piece is done. That takes in LEVEL as well as
+       the three climbs, because gentle-up-to-flat is the top of a lift hill and
+       carries a chain like the rest of it — the bar stopping short of Level
+       said the opposite. Derived rather than written down: it came out as the
+       three climbs when the ladder had one fewer rung, and it is not the sort
+       of number anyone would think to revisit. */
+    const liftGrades = new Set(
+      RC.PIECES.filter(d => d.kind === 'straight' && d.liftable).map(d => d.gOut));
+    const spanFrom = SLOPES.findIndex(s => liftGrades.has(s.g));
     const lift = document.createElement('button');
     lift.type = 'button';
     lift.className = 'rct-btn rct-btn-wide';
     lift.id = 'btn-lift';
-    // Deliberately a word, not an icon: it toggles a property of the pieces
-    // you build rather than choosing a shape, so it shouldn't look like the
-    // shape buttons beside it.
     lift.textContent = 'Chain';
-    lift.title = 'Put a chain lift on uphill pieces as you build them';
+    lift.style.gridColumn = `${spanFrom + 1} / span ${SLOPES.length - spanFrom}`;
     lift.addEventListener('click', fromMenu(() => {
-      sel.lift = !sel.lift;
-      setStatus(sel.lift ? 'Chain lift on — applies to uphill pieces' : 'Chain lift off');
+      /* On a selected piece it changes THAT climb; otherwise it arms the chain
+         for whatever gets built next. Two jobs on one button, but they are the
+         same idea and the button's own state says which one it is doing. */
+      if (cursor !== null) {
+        const pe = RC.track.pieces[cursor];
+        const res = RC.setChain(cursor, !(pe && pe.lift));
+        if (!res.ok) setStatus(res.why);
+        else if (!res.changed) setStatus('No change');
+        else {
+          setStatus(RC.track.pieces[cursor].lift
+            ? `Chain on — ${res.count} piece${res.count === 1 ? '' : 's'} of climb`
+            : `Chain off — ${res.count} piece${res.count === 1 ? '' : 's'} of climb`);
+        }
+      } else {
+        sel.lift = !sel.lift;
+        setStatus(sel.lift ? 'Chain lift on — applies to uphill pieces' : 'Chain lift off');
+      }
       refresh();
     }));
     slopeRow.appendChild(lift);
@@ -485,11 +520,23 @@
     if (!inspecting) RC.syncChain();      // the chain does not survive leaving a climb
     const liftBtn = document.getElementById('btn-lift');
     if (liftBtn) {
-      liftBtn.disabled = inspecting ? false : !canChain;
-      liftBtn.classList.toggle('active', sel.lift && canChain);
-      liftBtn.title = canChain
-        ? 'Put a chain on this piece'
-        : 'Chain lift — only track that climbs can carry one';
+      // While inspecting, the button reports and changes the CLIMB the selected
+      // piece belongs to. Otherwise it arms the chain for what gets built next.
+      const run = inspecting ? RC.chainRun(cursor) : null;
+      if (inspecting) {
+        liftBtn.disabled = !run;
+        liftBtn.classList.toggle('active', !!run && !!RC.track.pieces[cursor].lift);
+        liftBtn.title = run
+          ? `Put a chain on this climb, or take it off — ${run.count} piece` +
+            `${run.count === 1 ? '' : 's'}`
+          : 'Chain lift — only track that climbs can carry one';
+      } else {
+        liftBtn.disabled = !canChain;
+        liftBtn.classList.toggle('active', sel.lift && canChain);
+        liftBtn.title = canChain
+          ? 'Put a chain on the pieces you build next'
+          : 'Chain lift — only track that climbs can carry one';
+      }
     }
 
     const nameEl = document.getElementById('preview-name');

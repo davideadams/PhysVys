@@ -1991,6 +1991,50 @@
     return { ok: true, R: newR, L: newL };
   };
 
+  /* ---- chains after the fact ---------------------------------------------
+     A chain is a property of track already built, so it can be changed after
+     the event — the same as a loop's size, and for the same reason. A student
+     who has laid a twelve-piece lift and then wants to see what the ride does
+     WITHOUT it should not have to demolish the hill to find out; that comparison
+     is most of the lesson.
+
+     It applies to the whole CLIMB rather than one piece. A lift hill is a run of
+     pieces and nobody thinks of it as anything else, so toggling twelve of them
+     one at a time would be a chore that teaches nothing. The run is the
+     contiguous span of liftable pieces containing the one picked, which IS the
+     climb, because liftable means "this piece goes uphill". */
+  function liftableAt(i) {
+    const p = RC.track.pieces[i];
+    const def = p && BY_ID.get(p.defId);
+    return !!(def && def.liftable);
+  }
+
+  /* The climb this piece belongs to, or null if it does not climb. */
+  RC.chainRun = function (pieceIndex) {
+    if (!liftableAt(pieceIndex)) return null;
+    let from = pieceIndex, to = pieceIndex;
+    while (liftableAt(from - 1)) from--;
+    while (liftableAt(to + 1)) to++;
+    return { from, to, count: to - from + 1 };
+  };
+
+  RC.setChain = function (pieceIndex, on) {
+    const run = RC.chainRun(pieceIndex);
+    if (!run) return { ok: false, why: 'Only track that climbs can carry a chain' };
+    const pieces = RC.track.pieces;
+    let changed = false;
+    for (let i = run.from; i <= run.to; i++) {
+      if (!!pieces[i].lift !== !!on) changed = true;
+    }
+    // Nothing to do is not an edit — it should not cost a press of undo.
+    if (!changed) return { ok: true, count: run.count, changed: false };
+    RC.edit(() => {
+      for (let i = run.from; i <= run.to; i++) pieces[i].lift = !!on;
+      RC.version++;
+    });
+    return { ok: true, count: run.count, changed: true };
+  };
+
   /* ---- circuit validation ---------------------------------------------
      Closed: the head has come back to exactly the node the track started
      from. Shuttle: it hasn't, but there's a launch piece to drive an
