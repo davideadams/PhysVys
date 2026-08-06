@@ -148,24 +148,45 @@ function clearBg() {
   ctx.fillRect(0, 0, W, H);
 }
 
+// The strip's colour depends only on x, so it is built one row tall and
+// stretched down the strip. Smoothing is off for the blit: the horizontal
+// scale is 1:1, so nearest-neighbour reproduces the row exactly.
+const STRIP_W = STRIP.xR - STRIP.xL;
+const stripRow = document.createElement('canvas');
+stripRow.width = STRIP_W;
+stripRow.height = 1;
+const stripRowCtx = stripRow.getContext('2d');
+const stripRowImg = stripRowCtx.createImageData(STRIP_W, 1);
+// Absorption depth per column, reused between renders.
+const stripDark = new Float64Array(STRIP_W);
+// exp(−d²/2.2) falls to 8e-8 by six pixels out, far below one 8-bit step,
+// so a line only has to touch the columns immediately either side of it.
+const LINE_REACH = 6;
+
 function drawStrip() {
   const src = SOURCES[state.sourceKey];
   const sh  = STRIP.y1 - STRIP.y0;
-  const sw  = STRIP.xR - STRIP.xL;
+  const sw  = STRIP_W;
 
   ctx.save();
 
   if (src.continuum) {
-    // Build per-pixel image for full control over line darkness.
-    // Resolution: 1px per x column in the strip.
-    const imgData = ctx.createImageData(sw, sh);
-    const buf = imgData.data;
+    const buf = stripRowImg.data;
 
-    // Pre-compute absorption line list shifted by source redshift.
-    const absorbers = [];
+    // Scatter each absorption line into the columns it reaches, rather than
+    // asking every column about every line. Line centres are fixed, so they
+    // are computed once here instead of once per column.
+    stripDark.fill(0);
     for (const [sym, compW] of Object.entries(src.composition)) {
       for (const {nm, w} of ELEMENTS[sym].lines) {
-        absorbers.push({ nm: nm * (1 + src.z), absW: compW * w });
+        const absW = compW * w;
+        const centre = lambdaToX(nm * (1 + src.z)) - STRIP.xL;
+        const lo = Math.max(0, Math.ceil(centre - LINE_REACH));
+        const hi = Math.min(sw - 1, Math.floor(centre + LINE_REACH));
+        for (let px = lo; px <= hi; px++) {
+          const dpx = px - centre;
+          stripDark[px] += absW * Math.exp(-dpx * dpx / 2.2);
+        }
       }
     }
 
@@ -173,14 +194,8 @@ function drawStrip() {
       const nm = xToLambda(STRIP.xL + px);
       let [R, G, B] = wavelengthToRGBnm(nm);
 
-      // Darken for absorption lines using a narrow Lorentzian profile.
-      // Physical half-width in px units ≈ 2 px → ~0.9 nm at this scale.
-      let darkness = 0;
-      for (const { nm: lnm, absW } of absorbers) {
-        const dpx = Math.abs(px - (lambdaToX(lnm) - STRIP.xL));
-        const d = absW * Math.exp(-dpx * dpx / 2.2);
-        darkness = Math.min(1, darkness + d);
-      }
+      // Overlapping lines saturate rather than over-darken.
+      const darkness = stripDark[px] > 1 ? 1 : stripDark[px];
       R *= (1 - darkness * 0.96);
       G *= (1 - darkness * 0.96);
       B *= (1 - darkness * 0.96);
@@ -192,21 +207,16 @@ function drawStrip() {
       );
       R *= edgeFade; G *= edgeFade; B *= edgeFade;
 
-      for (let row = 0; row < sh; row++) {
-        const idx = (row * sw + px) * 4;
-        buf[idx]   = (R * 255) | 0;
-        buf[idx+1] = (G * 255) | 0;
-        buf[idx+2] = (B * 255) | 0;
-        buf[idx+3] = 255;
-      }
+      const idx = px * 4;
+      buf[idx]   = (R * 255) | 0;
+      buf[idx+1] = (G * 255) | 0;
+      buf[idx+2] = (B * 255) | 0;
+      buf[idx+3] = 255;
     }
 
-    // Blit into a temp canvas, then drawImage to the real canvas.
-    const tmp = document.createElement('canvas');
-    tmp.width  = sw;
-    tmp.height = sh;
-    tmp.getContext('2d').putImageData(imgData, 0, 0);
-    ctx.drawImage(tmp, STRIP.xL, STRIP.y0);
+    stripRowCtx.putImageData(stripRowImg, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(stripRow, 0, 0, sw, 1, STRIP.xL, STRIP.y0, sw, sh);
 
   } else {
     // Emission lamp: dark background + bright lines.
