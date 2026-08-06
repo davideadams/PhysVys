@@ -24,6 +24,16 @@ const WAVE_SPEED = 30;               // mm per sim-second
 const PLATE_W   = 1.6;
 const SCREEN_W  = 2.0;
 
+// Per-column scene x and (x − SLIT_X)². Neither depends on any control, so
+// they are built once here rather than re-derived on all 238 rows.
+const colX = new Float32Array(BW);
+const colDxr2 = new Float32Array(BW);
+for (let px = 0; px < BW; px++) {
+  const x = (px + 0.5) / BW * SCENE_W;
+  colX[px] = x;
+  colDxr2[px] = (x - SLIT_X) * (x - SLIT_X);
+}
+
 // ── State ─────────────────────────────────────────────────────────
 const state = {
   mode: 'waves',
@@ -85,6 +95,31 @@ function slitEnv(dy, r) {
   return Math.sin(arg) / arg;
 }
 
+// ── Fast trig for the field render ────────────────────────────────
+// Both slits cost a sine for the wave and another for its envelope, so the
+// field render spends most of its time in Math.sin. An 8192-entry table steps
+// by 2π/8192 ≈ 0.00077 rad, and since |d(sin)/dθ| ≤ 1 that bounds the error at
+// about 0.00077 — well under one part in 255, so the colour ramp cannot show
+// it. Only the field render uses these; the readouts, the screen strip and the
+// derivation keep the exact versions above.
+const SIN_N = 8192, SIN_MASK = SIN_N - 1;
+const SIN_LUT = new Float32Array(SIN_N);
+for (let i = 0; i < SIN_N; i++) SIN_LUT[i] = Math.sin(i * 2 * Math.PI / SIN_N);
+const SIN_SCALE = SIN_N / (2 * Math.PI);
+// Truncation plus a mask wraps correctly for negative phase (two's complement).
+function fastSin(ph) { return SIN_LUT[((ph * SIN_SCALE) | 0) & SIN_MASK]; }
+// sinc(x) = sin(x)/x. Dividing by a small x would amplify the table's error, so
+// small x takes the series instead. The series is the more accurate of the two
+// out to about |x| = 1: its first dropped term is x⁸/362880, which at x = 1 is
+// 3e-6, whereas the table path there is already off by 0.00077.
+function fastSinc(x) {
+  if (x > -1 && x < 1) {
+    const x2 = x * x;
+    return 1 - x2 / 6 + x2 * x2 / 120 - x2 * x2 * x2 / 5040;
+  }
+  return fastSin(x) / x;
+}
+
 function syncSlitOnTimes() {
   const { s1, s2 } = slitsOpen();
   if (s1 && state.t_on1 === null) state.t_on1 = state.t;
@@ -122,13 +157,35 @@ function getDerivY() {
 }
 
 // ── Wave-field render ─────────────────────────────────────────────
+// Nothing in the field changes unless the clock advances or a control moves,
+// but the loop runs every frame regardless. Paused, that recomputed 90,440
+// identical pixels sixty times a second; now it re-blits the buffer instead.
+let fieldCacheKey = '';
+function fieldKey() {
+  return `${state.t}|${state.lambda}|${state.d}|${state.a}|${state.L}|` +
+         `${state.slits}|${state.t_on_source}|${state.t_on1}|${state.t_on2}`;
+}
+
 function renderField() {
+  const key = fieldKey();
+  if (key !== fieldCacheKey) {
+    fieldCacheKey = key;
+    computeField();
+  }
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(buf, 0, 0, W, H);
+}
+
+function computeField() {
   const k = 2 * Math.PI / state.lambda;
   const w = WAVE_SPEED * k;
   const t = state.t;
   const tElapsed = Math.max(0, t - state.t_on_source);
   const reachSrc = tElapsed * WAVE_SPEED;
-  const wt = w * tElapsed;
+  // Wrapped to one cycle — sine is 2π-periodic, and this keeps the phase from
+  // growing without bound over a long lesson.
+  const wt = (w * tElapsed) % (2 * Math.PI);
   const invLam = 1 / state.lambda;
 
   const { s1, s2 } = slitsOpen();
@@ -141,6 +198,10 @@ function renderField() {
   const dPlate = SLIT_X - SOURCE_X;
   const phaseRight = k * dPlate;     // common phase offset for right-side waves
   const SCREEN_X = screenX();
+  // slitEnv's argument is envK · dy / r; the leading factor is fixed per frame
+  // rather than rebuilt from state on each of the 180,000 envelope evaluations.
+  const envOn = state.a > 0;
+  const envK = Math.PI * state.a * invLam;
 
   let i = 0;
   for (let py = 0; py < BH; py++) {
@@ -148,7 +209,7 @@ function renderField() {
     const dy1 = y - y1, dy1sq = dy1 * dy1;
     const dy2 = y - y2, dy2sq = dy2 * dy2;
     for (let px = 0; px < BW; px++) {
-      const x = (px + 0.5) / BW * SCENE_W;
+      const x = colX[px];
 
       let psi;
       if (x > SCREEN_X + 0.5) {
@@ -161,13 +222,12 @@ function renderField() {
         } else {
           let f = (reachSrc - dxs) * invLam;
           if (f < 0) f = 0; else if (f > 1) f = 1;
-          psi = f * Math.sin(k*dxs - wt);
+          psi = f * fastSin(k*dxs - wt);
         }
       } else {
         // Right side: cylindrical waves from open slits, gated by both source and slit causality.
         let p = 0;
-        const dxr = x - SLIT_X;
-        const dxrsq = dxr * dxr;
+        const dxrsq = colDxr2[px];
         if (s1) {
           const r1 = Math.sqrt(dxrsq + dy1sq);
           let fs = (reachSrc - (dPlate + r1)) * invLam;
@@ -175,7 +235,8 @@ function renderField() {
           let fSlit = (reach1 - r1) * invLam;
           if (fSlit < 0) fSlit = 0; else if (fSlit > 1) fSlit = 1;
           const f = fs < fSlit ? fs : fSlit;
-          p += f * slitEnv(dy1, r1) * Math.sin(k*r1 - wt + phaseRight);
+          const env = (envOn && r1 > 1e-6) ? fastSinc(envK * dy1 / r1) : 1;
+          p += f * env * fastSin(k*r1 - wt + phaseRight);
         }
         if (s2) {
           const r2 = Math.sqrt(dxrsq + dy2sq);
@@ -184,7 +245,8 @@ function renderField() {
           let fSlit = (reach2 - r2) * invLam;
           if (fSlit < 0) fSlit = 0; else if (fSlit > 1) fSlit = 1;
           const f = fs < fSlit ? fs : fSlit;
-          p += f * slitEnv(dy2, r2) * Math.sin(k*r2 - wt + phaseRight);
+          const env = (envOn && r2 > 1e-6) ? fastSinc(envK * dy2 / r2) : 1;
+          p += f * env * fastSin(k*r2 - wt + phaseRight);
         }
         psi = p;
       }
@@ -205,9 +267,6 @@ function renderField() {
     }
   }
   bctx.putImageData(imgData, 0, 0);
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(buf, 0, 0, W, H);
 }
 
 // ── Source bar, slit plate, screen strip ──────────────────────────
