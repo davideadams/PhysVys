@@ -47,6 +47,13 @@ const state = {
 
 // ─── Field models ─────────────────────────────────────────────────────────────
 
+// Running total for addWireField. Tracing one field line runs 1400 RK4 steps,
+// each asking for the field four times, and each of those sums over 2 × turns
+// wires — so handing the result back as a fresh object through a fresh closure
+// meant millions of one-frame-lived allocations per redraw. barField and
+// solenoidField zero these, add into them, then read them off.
+let wireBx = 0, wireBy = 0;
+
 // Bar magnet: Amperian model. A permanent magnet is equivalent to a stack of
 // microscopic current loops; this gives the correct closed-loop B field
 // (uniform interior, dipole exterior) using the same wire-pair math as the
@@ -61,17 +68,17 @@ function barField(px, py) {
   const topSign = polarity === 'ns' ? +1 : -1;
   const botSign = -topSign;
 
-  let bx = 0, by = 0;
   const start = CX - half;
   const span = (turns > 1) ? length / (turns - 1) : 0;
   const I = poleStrength;
 
+  wireBx = 0; wireBy = 0;
   for (let i = 0; i < turns; i++) {
     const wx = start + i * span;
-    addWireField(px, py, wx, CY - radius, topSign * I, (out) => { bx += out.bx; by += out.by; });
-    addWireField(px, py, wx, CY + radius, botSign * I, (out) => { bx += out.bx; by += out.by; });
+    addWireField(px, py, wx, CY - radius, topSign * I);
+    addWireField(px, py, wx, CY + radius, botSign * I);
   }
-  return { bx, by };
+  return { bx: wireBx, by: wireBy };
 }
 
 // Solenoid: model as N current loops along the x-axis. In a 2D side-view
@@ -87,37 +94,34 @@ function solenoidField(px, py) {
   const botSign = -topSign;
 
   const half = length / 2;
-  let bx = 0, by = 0;
 
   // Place loops evenly along the axis
   const start = CX - half;
   const span = (turns > 1) ? length / (turns - 1) : 0;
 
+  wireBx = 0; wireBy = 0;
   for (let i = 0; i < turns; i++) {
     const wx = (turns === 1) ? CX : start + i * span;
     // Top wire (above axis): at (wx, CY - radius), sign = topSign
-    addWireField(px, py, wx, CY - radius, topSign * current, (out) => {
-      bx += out.bx; by += out.by;
-    });
+    addWireField(px, py, wx, CY - radius, topSign * current);
     // Bottom wire (below axis)
-    addWireField(px, py, wx, CY + radius, botSign * current, (out) => {
-      bx += out.bx; by += out.by;
-    });
+    addWireField(px, py, wx, CY + radius, botSign * current);
   }
-  return { bx, by };
+  return { bx: wireBx, by: wireBy };
 }
 
 // Field of an infinite wire perpendicular to the page at (wx, wy)
 // carrying current `i` (positive = out of page). B circulates
 // counter-clockwise (right-hand rule).
-function addWireField(px, py, wx, wy, i, accum) {
+function addWireField(px, py, wx, wy, i) {
   const dx = px - wx;
   const dy = py - wy;
   const r2 = dx * dx + dy * dy;
-  if (r2 < 9) { accum({ bx: 0, by: 0 }); return; }
+  if (r2 < 9) return;              // inside the wire: contributes nothing
   // For current out of page (+z), B = (k * i / r²) * (-dy, dx)
   const s = i / r2;
-  accum({ bx: -s * dy, by: s * dx });
+  wireBx += -s * dy;
+  wireBy +=  s * dx;
 }
 
 function getField(px, py) {
