@@ -19,6 +19,27 @@ const SOURCE_X = 0;                  // sources sit on the left edge; only their
 const CENTER_Y = SCENE_H / 2;
 const WAVE_SPEED = 30;               // mm/s — animation pace only
 
+// Per-column (x − SOURCE_X)². The sources never move off the left edge, so this
+// is fixed for the whole run rather than something to re-derive on all 213 rows.
+const colDx2 = new Float32Array(BW);
+for (let px = 0; px < BW; px++) {
+  const dx = (px + 0.5) / BW * SCENE_W - SOURCE_X;
+  colDx2[px] = dx * dx;
+}
+
+// ── Fast trig for the field render ────────────────────────────────
+// Two sines per pixel in the wave view, a cosine in the intensity view. An
+// 8192-entry table steps by 2π/8192 ≈ 0.00077 rad, and since |d(sin)/dθ| ≤ 1
+// that bounds the error at about 0.00077 — far below one part in 255, so the
+// colour ramp cannot show it. The overlays and readouts keep exact trig.
+const SIN_N = 8192, SIN_MASK = SIN_N - 1;
+const SIN_LUT = new Float32Array(SIN_N);
+for (let i = 0; i < SIN_N; i++) SIN_LUT[i] = Math.sin(i * 2 * Math.PI / SIN_N);
+const SIN_SCALE = SIN_N / (2 * Math.PI);
+// Truncation plus a mask wraps correctly for negative phase (two's complement).
+function fastSin(ph) { return SIN_LUT[((ph * SIN_SCALE) | 0) & SIN_MASK]; }
+function fastCos(ph) { return fastSin(ph + Math.PI / 2); }
+
 // ── State ─────────────────────────────────────────────────────────
 const state = {
   d: 40,
@@ -61,7 +82,27 @@ function syncSourceOnTimes() {
 }
 
 // ── Wave-field render (per pixel into ImageData) ──────────────────
+// The intensity view freezes the clock, so its image never changes at all, and
+// a paused wave view is just as static — yet the loop rebuilt all 68,160 pixels
+// every frame. Recompute only when an input actually moves; otherwise re-blit.
+let fieldCacheKey = '';
+function fieldKey() {
+  return `${state.t}|${state.lambda}|${state.d}|${state.view}|${state.active}|` +
+         `${state.phaseMode}|${state.phaseCustom}|${state.t_on1}|${state.t_on2}`;
+}
+
 function renderField() {
+  const key = fieldKey();
+  if (key !== fieldCacheKey) {
+    fieldCacheKey = key;
+    computeField();
+  }
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(buf, 0, 0, W, H);
+}
+
+function computeField() {
   const { a1, a2 } = sourceAmps();
   const k = 2 * Math.PI / state.lambda;
   const w = WAVE_SPEED * k;
@@ -70,10 +111,11 @@ function renderField() {
 
   const s1y = CENTER_Y - state.d / 2;
   const s2y = CENTER_Y + state.d / 2;
-  const sx = SOURCE_X;
 
   const isInt = state.view === 'int';
-  const wt = w * t;
+  // Wrapped to one cycle — sine is 2π-periodic, and this keeps the phase from
+  // growing without bound over a long lesson.
+  const wt = (w * t) % (2 * Math.PI);
 
   // Causal reach of each source: distance the leading wavefront has travelled.
   // -1 means "off" (no contribution at all). Soft fade-in over one wavelength behind the front.
@@ -87,8 +129,7 @@ function renderField() {
     const dy1 = y - s1y, dy1sq = dy1 * dy1;
     const dy2 = y - s2y, dy2sq = dy2 * dy2;
     for (let px = 0; px < BW; px++) {
-      const x = (px + 0.5) / BW * SCENE_W;
-      const dx = x - sx, dxsq = dx * dx;
+      const dxsq = colDx2[px];
       const r1 = Math.sqrt(dxsq + dy1sq);
       const r2 = Math.sqrt(dxsq + dy2sq);
 
@@ -100,14 +141,14 @@ function renderField() {
       let r, g, b;
       if (isInt) {
         // Time-averaged |E|² with effective (causally-gated) amplitudes
-        const I = A1*A1 + A2*A2 + 2*A1*A2 * Math.cos(k*(r2 - r1) + phaseRel);
+        const I = A1*A1 + A2*A2 + 2*A1*A2 * fastCos(k*(r2 - r1) + phaseRel);
         const v = I * 0.25;                                // 0..1
         r = (255 * Math.min(1, v * 1.25)) | 0;
         g = (190 * v) | 0;
         b = (55  * v) | 0;
       } else {
         // Instantaneous ψ
-        const psi = A1 * Math.sin(k*r1 - wt) + A2 * Math.sin(k*r2 - wt + phaseRel);
+        const psi = A1 * fastSin(k*r1 - wt) + A2 * fastSin(k*r2 - wt + phaseRel);
         const v = psi * 0.5;                               // ~[-1, 1]
         if (v >= 0) {
           r = (14  + (220 - 14)  * v) | 0;
@@ -124,9 +165,6 @@ function renderField() {
     }
   }
   bctx.putImageData(imgData, 0, 0);
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(buf, 0, 0, W, H);
 }
 
 // ── Hyperbola (locus of constant path difference p = r2 − r1) ─────
