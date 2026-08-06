@@ -111,6 +111,31 @@ const bimg = bctx.createImageData(BW, BH);
 let fieldCacheKey = "";
 function fieldKey() { return `${state.V}|${state.target}|${state.lightMode ? "L" : "D"}`; }
 
+// The pattern is a set of concentric rings, so intensity depends on distance
+// from the centre and nothing else — yet it was evaluated per pixel, costing an
+// exp() for the direct beam plus one per ring on each of 144,000 pixels. It is
+// built once as a radial profile instead and read back with a lerp. Sampling
+// eight times per pixel keeps the interpolation error near a tenth of a colour
+// step: the narrowest Gaussian here has σ = 2.75 px, so it is heavily
+// oversampled. Dragging the V slider rebuilds ~1,000 entries, not ~430,000 exps.
+const LUT_PER_PX = 8;
+const LUT_MAX_R = SCREEN_RADIUS_PX * (BW / W) + 1.5;
+const radialLUT = new Float32Array(Math.ceil(LUT_MAX_R * LUT_PER_PX) + 2);
+
+function buildRadialLUT(rings, centreSig, ringSig) {
+  const c2 = 2 * centreSig * centreSig;
+  const g2 = 2 * ringSig * ringSig;
+  for (let i = 0; i < radialLUT.length; i++) {
+    const r = i / LUT_PER_PX;
+    let I = CENTRE_WEIGHT * Math.exp(-(r * r) / c2);
+    for (const ring of rings) {
+      const dr = r - ring.r;
+      I += ring.w * Math.exp(-(dr * dr) / g2);
+    }
+    radialLUT[i] = I;
+  }
+}
+
 function renderContinuousField() {
   const key = fieldKey();
   if (key === fieldCacheKey) return;
@@ -129,20 +154,20 @@ function renderContinuousField() {
   const dark = !state.lightMode;
   // Bright phosphor green vs dark teal-on-cream
   const R0 = dark ? 120 : 12, G0 = dark ? 255 : 70, B0 = dark ? 170 : 80;
+  buildRadialLUT(rings, centreSig, ringSig);
   for (let y = 0; y < BH; y++) {
+    const dyp = y - cy, dyp2 = dyp * dyp;
     for (let x = 0; x < BW; x++) {
-      const dxp = x - cx, dyp = y - cy;
-      const r = Math.sqrt(dxp * dxp + dyp * dyp);
+      const dxp = x - cx;
+      const r = Math.sqrt(dxp * dxp + dyp2);
       const idx = (y * BW + x) * 4;
       if (r > screenR + 1.5) {
         data[idx] = 0; data[idx + 1] = 0; data[idx + 2] = 0; data[idx + 3] = 0;
         continue;
       }
-      let I = CENTRE_WEIGHT * Math.exp(-(r * r) / (2 * centreSig * centreSig));
-      for (const ring of rings) {
-        const dr = r - ring.r;
-        I += ring.w * Math.exp(-(dr * dr) / (2 * ringSig * ringSig));
-      }
+      const f = r * LUT_PER_PX;
+      const i0 = f | 0;
+      const I = radialLUT[i0] + (radialLUT[i0 + 1] - radialLUT[i0]) * (f - i0);
       const a = Math.min(1, I * 0.95);
       data[idx]     = Math.round(R0 * a);
       data[idx + 1] = Math.round(G0 * a);
