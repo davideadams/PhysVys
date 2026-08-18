@@ -84,6 +84,26 @@ h1 {
   font-size: 1rem;
 }
 
+.intro-toggle {
+  margin: 0.6rem 0 0;
+}
+
+.intro-toggle summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 0.9rem;
+  font-weight: 700;
+  list-style: none;
+}
+.intro-toggle summary::-webkit-details-marker { display: none; }
+.intro-toggle summary::before {
+  content: "▶ ";
+  display: inline-block;
+}
+.intro-toggle[open] summary::before { content: "▼ "; }
+
+.intro-toggle .intro { margin-top: 0.4rem; }
+
 .hero-actions {
   display: flex;
   flex-wrap: wrap;
