@@ -30,7 +30,6 @@
 
   const SUBSTEP = 1 / 240;   // s — fixed physics step
   const MAX_FRAME = 0.1;     // s — ignore huge gaps after a tab switch
-  const STATION_BRAKE = 5;      // m/s^2 once the lap is done
   const STATION_DISPATCH = 2.5; // m/s — drive tyres pushing the train out
   const STATION_HOME = 1.5;     // m/s — and walking it back into its berth
   /* m/s^2 — how hard a brake run bites. About 1.5 g, which is a firm but
@@ -94,7 +93,7 @@
     kDrag: 0.0012,
 
     E0: 0, eMotor: 0, eThermal: 0,
-    maxV: 0, maxG: 0, maxZ: 0,
+    maxV: 0, maxG: 0, maxZ: 0, maxStationBrake: 0,
     g: { vert: 1, lat: 0, long: 0 },
     // The shape of the track under the front car: curvature in the vertical
     // plane (crests and valleys) and in the horizontal one (turning), 1/m.
@@ -324,6 +323,7 @@
     sim.eThermal = 0;
     sim.maxV = 0;
     sim.maxG = 0;
+    sim.maxStationBrake = 0;   // m/s^2 the platform had to pull to stop the train
     sim.maxZ = 0;
     sim.vGround = null;      // speed on first reaching ground, for a demo
     sim.tGround = null;
@@ -443,25 +443,53 @@
   };
 
   /* Bring a train that has finished its ride back to exactly where it set off
-     from, the way the real thing does: the station's drive tyres slow it if it
-     arrives quickly and carry it the rest of the way at a walking pace.
+     from, the way the real thing does: the station's brakes slow it if it
+     arrives quickly and its drive tyres carry it the rest of the way at a
+     walking pace.
 
      It used to stop as soon as it was under half a metre per second and snap to
      the berth, which took a train from the station THRESHOLD to its berth in
      one frame — the run appeared to end the moment the front car reached the
      platform, a dozen metres short of where it started. Now it drives in.
 
+     THE STATION ALWAYS STOPS THE TRAIN, and stops it at the berth. It used to
+     brake at a fixed 5 m/s^2, which is enough for a train arriving at walking
+     pace and nothing like enough for one arriving off a drop: at 20 m/s the
+     platform shed 5 m/s over its whole length and then declared the train home
+     at fifteen, dumping the rest of its kinetic energy in a single frame. The
+     energy went to the right place, so nothing in the readout was wrong — but
+     what it described was a train hitting the end of the station, not one
+     stopping in it.
+
+     So the deceleration is SOLVED FOR rather than fixed: v^2 = 2.a.d for the
+     distance still to run, recomputed each substep. That is the constant rate
+     which brings the train to rest exactly at the berth, and recomputing it
+     keeps it exact whatever the grade under the platform does in between. A
+     station asked for more than a brake run's worth of it says so in the
+     report — the arithmetic will always stop the train, but a platform pulling
+     three g to do it is a fact about the ride worth knowing.
+
      `sign` is +1 when the berth lies ahead (a circuit, arriving forwards) and
      -1 when it lies behind (a shuttle, rolling back in). Returns true once the
      train is home. */
   function stationHome(sim, m, dt, sign, onStation) {
-    if ((sim.startS - sim.s) * sign <= 0) return true;
+    const togo = (sim.startS - sim.s) * sign;  // distance still to run
+    if (togo <= 0) return true;
     if (!onStation) return false;              // still out on the track
 
     const closing = sim.v * sign;              // how fast it is nearing the berth
-    const target = closing > STATION_HOME
-      ? Math.max(STATION_HOME, closing - STATION_BRAKE * dt)
-      : STATION_HOME;
+    let target = STATION_HOME;
+    if (closing > STATION_HOME) {
+      const a = closing * closing / (2 * togo);
+      if (a > sim.maxStationBrake) sim.maxStationBrake = a;
+      if (a > BRAKE_DECEL) {
+        addWarning(`The station brakes at ${(a / G).toFixed(1)} g to catch the train — ` +
+                   `it arrives at ${closing.toFixed(1)} m/s with only ${togo.toFixed(0)} m ` +
+                   `of platform to stop in`,
+                   'station-brake', a);
+      }
+      target = Math.max(STATION_HOME, closing - a * dt);
+    }
 
     // Slowing it down sheds energy as heat; nudging it along costs the motor.
     const before = 0.5 * m * sim.v * sim.v;
@@ -1034,6 +1062,75 @@
       keGround: tr.vGround === null ? null : 0.5 * m * tr.vGround * tr.vGround,
       length: tr.path.total
     };
+  };
+
+  /* ---- how much ride is left in the train -------------------------------
+     ENERGY HEIGHT: z + v^2/2g, the height the train could still reach if it
+     turned everything it has into climb. It is what the autocompleter spends
+     when it decides how high to put the last corner, and it is worked out
+     rather than simulated — between the four things on a track that add or
+     remove energy it is exactly conserved, so walking the pieces and applying
+     those four is the whole calculation.
+
+     Everything here leans the same way, towards an UPPER bound on what the
+     train really has, because a caller spending against it needs a figure it
+     cannot be short of. */
+
+  /* What a stretch of track costs, in metres of energy height, crossed with
+     `head` metres of it in hand:
+
+        dH/ds = -(mu.cos(pitch) + kDrag.v^2/g),   v^2 = 2g.head
+
+     cos(pitch) is taken as 1, which overstates the loss on a slope.
+
+     Losses are charged even when friction is switched OFF. Switching it on is
+     the headline experiment in this sim, and a track that only closes while it
+     is off would break at exactly the moment a student runs that experiment.
+
+     Shared with the route search, which charges it piece by piece to refuse a
+     hill the train could not climb: one loss model, in one place, so the two
+     cannot drift apart. */
+  RC.energyLoss = function (metres, head) {
+    const sim = RC.sim;
+    const mu = Math.max(sim.mu, DEFAULT_MU);
+    return (mu + 2 * sim.kDrag * Math.max(0, head)) * metres;
+  };
+
+  /* The budget at the build head. Null if the track has nothing on it that
+     puts energy in, which is nothing a student can build — but a demo lane is
+     released from a standing start on a slope, and has no station at all. */
+  RC.energyHeightAtHead = function () {
+    const sim = RC.sim;
+    let k = RC.track.start.k;
+    let H = null;
+
+    for (const p of RC.track.pieces) {
+      const def = RC.pieceDef(p.defId);
+      if (!def) return null;
+      const kOut = k + def.dH;
+      const zOut = kOut * RC.LEVEL_M;
+
+      if (H !== null) {
+        // Taken at the piece's middle, since that is where its mean height is.
+        const zMid = (k + kOut) / 2 * RC.LEVEL_M;
+        H -= RC.energyLoss(RC.pieceLength(def), H - zMid);
+      }
+
+      // Floors first and the ceiling last: a brake at the bottom of a drop has
+      // the final say on what leaves it.
+      const floor = v => {
+        const h = zOut + v * v / (2 * G);
+        if (H === null || h > H) H = h;
+      };
+      if (def.station) floor(STATION_DISPATCH);
+      if (p.lift && def.liftable) floor(sim.liftSpeed);
+      if (def.launch) floor(sim.launchSpeed);
+      if (def.brake && H !== null) {
+        H = Math.min(H, zOut + sim.brakeSpeed * sim.brakeSpeed / (2 * G));
+      }
+      k = kOut;
+    }
+    return H;
   };
 
   /* ---- trace ------------------------------------------------------------

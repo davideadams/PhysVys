@@ -2174,13 +2174,235 @@
     return top;
   };
 
+
+  /* ---- an ending worth riding -------------------------------------------
+
+     The search below closes a circuit by the dullest route it can find, and
+     from a track that still has height left in it that means a flat crawl home
+     with the last corner taken at whatever speed happened to be going spare.
+     Given the energy there is a better shape available, and it is the one a
+     real layout uses: CLIMB to a crest, put the last corner up there — wide,
+     level and banked, where the train is slow — then run straight downhill
+     into the station.
+
+     HOW HIGH IS A PHYSICS QUESTION, and the answer is not "as high as it will
+     go". A corner banked at 45 degrees is in BALANCE at v = sqrt(gR): there,
+     gravity and the centripetal force between them push straight into the seat
+     and a rider feels nothing sideways at all. Slower and they hang inwards,
+     faster and they are thrown outwards, and the report flags either once the
+     sideways force passes G_LIMITS.latHigh — it takes the SIZE of that force
+     and not the side of it. So a corner lifted too high is as much a fault as
+     one taken too fast, and "as high as possible" would build one.
+
+     Writing the crest speed as v^2 = 2g(H - h) against the energy height H at
+     the build head, the band |lat| <= LAT_BAND comes out as
+
+        R(1 - LAT_BAND.sqrt2)/2  <=  H - h  <=  R(1 + LAT_BAND.sqrt2)/2
+
+     — between about 2 m and 12 m of energy height held back over a wide
+     corner, with BALANCE at R/2, which is 7 m.
+
+     Balance is what the crest is aimed at, not the edge of the band. It is the
+     better corner, and aiming there also leaves five metres of slack for
+     everything this arithmetic does not know: the budget is an upper bound,
+     the train is not the point mass it is treated as here, a turn's dH is
+     rounded to whole levels, and the filler that has still to be laid has
+     still to be crossed. A track without the height for a balanced corner
+     drops back to the band's floor and gets one a rider leans into, which is
+     a good deal better than taking the last bend on the floor.
+
+     The band's floor is then enforced ALONG THE ROUTE rather than assumed, so
+     a crest the train would arrive at too slowly is refused and a nearer one
+     of the same height taken instead — and if none of them can be reached, the
+     finish falls back to the plain one (see RC.findRouteHome). LAT_BAND itself
+     is a third of what the report complains about. */
+  const LAT_BAND = 0.5;              // g sideways, either way, at the crest
+  const FINISH_TURNS = ['turn-left-wide', 'turn-right-wide'];
+  const MAX_FINISH_PAD = 12;         // tiles of level track after the corner
+  const MAX_DESCENT_TILES = 20;      // the run home is a drop, not a journey
+
+  /* Straights available to a filler, by the grades they join, so the descent
+     below is read off the catalogue instead of being spelled out. Built from
+     ROUTE_IDS rather than PIECES, which is what keeps the station, the brakes
+     and the launch — all of them FLAT to FLAT — out of it. */
+  const ROUTE_STRAIGHT = new Map();
+  for (const id of ROUTE_IDS) {
+    const def = BY_ID.get(id);
+    if (def && def.kind === 'straight') ROUTE_STRAIGHT.set(def.gIn + ':' + def.gOut, def);
+  }
+
+  /* A straight descent that starts and finishes level: down the grade ladder
+     to `grade`, n tiles of it, and back up the ladder to flat. Returns the
+     ids, the levels dropped and the tiles used.
+
+     STEEP is on the ladder but never asked for (see finishDescent). 45 degrees
+     into the station is a design decision with a lot of ride in it, and the
+     finisher closes a circuit tidily rather than signing a student's name to a
+     plunge. */
+  function descentTo(grade, n) {
+    const rungs = RC.GRADES.filter(g => g <= grade);
+    const ids = [];
+    let drop = 0, tiles = 0;
+    const step = (a, b) => {
+      const def = ROUTE_STRAIGHT.get((-a) + ':' + (-b));
+      if (!def) return false;
+      ids.push(def.id);
+      drop -= def.dH;
+      tiles += def.L;
+      return true;
+    };
+    for (let m = 0; m + 1 < rungs.length; m++) if (!step(rungs[m], rungs[m + 1])) return null;
+    for (let q = 0; q < n; q++) if (!step(grade, grade)) return null;
+    for (let m = rungs.length - 1; m > 0; m--) if (!step(rungs[m], rungs[m - 1])) return null;
+    return { ids, drop, tiles };
+  }
+
+  /* The deepest descent that lands inside `levels` of the station. Medium
+     first, since that is the grade every preset uses for anything worth
+     height; gentle only when the drop is too small for medium's minimum of
+     four metres. */
+  function finishDescent(levels) {
+    for (const grade of [MEDIUM, GENTLE]) {
+      let best = null;
+      for (let n = 0; ; n++) {
+        const d = descentTo(grade, n);
+        if (!d || d.drop > levels || d.tiles > MAX_DESCENT_TILES) break;
+        best = d;
+      }
+      if (best) return best;
+    }
+    return null;
+  }
+
+  /* One candidate ending, laid out BACKWARDS from the station: the descent
+     that lands on it, the level run before that, and the banked corner at the
+     top. Returns the node the corner starts from — which is what the search
+     then has to reach — or null if it will not fit in the park.
+
+     Nothing here needs an inverse of RC.exitNode. A tail's displacement is the
+     same wherever it is put, so it is measured once from a canonical node and
+     subtracted from the station; the result is then walked forwards again to
+     prove it lands exactly where it was meant to. */
+  function finishTail(turnId, descent, pad) {
+    const turnDef = BY_ID.get(turnId);
+    const start = RC.track.start;
+    if (!turnDef || start.g !== FLAT) return null;
+
+    const steps = [{ id: turnId, bank: true }]
+      .concat(new Array(pad).fill(0).map(() => ({ id: 'flat' })))
+      .concat(descent.ids.map(id => ({ id })));
+
+    // Everything after the corner is straight, so the corner is the only thing
+    // that turns: it has to be entered on whichever heading leaves it pointing
+    // the way the station does.
+    const dir = (start.dir - turnDef.turn + 4) % 4;
+
+    let probe = { i: 0, j: 0, dir, k: 0, g: FLAT };
+    for (const s of steps) probe = RC.exitNode(BY_ID.get(s.id), probe);
+    const from = {
+      i: start.i - probe.i,
+      j: start.j - probe.j,
+      dir,
+      k: start.k - probe.k,
+      g: FLAT
+    };
+    if (from.k < 0 || from.k > MAX_H || !RC.inBounds(from.i, from.j)) return null;
+
+    /* Walk it forwards to prove the arithmetic, and test it against what is
+       already built while doing so. A tail that runs through the lift hill is
+       no use as a goal: the search would spend its whole budget getting to a
+       corner that RC.place then refuses, and the finish would fall back to the
+       dull one even though a tail three tiles further round was perfectly
+       clear. What it CANNOT test is the filler, which does not exist yet. */
+    const occ = occupancy();
+    const skipFrom = RC.track.pieces.length;
+    let node = from;
+    for (const s of steps) {
+      const def = BY_ID.get(s.id);
+      for (const c of interiorCells(def, node)) {
+        if (!RC.inBounds(c.i, c.j)) return null;
+      }
+      if (collidesWith(def, node, occ, skipFrom)) return null;
+      node = RC.exitNode(def, node);
+      if (node.k < 0 || node.k > MAX_H || !RC.inBounds(node.i, node.j)) return null;
+    }
+    if (!sameNode(node, start)) return null;
+
+    return { from, steps, drop: descent.drop };
+  }
+
+  /* Every ending the track has the energy and the room for. The search treats
+     them as alternative goals and takes whichever it can reach most cheaply,
+     so a left corner and a right one, at every distance back from the station,
+     are all offered at once rather than tried a search at a time.
+
+     A tail is tested against the track that already exists, but nothing can
+     test it against the filler until the filler is laid — so the two can still
+     meet, and RC.place is what finds out. completeTrack falls back to a plain
+     finish when it does. */
+  function shapedFinishes() {
+    if (!RC.energyHeightAtHead) return null;
+    const H = RC.energyHeightAtHead();
+    if (H == null) return null;
+
+    const R = RC.turnRadius(BY_ID.get(FINISH_TURNS[0])) * RC.TILE_M;
+    const holdMin = R * (1 - LAT_BAND * Math.SQRT2) / 2;   // the band's floor
+    const holdBal = R / 2;                                 // nothing sideways at all
+    const start = RC.track.start, head = RC.track.head;
+
+    /* The filler has still to be crossed, and it is charged before the crest is
+       chosen rather than after. It covers at least the distance home and in
+       practice wanders, so it goes in at half as much again. A rough figure is
+       enough: the crest is aimed at BALANCE, five metres of energy height above
+       the floor the search will actually enforce, so this only has to be right
+       to within that. */
+    const run = 1.5 * (Math.abs(head.i - start.i) + Math.abs(head.j - start.j)) * RC.TILE_M;
+    const budget = H - RC.energyLoss(run, H - head.k * RC.LEVEL_M);
+
+    const levelsFor = hold => Math.floor((budget - hold) / RC.LEVEL_M) - start.k;
+    // Balance if the track can afford it; otherwise as high as the band allows,
+    // which is a corner a rider hangs into rather than one they are thrown out
+    // of, and still better than taking the last bend on the floor.
+    let levels = levelsFor(holdBal);
+    if (levels < 2) levels = levelsFor(holdMin);
+    if (levels < 2) return null;              // nothing to lift the corner with
+    levels = Math.min(levels, MAX_H - start.k);
+
+    const descent = finishDescent(levels);
+    if (!descent) return null;
+
+    const out = [];
+    for (const turnId of FINISH_TURNS) {
+      for (let pad = 0; pad <= MAX_FINISH_PAD; pad++) {
+        const tail = finishTail(turnId, descent, pad);
+        if (tail) out.push(tail);
+      }
+    }
+    return out.length ? { tails: out, H, holdMin } : null;
+  }
+
   const nodeKey = n => n.i + ',' + n.j + ',' + n.dir + ',' + n.k + ',' + n.g;
 
+  /* Search for a way home. `limits.shaped` asks for the climb-corner-descent
+     ending above; without it, or when the track has not the energy or the room
+     for one, the goal is simply the start node and the result is the old dull
+     filler.
+
+     Either way the search is the same A*, because a shaped ending is nothing
+     more than a DIFFERENT SET OF GOALS: the nodes each candidate tail begins
+     at. The heuristic takes the nearest of them, which is still a lower bound
+     on reaching any one, so it stays admissible. */
   RC.findRouteHome = function (limits) {
     const target = RC.track.start;
     const from = RC.track.head;
     if (!target || !from) return { ok: false, why: 'There is no track to finish' };
     if (sameNode(from, target)) return { ok: false, why: 'The circuit is already complete' };
+
+    const shaped = (limits && limits.shaped) ? shapedFinishes() : null;
+    const goals = new Map();
+    if (shaped) for (const t of shaped.tails) goals.set(nodeKey(t.from), t);
+    else goals.set(nodeKey(target), null);
+    const goalNodes = shaped ? shaped.tails.map(t => t.from) : [target];
 
     const maxExpand = (limits && limits.maxExpand) || 40000;
     const maxPieces = (limits && limits.maxPieces) || 150;
@@ -2188,21 +2410,45 @@
     const skipPi = RC.track.pieces.length - 1;
     const defs = ROUTE_IDS.map(id => BY_ID.get(id)).filter(Boolean);
 
-    const heuristic = n => Math.max(
-      (Math.abs(n.i - target.i) + Math.abs(n.j - target.j)) / MAX_ADVANCE,
-      Math.abs(n.k - target.k) / MAX_CLIMB()
-    );
+    /* Energy, charged along the route — for a SHAPED finish only.
+
+       The plain filler is level and dull, and it has always been allowed to
+       close a circuit the train cannot actually get round; refusing that now
+       would stop a bare station from being closed at all, which is the first
+       thing the page does. A climb is a different thing. A hill the train
+       cannot get over is not a finish, it is a trap, so every candidate piece
+       is charged for what crossing it costs and rejected if it would leave the
+       train slower than the chain hauls it.
+
+       The spend is carried on whichever route reached a node most cheaply
+       rather than on the least wasteful one. They are near enough the same
+       thing — the loss goes with length, and so does the piece count the
+       search is minimising. */
+    const LEN = new Map(defs.map(d => [d.id, RC.pieceLength(d)]));
+    const minHead = shaped ? RC.sim.liftSpeed * RC.sim.liftSpeed / (2 * RC.G) : 0;
+
+    const heuristic = n => {
+      let low = Infinity;
+      for (const t of goalNodes) {
+        const h = Math.max(
+          (Math.abs(n.i - t.i) + Math.abs(n.j - t.j)) / MAX_ADVANCE,
+          Math.abs(n.k - t.k) / MAX_CLIMB()
+        );
+        if (h < low) low = h;
+      }
+      return low;
+    };
 
     const open = new Heap();
     const best = new Map();
     const startKey = nodeKey(from);
-    best.set(startKey, { g: 0, node: from, parent: null, defId: null });
+    best.set(startKey, { g: 0, spent: 0, node: from, parent: null, defId: null });
     // Weighted slightly, trading a possibly longer route for a much faster
     // search. The route only has to be legal and dull, not optimal.
     open.push({ f: heuristic(from) * 1.2, key: startKey });
 
     let expanded = 0;
-    let goal = null;
+    let goal = null, goalKey = null;
 
     while (open.a.length && expanded < maxExpand) {
       const cur = open.pop();
@@ -2214,7 +2460,17 @@
       expanded++;
 
       const node = entry.node;
-      if (sameNode(node, target)) { goal = entry; break; }
+      if (goals.has(cur.key)) {
+        // A crest reached too slowly is not a crest. Refusing it here rather
+        // than up front lets a nearer corner of the same height still be found.
+        const tail = goals.get(cur.key);
+        if (!tail || shaped.H - entry.spent >= node.k * RC.LEVEL_M + shaped.holdMin) {
+          goal = entry;
+          goalKey = cur.key;
+          break;
+        }
+        continue;
+      }
       if (entry.g >= maxPieces) continue;
 
       for (const def of defs) {
@@ -2237,11 +2493,18 @@
         }
         if (bad) continue;
 
+        let spent = entry.spent;
+        if (shaped) {
+          const zMid = (node.k + exit.k) / 2 * RC.LEVEL_M;
+          spent += RC.energyLoss(LEN.get(def.id), shaped.H - spent - zMid);
+          if (shaped.H - spent < exit.k * RC.LEVEL_M + minHead) continue;
+        }
+
         const g = entry.g + routeCost(def);
         const key = nodeKey(exit);
         const prev = best.get(key);
         if (prev && prev.g <= g) continue;
-        const next = { g, node: exit, parent: entry, defId: def.id };
+        const next = { g, spent, node: exit, parent: entry, defId: def.id };
         best.set(key, next);
         open.push({ f: g + heuristic(exit) * 1.2, key });
       }
@@ -2249,43 +2512,95 @@
 
     if (!goal) {
       return {
+        // Said of the goals it was actually given, so a shaped attempt that
+        // cannot be reached does not claim the station is unreachable — the
+        // plain attempt that follows it may well get home.
         ok: false,
-        why: expanded >= maxExpand
-          ? 'Could not find a way back to the station'
-          : 'There is no way back to the station from here'
+        shaped: !!shaped,
+        why: shaped
+          ? 'Could not find room for a hill before the last corner'
+          : (expanded >= maxExpand
+            ? 'Could not find a way back to the station'
+            : 'There is no way back to the station from here')
       };
     }
 
-    const ids = [];
-    for (let e = goal; e && e.defId; e = e.parent) ids.unshift(e.defId);
-    return { ok: true, ids, expanded };
+    const steps = [];
+    for (let e = goal; e && e.defId; e = e.parent) steps.unshift({ id: e.defId });
+    const tail = goals.get(goalKey);
+    if (tail) for (const s of tail.steps) steps.push(s);
+
+    return {
+      ok: true,
+      shaped: !!tail,
+      steps,
+      ids: steps.map(s => s.id),
+      crest: tail ? tail.drop * RC.LEVEL_M : 0,
+      expanded
+    };
   };
 
   /* Find a route and actually build it. Everything is placed through the
      normal RC.place, so the finished track obeys exactly the same rules as
      hand-built track; if any piece is refused the whole lot is rolled back
-     rather than leaving a half-finished stub. */
-  RC.completeTrack = function (limits) {
-    const route = RC.findRouteHome(limits);
-    if (!route.ok) return route;
+     rather than leaving a half-finished stub.
 
-    // One undoable step however many pieces it lays: a student who does not
-    // like the filler wants it gone in one press, not thirty.
+     The shaped ending is tried first and the plain one is the fallback, which
+     is what keeps "Finish track" a button that always works. It gets a second
+     chance rather than one attempt because the shaped route is only checked
+     for collisions as it is LAID: the search knows where the tail goes but not
+     where the filler in front of it will end up, so the two can meet. Rare,
+     and cheaper to discover here than to rule out in the search. */
+  RC.completeTrack = function (limits) {
+    const plainOnly = limits && limits.shaped === false;
+
+    // One undoable step however many pieces it lays, and however many attempts
+    // it took: a student who does not like the filler wants it gone in one
+    // press, not thirty.
     return RC.edit(() => {
-      const before = RC.track.pieces.length;
-      for (const id of route.ids) {
-        if (!RC.place(id)) {
-          while (RC.track.pieces.length > before) RC.removeLast();
-          return { ok: false, why: 'The route it found ran into the track on the way' };
-        }
+      let last = null;
+      const budget = (limits && limits.maxExpand) || 40000;
+      for (const shaped of plainOnly ? [false] : [true, false]) {
+        /* The shaped attempt is speculative and the plain one is the guarantee,
+           so the speculative one gets half the budget and the guarantee keeps
+           all of it. Worst case is one and a half searches rather than two, and
+           a shaped finish that cannot be found never costs the plain one its
+           chance. */
+        const route = RC.findRouteHome(Object.assign({}, limits, {
+          shaped,
+          maxExpand: shaped ? Math.ceil(budget / 2) : budget
+        }));
+        last = route.ok ? buildRoute(route) : route;
+        if (last.ok) return last;
+        // A shaped attempt that never got a goal set has already run the plain
+        // search; running it again would only take the same time twice.
+        if (!route.shaped) break;
       }
-      if (!sameNode(RC.track.head, RC.track.start)) {
-        while (RC.track.pieces.length > before) RC.removeLast();
-        return { ok: false, why: 'The route it found did not close the circuit' };
-      }
-      return { ok: true, added: route.ids.length };
+      return last;
     });
   };
+
+  function buildRoute(route) {
+    const before = RC.track.pieces.length;
+    const fail = why => {
+      while (RC.track.pieces.length > before) RC.removeLast();
+      return { ok: false, why, shaped: route.shaped };
+    };
+    for (const step of route.steps) {
+      if (!RC.place(step.id, step)) {
+        return fail('The route it found ran into the track on the way');
+      }
+    }
+    if (!sameNode(RC.track.head, RC.track.start)) {
+      return fail('The route it found did not close the circuit');
+    }
+    return {
+      ok: true,
+      added: route.steps.length,
+      shaped: route.shaped,
+      crest: route.crest
+    };
+  }
 
   /* ---- setup ----------------------------------------------------------
      Start every park with a short station, so there is always something to

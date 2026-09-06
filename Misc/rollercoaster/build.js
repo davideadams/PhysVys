@@ -697,8 +697,13 @@
         const res = RC.completeTrack();
         const ms = performance.now() - t0;
         finish.textContent = was;
+        // Worth saying when it managed the good ending rather than the dull
+        // one, since the height is the whole difference between them.
+        const how = res.shaped
+          ? `, last corner ${res.crest.toFixed(1)} m up`
+          : '';
         setStatus(res.ok
-          ? `Joined up with ${res.added} pieces (${ms.toFixed(0)} ms)`
+          ? `Joined up with ${res.added} pieces${how} (${ms.toFixed(0)} ms)`
           : res.why);
         refresh();
       });

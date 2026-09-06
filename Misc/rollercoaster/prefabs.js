@@ -10,7 +10,21 @@
    hand-solving the arithmetic, which matters more than it used to: a piece's
    length now follows from its grade change, so hand-closed geometry has to be
    re-solved every time the grade ladder moves, and a preset that quietly stops
-   closing turns itself into a shuttle and throws the train off the end.
+   closing turns itself into a shuttle and throws the train off the end. Every
+   preset here is closed that way now; none is hand-solved.
+
+   LEAVE ROOM BEHIND THE STATION. The finisher's good ending is a raised banked
+   corner and a straight run down into the platform, and all of that run lies
+   behind `start`, along the way it faces. So a preset needs
+
+       the descent's tiles + 2.5 for the corner
+
+   of clear park on that side — a dozen tiles for a ride with real height in it
+   — plus about 2.5 tiles of lateral margin on one side or the other for the
+   corner itself. Nothing else in the layout can stand in for it: a station
+   pushed up against the wall it points away from can only ever be crawled into
+   flat, however much room the rest of the park has. `looper` was exactly that
+   and had to be moved.
 
    A shuttle preset sets `shuttle: true`: it is an OPEN out-and-back (launch,
    loop, spike, roll back through the loop to the station), not a circuit. */
@@ -70,12 +84,24 @@
          Everything worth height is on MEDIUM (18.4 deg, 2 m a tile). Gentle is
          half that now and would take twice the park to climb the same hill.
 
-         Closed BY HAND, unlike the others, because the brake has to finish
-         within a turn of the station: braking to 3 m/s and then asking the
-         train to cross whatever length of filler the solver happens to choose
-         is asking it to valley short of home. The station is three tiles, so
-         the two legs across the park differ by three and the two along it
-         match. */
+         It used to be closed BY HAND, and it used to need a brake run to do
+         it. Both are gone. The brake went first: the station now solves for
+         whatever deceleration brings the train to rest exactly at its berth
+         instead of pulling a fixed 5 m/s^2, so a fast arrival is the station's
+         problem rather than the layout's, and it will say in the report if it
+         is having to pull hard. Once the brake was gone the hand-closing had
+         nothing left to protect — its whole reason was that braking to 3 m/s
+         and then crossing whatever filler the solver chose was asking the
+         train to valley short of home.
+
+         So the ride now stops after its airtime hill and the solver brings it
+         home, which is the same deal every other preset gets: nothing here has
+         to be re-solved by hand when a piece changes shape. Whether the last
+         corner comes back raised or flat is not decided here either — the
+         finisher works out what the train has left at that point and lifts the
+         corner if there is anything to lift it with. On this layout there very
+         nearly is not, because spending the lot is the whole idea. */
+      finish: true,
       build: [].concat(
         // Side 1 (+i), 12 tiles: lift to 20 m.
         [{ id: 'flat-to-gentle-up', lift: true }],
@@ -102,18 +128,18 @@
         rep(3, 'medium-up'),
         [{ id: 'medium-to-gentle-up' }, { id: 'gentle-up-to-flat' }],
         [{ id: 'turn-right-wide', bank: true }],
-        /* Side 4 (-j), 14 tiles: down to the ground, over the airtime hill, and
-           home. One brake piece, not two — two took the train down to a walk
-           with a whole banked turn still to travel, and with friction on it
-           died a metre short of the station. */
+        /* Side 4 (-j), 11 tiles: down to the ground and over the airtime hill,
+           and that is where the hand-built part stops. The hill stays here
+           because it is the point of this side of the park and it has to be
+           low and late for the reason given above — the solver would never
+           build one, since what it builds is a slow corner. The run from the
+           far side of the hill back to the platform is filler, and filler can
+           be found. */
         [{ id: 'flat-to-gentle-down' }, { id: 'gentle-to-medium-down' }],
         rep(3, 'medium-down'),
         [{ id: 'medium-to-gentle-down' }, { id: 'gentle-down-to-flat' }],
         [{ id: 'flat-to-gentle-up' }, { id: 'gentle-up-to-flat' }],
-        [{ id: 'flat-to-gentle-down' }, { id: 'gentle-down-to-flat' }],
-        rep(2, 'flat'),
-        [{ id: 'brake' }],
-        [{ id: 'turn-right-wide' }]
+        [{ id: 'flat-to-gentle-down' }, { id: 'gentle-down-to-flat' }]
       )
     },
 
@@ -149,13 +175,21 @@
       name: 'Looper',
       blurb: 'A lift and a long drop feed a vertical loop, then the track curves back to the station.',
       finish: true,
-      /* Its own station, in a corner of the park, because this one needs the
-         room. The loop is 13.5 m tall and needs about 17.3 m/s at the bottom to
-         hold the train through the top, which is an 18 m drop before losses —
-         so the lift and the drop alone are 22 tiles before anything else is
-         laid. From the middle of the park that runs out of room; from a corner
-         it does not. */
-      start: { i: 2, j: 6, dir: 0, k: 0, g: 0 },
+      /* Its own station, well down one side of the park, because this one needs
+         the room. The loop is 13.5 m tall and needs about 17.3 m/s at the
+         bottom to hold the train through the top, which is an 18 m drop before
+         losses — so the lift and the drop alone are 22 tiles before anything
+         else is laid. From the middle of the park that runs out of room.
+
+         It used to sit at (2, 6), two tiles from the wall it points away from,
+         and that was two tiles too few. A finish has to come at the station
+         from BEHIND, along the way the platform faces, and the run down to it
+         needs the length of the descent plus the corner that turns onto it —
+         a dozen tiles here. With two, there was nowhere to put any of it and
+         the solver could only ever crawl in flat. Fourteen leaves room behind
+         and still leaves twenty-six ahead, which is more than the lift and the
+         drop need. */
+      start: { i: 14, j: 4, dir: 0, k: 0, g: 0 },
       build: [].concat(
         rep(3, 'station'),
         // Side 1 (+i): lift to 18 m, on medium.
@@ -409,17 +443,27 @@
         return { ok: false, why: `${prefab.name}: piece ${n + 1} (${step.id}) refused — ${why}` };
       }
     }
+    let finish = null;
     if (prefab.finish) {
       // A generous budget: a preset's return leg can be long, and this only
       // runs once when a preset is chosen, not interactively.
-      const res = RC.completeTrack({ maxExpand: 300000 });
-      if (!res.ok) return { ok: false, why: `${prefab.name}: could not close the circuit — ${res.why}` };
+      finish = RC.completeTrack({ maxExpand: 300000 });
+      if (!finish.ok) return { ok: false, why: `${prefab.name}: could not close the circuit — ${finish.why}` };
     }
     // Choosing a preset is opening a track, not editing the old one — so there
     // is nothing sensible for undo to go back to. (On the failure paths above
     // the history is left alone deliberately: the track is in a half-built
     // state and being able to step out of it is worth more.)
     RC.clearHistory && RC.clearHistory();
-    return { ok: true, closed: RC.sameNode(RC.track.head, RC.track.start), shuttle: !!prefab.shuttle };
+    return {
+      ok: true,
+      closed: RC.sameNode(RC.track.head, RC.track.start),
+      shuttle: !!prefab.shuttle,
+      // Whether the solver managed the raised last corner or only the flat
+      // crawl. Passed on so a test can hold a preset to it — a layout that
+      // stops leaving room for one should say so, not just quietly get duller.
+      shaped: !!(finish && finish.shaped),
+      crest: finish ? finish.crest : 0
+    };
   };
 })();

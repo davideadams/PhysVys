@@ -1231,6 +1231,150 @@
     }
   });
 
+  /* ---- the shaped ending ------------------------------------------------
+     The finisher climbs to a crest, puts the last corner up there banked, and
+     runs straight downhill into the station — but only when the train has the
+     energy to get over it. Both halves matter: the shape, and the refusal. */
+
+  /* A lift to 12 m on medium and the whole of it given straight back, which
+     leaves the head at ground level with a real budget still in hand. Eight
+     tiles up and eight down, so it fits in the park from the middle of it. */
+  function buildTallDrop() {
+    RC.resetTrack();
+    const up = ['flat-to-gentle-up', 'gentle-to-medium-up', 'medium-up', 'medium-up',
+                'medium-up', 'medium-up', 'medium-to-gentle-up', 'gentle-up-to-flat'];
+    const down = ['flat-to-gentle-down', 'gentle-to-medium-down', 'medium-down',
+                  'medium-down', 'medium-down', 'medium-down', 'medium-to-gentle-down',
+                  'gentle-down-to-flat'];
+    for (const id of up) if (!RC.place(id, { lift: true })) return `${id} refused`;
+    if (!RC.place('turn-right-wide')) return 'turn refused';
+    for (const id of down) if (!RC.place(id)) return `${id} refused`;
+    RC.clearHistory();
+    return null;
+  }
+
+  /* Index of the last corner on the track, which on a shaped finish is the one
+     at the crest. */
+  function lastTurnIndex() {
+    const pieces = RC.track.pieces;
+    for (let n = pieces.length - 1; n >= 0; n--) {
+      if (RC.pieceDef(pieces[n].defId).kind === 'turn') return n;
+    }
+    return -1;
+  }
+
+  check('the chain sets the budget, and nothing on the track sets it higher', () => {
+    RC.resetTrack();
+    for (const id of ['flat-to-gentle-up', 'gentle-up', 'gentle-up', 'gentle-up-to-flat']) {
+      if (!RC.place(id, { lift: true })) return `${id} refused`;
+    }
+    const top = RC.track.head.k * RC.LEVEL_M;
+    const H = RC.energyHeightAtHead();
+    // At the top of a lift the train is doing chain speed, no more and no less
+    // — so the budget is the height plus exactly that, and losses only cut it.
+    const cap = top + RC.sim.liftSpeed * RC.sim.liftSpeed / (2 * RC.G);
+    if (H > cap + 1e-9) return `${H.toFixed(3)} m of budget from a ${top} m lift, over the ${cap.toFixed(3)} the chain can give`;
+    if (H <= top) return `${H.toFixed(3)} m of budget at the ${top} m top — the train has stopped`;
+  });
+
+  check('a brake takes the budget away again', () => {
+    RC.resetTrack();
+    const seq = ['flat-to-gentle-up', 'gentle-up', 'gentle-up', 'gentle-up-to-flat',
+                 'flat-to-gentle-down', 'gentle-down', 'gentle-down', 'gentle-down-to-flat',
+                 'brake'];
+    for (const id of seq) if (!RC.place(id, { lift: true })) return `${id} refused`;
+    const H = RC.energyHeightAtHead();
+    const cap = RC.sim.brakeSpeed * RC.sim.brakeSpeed / (2 * RC.G);
+    if (H > cap + 1e-9) {
+      return `${H.toFixed(3)} m of budget after a brake run, over the ${cap.toFixed(3)} it leaves`;
+    }
+  });
+
+  check('a bare station is finished flat, because it has nothing to climb with', () => {
+    RC.resetTrack();
+    const res = RC.completeTrack();
+    if (!res.ok) return res.why;
+    if (res.shaped) return 'it lifted a corner on a track with no energy in it';
+    if (RC.circuitStatus().kind !== 'closed') return 'circuit did not close';
+  });
+
+  check('a track with height left in it gets an elevated banked corner', () => {
+    const err = buildTallDrop();
+    if (err) return err;
+    const res = RC.completeTrack();
+    if (!res.ok) return res.why;
+    if (!res.shaped) return 'it closed the circuit flat, with 12 m of lift unspent';
+    if (RC.circuitStatus().kind !== 'closed') return 'circuit did not close';
+
+    const ti = lastTurnIndex();
+    if (ti < 0) return 'no corner at all on the finished track';
+    const piece = RC.track.pieces[ti];
+    const def = RC.pieceDef(piece.defId);
+    if (!piece.bank) return `the last corner (${piece.defId}) is not banked`;
+    if (def.R !== RC.pieceDef('turn-right-wide').R) {
+      return `the last corner is ${piece.defId}, not a wide one`;
+    }
+    if (piece.node.k <= RC.track.start.k) {
+      return `the last corner sits at level ${piece.node.k}, no higher than the station`;
+    }
+    if (piece.node.g !== 0) return 'the last corner is on a slope, not level';
+    // And everything after it runs straight downhill to the station.
+    for (let n = ti + 1; n < RC.track.pieces.length; n++) {
+      const d = RC.pieceDef(RC.track.pieces[n].defId);
+      if (d.kind !== 'straight') return `a ${d.kind} between the last corner and the station`;
+      if (d.dH > 0) return `${d.id} climbs after the last corner`;
+    }
+  });
+
+  check('the whole finish comes off in one press of undo', () => {
+    const err = buildTallDrop();
+    if (err) return err;
+    const before = RC.track.pieces.length;
+    if (!RC.completeTrack().ok) return 'could not finish';
+    if (!RC.undo()) return 'undo refused';
+    if (RC.track.pieces.length !== before) {
+      return `${RC.track.pieces.length - before} pieces left behind after one undo`;
+    }
+  });
+
+  check('the train gets over the hill the finisher built, and round the corner', () => {
+    const err = buildTallDrop();
+    if (err) return err;
+    const res = RC.completeTrack();
+    if (!res.ok) return res.why;
+    if (!res.shaped) return 'nothing was shaped, so there is nothing to ride';
+
+    const ti = lastTurnIndex();
+    const path = RC.trackPath();
+    let lo = Infinity, hi = -Infinity;
+    for (const p of path.pts) {
+      if (p.pi === ti) { lo = Math.min(lo, p.s); hi = Math.max(hi, p.s); }
+    }
+
+    // With friction ON, which is the case the crest was sized for.
+    const wasFriction = RC.sim.friction;
+    RC.sim.friction = true;
+    RC.resetSim(RC.stationEndS() + 1);
+    let worst = 0, reached = false;
+    RC.sim.state = 'running';
+    for (let n = 0; n < 180 * 60 && RC.sim.state === 'running'; n++) {
+      RC.stepSim(1 / 60);
+      if (RC.sim.s >= lo && RC.sim.s <= hi) {
+        reached = true;
+        worst = Math.max(worst, Math.abs(RC.sim.g.lat));
+      }
+    }
+    RC.sim.friction = wasFriction;
+
+    if (!reached) {
+      return `the train stopped at ${RC.sim.s.toFixed(1)} m (${RC.sim.state}), ` +
+             `short of the last corner at ${lo.toFixed(1)} m`;
+    }
+    if (worst > RC.G_LIMITS.latHigh) {
+      return `${worst.toFixed(2)} g sideways on the last corner, over the ${RC.G_LIMITS.latHigh} the report allows`;
+    }
+  });
+
   /* ---- physics ---------------------------------------------------------
      The invariant the whole sim exists to teach: KE + PE + thermal must
      equal the energy it started with plus whatever the motor put in. If
@@ -3540,6 +3684,90 @@
     }
   });
 
+
+  /* ---- the station always catches the train -----------------------------
+     However fast it arrives, the platform solves for the deceleration that
+     brings it to rest exactly at its berth. It used to pull a fixed 5 m/s^2,
+     which is plenty for a walking pace and nothing like enough off a drop. */
+
+  check('the station stops a fast arrival at the berth, not at the threshold', () => {
+    const res = RC.loadPrefab('first-drop');
+    if (!res.ok) return res.why;
+    RC.sim.friction = false;          // the fastest this ride can come home
+    RC.resetSim();
+    const berth = RC.sim.startS;
+    if (!(berth > 2)) return 'this track has no station length to travel along';
+    runFor(240);
+    if (RC.sim.state !== 'finished') {
+      return `state "${RC.sim.state}" after 240 s (note "${RC.sim.note}")`;
+    }
+    if (Math.abs(RC.sim.s - berth) > 1e-6) {
+      return `ended at ${RC.sim.s.toFixed(3)} m, berth is ${berth.toFixed(3)} m`;
+    }
+    if (!(RC.sim.maxStationBrake > 0)) {
+      return 'the platform recorded no braking at all on a train off a 20 m drop';
+    }
+  });
+
+  check('the station brakes as hard as the arrival needs, not a fixed amount', () => {
+    const hard = (friction) => {
+      const res = RC.loadPrefab('first-drop');
+      if (!res.ok) return null;
+      RC.sim.friction = friction;
+      RC.resetSim();
+      runFor(240);
+      return RC.sim.state === 'finished' ? RC.sim.maxStationBrake : null;
+    };
+    // Friction on costs the train height all the way round, so it arrives
+    // slower and the platform has less to do. A fixed rate could not tell the
+    // difference; v^2 = 2.a.d has to.
+    const fast = hard(false);
+    if (fast === null) return 'the ride did not get home with friction off';
+    const slow = hard(true);
+    if (slow === null) return 'the ride did not get home with friction on';
+    RC.sim.friction = false;
+    if (!(fast > slow)) {
+      return `braked at ${fast.toFixed(2)} m/s^2 off a fast arrival and ` +
+             `${slow.toFixed(2)} off a slow one — it is not solving for the arrival`;
+    }
+  });
+
+  /* ---- the presets ------------------------------------------------------ */
+
+  check('a preset station has the room behind it a finish needs', () => {
+    /* The raised corner and the run down from it lie ENTIRELY behind the
+       station, along the way it faces. The shallowest ending there is drops a
+       metre over two tiles and turns onto them through a wide corner, so
+       nothing at all fits in less than that. A preset with less room than this
+       can only ever be crawled into flat however much park it has elsewhere,
+       which is what `looper` used to do from two tiles off the wall. */
+    const wide = RC.pieceDef('turn-right-wide');
+    const need = 2 + Math.ceil(wide.R);
+    for (const key of Object.keys(RC.PREFABS)) {
+      const prefab = RC.PREFABS[key];
+      if (!prefab.finish) continue;
+      RC.loadPrefab(key);
+      const st = RC.track.start;
+      // Tiles between the station and the park edge it backs onto.
+      const behind = [st.i, st.j, RC.GRID - 1 - st.i, RC.GRID - 1 - st.j][st.dir];
+      if (behind < need) {
+        return `${key}'s station has ${behind} tiles behind it, and a finish needs ${need}`;
+      }
+    }
+  });
+
+  check('the presets with height to spare come back with a raised corner', () => {
+    // Both of these arrive at the finisher with real height unspent, so both
+    // should get the good ending rather than the flat crawl. `first-drop` is
+    // deliberately not in the list: spending the lot is the whole idea of it,
+    // and whether anything is left over is genuinely close.
+    for (const key of ['gentle-hills', 'looper']) {
+      const res = RC.loadPrefab(key);
+      if (!res.ok) return `${key}: ${res.why}`;
+      if (!res.shaped) return `${key} closed flat, with no raised corner`;
+      if (!(res.crest > 0)) return `${key} reports a corner ${res.crest} m above the station`;
+    }
+  });
   section('Train and losses');
   check('the release point decides where the train starts', () => {
     RC.loadPrefab('first-drop');
