@@ -1096,41 +1096,82 @@
     return (mu + 2 * sim.kDrag * Math.max(0, head)) * metres;
   };
 
-  /* The budget at the build head. Null if the track has nothing on it that
-     puts energy in, which is nothing a student can build — but a demo lane is
-     released from a standing start on a slope, and has no station at all. */
-  RC.energyHeightAtHead = function () {
+  /* The budget PIECE BY PIECE: what the train has entering each piece and what
+     it has leaving. Null entries before the first thing that puts energy in,
+     which is nothing a student can build — but a demo lane is released from a
+     standing start on a slope and has no station at all.
+
+     `lossless` leaves the resistances out, which turns the figures from an
+     estimate of this ride into an upper bound on any ride: nothing the student
+     does to the friction controls can make the train faster than this. That is
+     what the shape readout wants, since it is asking whether a corner COULD
+     ever be overrun.
+
+     `laps` runs the walk more than once, seeding from where the last one ended.
+     A closed circuit carries energy round past its own start, so a single pass
+     understates every piece before the first climb — and the readout that asks
+     "how fast could the train be here" needs the lap's worth, not the dispatch
+     it left on. Two is enough: the station is a hard reset, so nothing
+     propagates past it a second time.
+
+     THE STATION SETS the budget rather than flooring it, because a station
+     stops the train and dispatches it at walking pace whatever it arrived at.
+     The chain and the launch only ever floor — neither slows anything down —
+     and a brake only ever caps. */
+  RC.energyProfile = function (opts) {
+    const charge = !(opts && opts.lossless);
+    const laps = Math.max(1, (opts && opts.laps) || 1);
     const sim = RC.sim;
-    let k = RC.track.start.k;
+    const pieces = RC.track.pieces;
+    const out = [];
     let H = null;
 
-    for (const p of RC.track.pieces) {
-      const def = RC.pieceDef(p.defId);
-      if (!def) return null;
-      const kOut = k + def.dH;
-      const zOut = kOut * RC.LEVEL_M;
+    for (let lap = 0; lap < laps; lap++) {
+      let k = RC.track.start.k;
+      for (let n = 0; n < pieces.length; n++) {
+        const p = pieces[n];
+        const def = RC.pieceDef(p.defId);
+        if (!def) return null;
+        const kOut = k + def.dH;
+        const zOut = kOut * RC.LEVEL_M;
+        const hIn = H;
 
-      if (H !== null) {
-        // Taken at the piece's middle, since that is where its mean height is.
-        const zMid = (k + kOut) / 2 * RC.LEVEL_M;
-        H -= RC.energyLoss(RC.pieceLength(def), H - zMid);
-      }
+        if (H !== null && charge) {
+          // Taken at the piece's middle, since that is where its mean height is.
+          const zMid = (k + kOut) / 2 * RC.LEVEL_M;
+          H -= RC.energyLoss(RC.pieceLength(def), H - zMid);
+        }
 
-      // Floors first and the ceiling last: a brake at the bottom of a drop has
-      // the final say on what leaves it.
-      const floor = v => {
-        const h = zOut + v * v / (2 * G);
-        if (H === null || h > H) H = h;
-      };
-      if (def.station) floor(STATION_DISPATCH);
-      if (p.lift && def.liftable) floor(sim.liftSpeed);
-      if (def.launch) floor(sim.launchSpeed);
-      if (def.brake && H !== null) {
-        H = Math.min(H, zOut + sim.brakeSpeed * sim.brakeSpeed / (2 * G));
+        const onLift = !!(p.lift && def.liftable);
+        const floor = v => {
+          const h = zOut + v * v / (2 * G);
+          if (H === null || h > H) H = h;
+        };
+        if (def.station) H = zOut + STATION_DISPATCH * STATION_DISPATCH / (2 * G);
+        if (onLift) floor(sim.liftSpeed);
+        if (def.launch) floor(sim.launchSpeed);
+        if (def.brake && H !== null) {
+          H = Math.min(H, zOut + sim.brakeSpeed * sim.brakeSpeed / (2 * G));
+        }
+
+        /* `hold` is the speed a drive system pins the train to along the whole
+           of the piece, which is the one case where neither end says what the
+           middle is doing: a chain lift climbs, so its exit budget is metres
+           above its entry, and reading either would have the train flying up
+           the hill it is being dragged up at four metres a second. */
+        out[n] = { hIn, hOut: H, hold: onLift ? sim.liftSpeed : 0 };
+        k = kOut;
       }
-      k = kOut;
     }
-    return H;
+    return out;
+  };
+
+  /* The budget at the build head — what the autocompleter spends. This ride,
+     with its losses, and one pass: the head is the end of the track as built,
+     so there is nothing beyond it to come round. */
+  RC.energyHeightAtHead = function () {
+    const prof = RC.energyProfile();
+    return prof && prof.length ? prof[prof.length - 1].hOut : null;
   };
 
   /* ---- trace ------------------------------------------------------------

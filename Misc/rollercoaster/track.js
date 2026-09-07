@@ -294,6 +294,165 @@
   }
   RC.bankProfile = bankProfile;
 
+  /* ---- how fast the track may twist ------------------------------------
+
+     What bankProfile gives is the bank the corner NEEDS, and where it needs
+     it. It is not, on its own, a bank the track can physically reach.
+
+     Tying bank to curvature was right and stays right, but it was done when
+     SPIRAL_THETA was 0.2 and the easement was a fifth of the piece — about
+     five metres, which rolls 45 degrees at 136 deg/s at 15 m/s. Brisk, and it
+     looked fine. Dropping theta to 0.05 for the tile footprint took the
+     easement to six per cent of the piece: 1.43 m on a wide corner, 0.86 m on
+     a tight one, which is 473 and 788 deg/s. Real rides are laid out around
+     90 to 120. The roll rate was simply not one of the things the theta change
+     was checked against, and it should have been.
+
+     NO VALUE OF THETA FIXES IT. Rolling 45 degrees in the 7.5 m that 90 deg/s
+     at 15 m/s needs means R.2theta = 7.5 with R = 15/(1 + theta + theta^2/6),
+     which comes out at theta = 0.34 — nineteen degrees of deflection before
+     the arc starts. Theta 0.2 was already too much for the footprint. So the
+     roll cannot live inside the curvature easement at all, and has to come out
+     of the track either side of the corner.
+
+     Which is what real coasters do: they roll on the straight before the bend.
+     So the profile above becomes a TARGET, and the bank actually laid is the
+     smallest rate-limited function that is everywhere at least as banked. That
+     is a max-plus dilation by a cone of slope ROLL_RATE, and it gives three
+     things at once: bank is never LESS than the corner asks for, so the g
+     spike that tying bank to curvature removed cannot come back; the slope is
+     bounded everywhere, so there is no crease; and the roll spills backwards
+     into whatever precedes the corner and forwards into whatever follows, by
+     exactly as much as it needs and no more.
+
+     Left and right rolls are dilated separately and added. Done as one signed
+     profile, an S-bend's two cones would fight and one would swallow the
+     other; added, they cross cleanly through level. The cost is that the
+     crossing itself may go at twice ROLL_RATE, and that is honest — an S-bend
+     with nothing between its halves has 90 degrees to cross and cannot do it
+     gently. It is why real layouts put a straight between opposite banked
+     turns, and the report will say so in lateral g. */
+  const ROLL_LEN = 6;                        // metres from level to full bank
+  const ROLL_RATE = BANK_ANGLE / ROLL_LEN;   // radians per metre
+
+  /* A STATION IS NEVER BANKED, and that is a hard rule rather than a
+     preference: it is the one piece of track a train stands still on and
+     people walk onto, so a tilted platform is not a stylistic matter. The roll
+     is therefore capped by the distance to the nearest station — measured
+     along the track, by the same two-pass sweep the dilation uses — which
+     pins the platform level and lets the bank climb off it at exactly the rate
+     it is allowed to.
+
+     This caps the roll BELOW what the corner asked for, which nothing else
+     here does. It only bites within six metres of a platform, and a banked
+     corner that close is a corner whose bank had nowhere to go. The filler
+     leaves a straight approach so it never puts one there (see
+     straightApproach); a student who builds one by hand gets an under-banked
+     corner and the lateral g to go with it, which is the honest outcome. */
+  /* A LOOP'S OWN ROLL, worked out as a bank angle so that it goes through the
+     same rate limit as every other roll on the track.
+
+     A loop is not banked through its body — the track IS the bend there, and
+     the frame's plane normal already points into it. It is banked at the
+     BOTTOM, where the piece also steps sideways to line its exit up with the
+     grid. That step is a horizontal bend of its own, and leaning into it is
+     the difference between a loop entry and a shove in the ribs. The old frame
+     did it by pointing "up" straight at the total curvature, which banks the
+     step perfectly and arrives at that bank in a single sample.
+
+     So: the angle from the loop's plane to its curvature, about the tangent.
+     Zero through the body, a lean over the bottom quarter where the sideways
+     step is laid on, and rate-limited afterwards like everything else — which
+     is what lets the roll start on the straight before the loop instead of at
+     the joint.
+
+     DAMPED BY THE LOOP'S OWN BEND, the in-plane component — not by the total
+     curvature. An angle measured from a plane means nothing until the bend in
+     that plane exists, and at the very start of a loop it does not: the
+     clothoid easement begins at zero curvature while the sideways step is
+     already being laid on, so the angle there is ninety degrees and is an
+     artefact of dividing one small number by a smaller one. Damping on the
+     total let it through, and the lean peaked a metre into the piece with
+     nowhere to have rolled in from. Measured against the loop's own peak
+     rather than an absolute figure, since a loop can be resized. */
+  const LOOP_BANK_KNEE = 0.2;
+
+  function loopBank(pts) {
+    // Each loop's peak in-plane bend, so the damping below has something to be
+    // a fraction of. Its own curvature at the top, where nothing else is left.
+    const peak = new Map();
+    for (const p of pts) {
+      if (!p.def || p.def.kind !== 'loop') continue;
+      const k = Math.hypot(p.kx, p.ky, p.kz);
+      if (!(peak.get(p.pi) >= k)) peak.set(p.pi, k);
+    }
+
+    for (let n = 0; n < pts.length; n++) {
+      const p = pts[n];
+      if (!p.def || p.def.kind !== 'loop') continue;
+
+      const a = pts[Math.max(0, n - 1)], b = pts[Math.min(pts.length - 1, n + 1)];
+      let fx = (b.x - a.x) * RC.TILE_M;
+      let fy = (b.y - a.y) * RC.TILE_M;
+      let fz = (b.z - a.z) * RC.LEVEL_M;
+      const fl = Math.hypot(fx, fy, fz) || 1;
+      fx /= fl; fy /= fl; fz /= fl;
+
+      const lat = D[(p.piece.node.dir + 1) & 3];
+      let ux = -fz * lat[1], uy = fz * lat[0], uz = fx * lat[1] - fy * lat[0];
+      const ul = Math.hypot(ux, uy, uz);
+      if (ul < 1e-9) { p.bank = 0; continue; }
+      ux /= ul; uy /= ul; uz /= ul;
+      const rx = uy * fz - uz * fy, ry = uz * fx - ux * fz, rz = ux * fy - uy * fx;
+
+      const knee = LOOP_BANK_KNEE * (peak.get(p.pi) || 0);
+      if (knee <= 0) { p.bank = 0; continue; }
+      const cu = p.kx * ux + p.ky * uy + p.kz * uz;
+      const cr = p.kx * rx + p.ky * ry + p.kz * rz;
+      p.bank = Math.atan2(cr, cu) * Math.min(1, Math.abs(cu) / knee);
+    }
+  }
+
+  function rollLimit(pts, wrap) {
+    const n = pts.length;
+    if (n < 2) return;
+    const up = new Float64Array(n), dn = new Float64Array(n), far = new Float64Array(n);
+    const BIG = 1e9;
+    for (let i = 0; i < n; i++) {
+      up[i] = Math.max(0, pts[i].bank);
+      dn[i] = Math.min(0, pts[i].bank);
+      far[i] = (pts[i].def && pts[i].def.station) ? 0 : BIG;
+    }
+    for (let lap = 0; lap < (wrap ? 2 : 1); lap++) {
+      if (lap) {
+        /* The last sample of a closed circuit and the first are the same place,
+           so a roll that ran off one end carries on from the other. One extra
+           lap converges: the cone is six metres and a circuit is hundreds. */
+        up[0] = up[n - 1] = Math.max(up[0], up[n - 1]);
+        dn[0] = dn[n - 1] = Math.min(dn[0], dn[n - 1]);
+        far[0] = far[n - 1] = Math.min(far[0], far[n - 1]);
+      }
+      for (let i = 1; i < n; i++) {
+        const ds = pts[i].s - pts[i - 1].s, d = ROLL_RATE * ds;
+        if (up[i - 1] - d > up[i]) up[i] = up[i - 1] - d;
+        if (dn[i - 1] + d < dn[i]) dn[i] = dn[i - 1] + d;
+        if (far[i - 1] + ds < far[i]) far[i] = far[i - 1] + ds;
+      }
+      for (let i = n - 2; i >= 0; i--) {
+        const ds = pts[i + 1].s - pts[i].s, d = ROLL_RATE * ds;
+        if (up[i + 1] - d > up[i]) up[i] = up[i + 1] - d;
+        if (dn[i + 1] + d < dn[i]) dn[i] = dn[i + 1] + d;
+        if (far[i + 1] + ds < far[i]) far[i] = far[i + 1] + ds;
+      }
+    }
+    for (let i = 0; i < n; i++) {
+      const cap = ROLL_RATE * far[i];
+      const b = up[i] + dn[i];
+      pts[i].bank = b > cap ? cap : (b < -cap ? -cap : b);
+    }
+  }
+  RC.ROLL_RATE = ROLL_RATE;
+
   /* A piece's height gain is the integral of its slope profile, which whatever
      shape that profile takes averages to (gIn+gOut)/2 — so dH is L*(gIn+gOut)/2
      and lands on a whole level for every combination below. That is why GENTLE
@@ -833,6 +992,27 @@
      sideways offset constant across the top, so the top is planar and the
      frame inverts cleanly. Smootherstep ramps keep it C^2 at the joins. */
   const LOOP_DRIFT_TAU = 0.25;
+
+  /* SPREADING THE SIDEWAYS OFFSET WIDER WAS TRIED AND IS WRONG, and the reason
+     is worth keeping because it is not the reason the block above gives.
+
+     The idea was sound as far as it went. A smootherstep's curvature reverses
+     half way through, so the offset asks the track to bank one way and then
+     back inside the bottom quarter, and what the roll limit cannot deliver is
+     left over as sideways force. Curvature goes as 1/L^2, so laying it over
+     0.35 of the loop instead of 0.25 ought to have asked for half the angle
+     over 1.4 times the distance.
+
+     IT ASKED FOR MORE. t is not distance. Through the body the loop runs
+     uniformly in TANGENT ANGLE, and ds/dt collapses towards the top where the
+     teardrop is tightest — so the extra tenth of t bought almost no extra
+     arc, and laid a slice of the offset across the little there was. The
+     sideways bend went from the loop's own 10 m to 6.2 m at t = 0.72, tighter
+     than anything in the catalogue, out of a change meant to loosen it.
+
+     Spreading it for real would mean spreading it in arc length, which needs
+     an s(t) table for the loop that nothing else here wants. Until something
+     does, the quarter stays. */
   function loopDrift(t) {
     const tau = LOOP_DRIFT_TAU;
     if (t < tau) return 0.5 * smootherstep(t / tau);
@@ -1116,6 +1296,20 @@
       pts[n].curv = Math.hypot(k[0], k[1], k[2]);
     }
 
+    /* A loop's roll has to wait for the curvature above, since that is what it
+       is measured against. A turn's does not, and is set as each sample is
+       laid.  */
+    loopBank(pts);
+
+    /* Rate-limit the roll before the frames are built from it, which is what
+       puts the whole of the rest of the sim — the ribbon, the ride camera, the
+       car frames and the g-forces — on the bank the track really has rather
+       than the one the corner asked for. There is exactly one reader of
+       pts[].bank, and it is the next line. */
+    const last = pieces[pieces.length - 1];
+    rollLimit(pts, pieces.length > 1 &&
+      sameNode(RC.exitNode(BY_ID.get(last.defId), last.node), pieces[0].node));
+
     buildFrames(pts);
 
     return { pts, total: s };
@@ -1162,10 +1356,24 @@
       if (fl < 1e-9) { fx = 1; fy = 0; fz = 0; fl = 1; }
       fx /= fl; fy /= fl; fz /= fl;
 
-      // Seed "up": the curvature direction inside a loop, else world up.
+      /* Seed "up": the loop's own PLANE inside a loop, else world up.
+
+         It used to be the loop's curvature direction, which is right in the
+         body of the loop and noise at both ends of it — the curvature vanishes
+         there, and normalising a vanishing vector gives whatever direction the
+         rounding happened to leave. That is what made a loop's entry and exit
+         twist: the frame arrived at the joint pointing somewhere arbitrary
+         instead of standing level with the straight track it joins.
+
+         The plane normal does not vanish. Taken a right angle round from the
+         entry direction it gives world up at the bottom whichever way the loop
+         faces, inverts cleanly at the top, and never once degenerates on the
+         way round. The roll that carries the frame from here to the bend is
+         held in pts[].bank like any other roll, and rate-limited with them. */
       let ux, uy, uz;
       if (pts[n].def && pts[n].def.kind === 'loop') {
-        ux = pts[n].kx; uy = pts[n].ky; uz = pts[n].kz;
+        const lat = D[(pts[n].piece.node.dir + 1) & 3];
+        ux = -fz * lat[1]; uy = fz * lat[0]; uz = fx * lat[1] - fy * lat[0];
         if (Math.hypot(ux, uy, uz) < 1e-9) { ux = 0; uy = 0; uz = 1; }
       } else {
         ux = 0; uy = 0; uz = 1;
@@ -1407,32 +1615,78 @@
      That number is the whole point of the geometry work — a catalogue that lets
      a student reach speeds its own pieces cannot carry is a catalogue that
      judges them against limits it never gave them the means to meet. */
+  /* THE RADII ARE OFTEN A TIE, and saying which feature holds the record is
+     then a coin toss. Every flat-to-gentle transition on the catalogue bends
+     at the same 24 m, so a ride with a lift, three drops and an airtime hill
+     has a dozen places all equal-tightest and the winner is decided by
+     floating-point noise in the three-point curvature stencil. Counting them
+     says the true thing — that the grade ladder is what set the radius, not
+     any one piece — and only names a feature when there is a single one. */
+  const TIE = 1.01;
+
+  function radiusOf(p, kind) {
+    const kv = p.kVert || 0, kl = p.kLat || 0;
+    if (kind === 'crest') return kv < -1e-9 ? -1 / kv : null;
+    if (kind === 'valley') return kv > 1e-9 ? 1 / kv : null;
+    return Math.abs(kl) > 1e-9 ? 1 / Math.abs(kl) : null;
+  }
+
+  /* How fast the train could possibly be at a path point, from the energy
+     budget rather than from any particular run. An UPPER bound: the profile is
+     taken lossless and round the lap, so nothing a student does to the friction
+     controls can beat it. */
+  function reachAt(p, prof) {
+    const e = prof && prof[p.pi];
+    if (!e) return null;
+    const g = RC.G || 9.81;
+    const z = p.z * RC.LEVEL_M;
+    let H = e.hOut;
+    if (e.hIn !== null && (H === null || e.hIn > H)) H = e.hIn;
+    // A chain holds the train at its own speed the whole way up, so neither
+    // end of a lift piece describes its middle.
+    if (e.hold) {
+      const held = z + e.hold * e.hold / (2 * g);
+      H = e.hIn === null ? held : Math.max(e.hIn, held);
+    }
+    return H === null ? null : Math.sqrt(Math.max(0, 2 * g * (H - z)));
+  }
+
+  RC.reachSpeed = function (p, prof) {
+    return reachAt(p, prof ||
+      (RC.energyProfile && RC.energyProfile({ lossless: true, laps: 2 })));
+  };
+
   RC.trackGeometry = function () {
     const pts = RC.trackPath().pts;
     const L = RC.G_LIMITS;
     const g = RC.G || 9.81;
     const out = {
-      crestR: null, crestS: null,      // tightest radius of each kind, in metres
-      valleyR: null, valleyS: null,
-      turnR: null, turnS: null,
-      honestV: null, honestS: null, honestWhy: null
+      crestR: null, crestS: null, crestN: 0,   // tightest radius of each kind,
+      valleyR: null, valleyS: null, valleyN: 0, // in metres, and how many
+      turnR: null, turnS: null, turnN: 0,       // features are equal-tightest
+      honestV: null, honestS: null, honestWhy: null,
+      tightV: null, tightCap: null, tightS: null, tightWhy: null, tightHead: null
     };
     if (!pts.length || !L) return out;
 
-    const tighter = (r, key) => out[key + 'R'] === null || r < out[key + 'R'];
+    /* Worked out once for the whole track: the question being asked is whether
+       a corner COULD ever be overrun, not whether it was on this run. */
+    const prof = RC.energyProfile ? RC.energyProfile({ lossless: true, laps: 2 }) : null;
 
     for (const p of pts) {
-      const kv = p.kVert || 0, kl = p.kLat || 0;
-      if (kv < -1e-9 && tighter(-1 / kv, 'crest')) { out.crestR = -1 / kv; out.crestS = p.s; }
-      if (kv > 1e-9 && tighter(1 / kv, 'valley')) { out.valleyR = 1 / kv; out.valleyS = p.s; }
-      if (Math.abs(kl) > 1e-9 && tighter(1 / Math.abs(kl), 'turn')) {
-        out.turnR = 1 / Math.abs(kl); out.turnS = p.s;
+      for (const kind of ['crest', 'valley', 'turn']) {
+        const r = radiusOf(p, kind);
+        if (r !== null && (out[kind + 'R'] === null || r < out[kind + 'R'])) {
+          out[kind + 'R'] = r;
+          out[kind + 'S'] = p.s;
+        }
       }
 
       // Resolved on the CAR's axes, banking and all, because that is what the
       // rider feels and what the g limits are written against.
       const Bv = (p.kx * p.ux + p.ky * p.uy + p.kz * p.uz) / g, Av = p.uz;
       const Bl = (p.kx * p.rx + p.ky * p.ry + p.kz * p.rz) / g, Al = p.rz;
+      let capV = null, capWhy = null;
       const cap = (num, den, why) => {
         if (Math.abs(den) < 1e-12) return;
         const v2 = num / den;
@@ -1441,14 +1695,46 @@
         // the ride report's own g warnings are the place for it.
         if (!(v2 >= 0)) return;
         const v = Math.sqrt(v2);
-        if (out.honestV === null || v < out.honestV) {
-          out.honestV = v; out.honestS = p.s; out.honestWhy = why;
-        }
+        if (capV === null || v < capV) { capV = v; capWhy = why; }
       };
       if (Bv > 0) cap(L.vertHigh - Av, Bv, 'vertical');
       else if (Bv < 0) cap(L.airtimeGood - Av, Bv, 'airtime');
       if (Bl > 0) cap(L.latHigh - Al, Bl, 'sideways');
       else if (Bl < 0) cap(-L.latHigh - Al, Bl, 'sideways');
+      if (capV === null) continue;
+
+      // The fastest a train could cross this shape ANYWHERE without breaking a
+      // limit. A true property of the track, and no use on its own: on a ride
+      // with an unbanked corner at the top of its lift, it is that corner's
+      // figure, and the train goes over it at chain speed.
+      if (out.honestV === null || capV < out.honestV) {
+        out.honestV = capV; out.honestS = p.s; out.honestWhy = capWhy;
+      }
+
+      // So this is the one that answers the question: of everywhere on the
+      // track, where does what the train can REACH come closest to what the
+      // shape can take?
+      const v = reachAt(p, prof);
+      if (v !== null && (out.tightHead === null || capV - v < out.tightHead)) {
+        out.tightHead = capV - v;
+        out.tightV = v; out.tightCap = capV; out.tightS = p.s; out.tightWhy = capWhy;
+      }
+    }
+
+    // Second pass, now the records are known: how many named features hold each.
+    for (const kind of ['crest', 'valley', 'turn']) {
+      const r = out[kind + 'R'];
+      if (r === null) continue;
+      const seen = new Set();
+      for (const p of pts) {
+        const rr = radiusOf(p, kind);
+        if (rr === null || rr > r * TIE) continue;
+        const f = RC.featureAt && RC.featureAt(p.s);
+        // Plain track carries no curvature, so the fallback is only ever
+        // reached by something odd; keying on the piece keeps it coarse.
+        seen.add(f ? f.label : 'piece ' + p.pi);
+      }
+      out[kind + 'N'] = seen.size;
     }
     return out;
   };
@@ -1581,6 +1867,7 @@
       // Frame axes, interpolated; RC.carFrame re-orthonormalises them.
       fx: mix(a.fx, b.fx), fy: mix(a.fy, b.fy), fz: mix(a.fz, b.fz),
       ux: mix(a.ux, b.ux), uy: mix(a.uy, b.uy), uz: mix(a.uz, b.uz),
+      pi: f < 0.5 ? a.pi : b.pi,
       piece: f < 0.5 ? a.piece : b.piece,
       def: f < 0.5 ? a.def : b.def
     };
@@ -2115,9 +2402,27 @@
     'turn-left-wide', 'turn-right-wide', 'turn-left-tight', 'turn-right-tight'
   ];
 
-  /* Slight preferences, so the filler favours straight level track. */
+  /* Slight preferences, so the filler favours straight level track — and a
+     STRONG one against the tight corner, which is a last resort rather than an
+     option. Filler is laid wherever the layout happens to have left a gap, and
+     that is very often at the bottom of a drop where the train is fastest.
+     Banked, a tight corner passes the report's 1.5 g sideways at 16.2 m/s
+     where a wide one holds out to 20.9, and nothing about being convenient for
+     the search makes that difference acceptable.
+
+     TEN, not the four it was. Four was reasoned about as though the choice were
+     one tight corner against one wide one, and it is not: a wide corner covers
+     more ground, so preferring them often means taking a longer way round — and
+     at four the tight corner still won as soon as the detour ran to three
+     pieces. Looper's filler duly laid one, and the report duly named it as the
+     single place on that track where the shape is outrun. At ten the detour has
+     to run to seven before the tight corner is worth it, which on a park this
+     size means it gets used when the geometry leaves no choice and not before.
+
+     Every piece still costs at least 1, which is all the heuristic assumes when
+     it counts pieces, so this stays admissible however far it goes. */
   function routeCost(def) {
-    if (def.kind === 'turn') return 1.25;
+    if (def.kind === 'turn') return def.R < 2 ? 10 : 1.25;
     if (def.gIn !== 0 || def.gOut !== 0) return 1.2;
     return 1;
   }
@@ -2220,6 +2525,7 @@
   const FINISH_TURNS = ['turn-left-wide', 'turn-right-wide'];
   const MAX_FINISH_PAD = 12;         // tiles of level track after the corner
   const MAX_DESCENT_TILES = 20;      // the run home is a drop, not a journey
+  const WANDER = 1.2;                // a route is longer than the line it covers
 
   /* Straights available to a filler, by the grades they join, so the descent
      below is read off the catalogue instead of being spelled out. Built from
@@ -2331,6 +2637,46 @@
     return { from, steps, drop: descent.drop };
   }
 
+  const APPROACH_TILES = 2;    // straight track a platform is entered along
+
+  /* The plain filler's ending: a short straight run into the platform.
+
+     Every corner the filler lays is banked, and the plain route used to be free
+     to put one right against the station. rollLimit will not tilt a platform,
+     so such a corner has its roll cut off exactly where the train is arriving
+     fastest — under-banked at the worst possible moment, and only because
+     there was nowhere to put the roll. Two tiles is twelve metres and the roll
+     needs six.
+
+     The shaped ending needs none of this: its descent is two tiles at the very
+     least, which is the same twelve metres. */
+  function straightApproach() {
+    const start = RC.track.start;
+    if (start.g !== FLAT) return null;
+    const d = D[start.dir];
+    const from = {
+      i: start.i - d[0] * APPROACH_TILES,
+      j: start.j - d[1] * APPROACH_TILES,
+      dir: start.dir, k: start.k, g: FLAT
+    };
+    if (!RC.inBounds(from.i, from.j)) return null;
+
+    const steps = new Array(APPROACH_TILES).fill(0).map(() => ({ id: 'flat' }));
+    const occ = occupancy();
+    const skipFrom = RC.track.pieces.length;
+    let node = from;
+    for (const s of steps) {
+      const def = BY_ID.get(s.id);
+      for (const c of interiorCells(def, node)) {
+        if (!RC.inBounds(c.i, c.j)) return null;
+      }
+      if (collidesWith(def, node, occ, skipFrom)) return null;
+      node = RC.exitNode(def, node);
+    }
+    if (!sameNode(node, start)) return null;
+    return { from, steps, drop: 0 };
+  }
+
   /* Every ending the track has the energy and the room for. The search treats
      them as alternative goals and takes whichever it can reach most cheaply,
      so a left corner and a right one, at every distance back from the station,
@@ -2350,26 +2696,41 @@
     const holdBal = R / 2;                                 // nothing sideways at all
     const start = RC.track.start, head = RC.track.head;
 
-    /* The filler has still to be crossed, and it is charged before the crest is
-       chosen rather than after. It covers at least the distance home and in
-       practice wanders, so it goes in at half as much again. A rough figure is
-       enough: the crest is aimed at BALANCE, five metres of energy height above
-       the floor the search will actually enforce, so this only has to be right
-       to within that. */
-    const run = 1.5 * (Math.abs(head.i - start.i) + Math.abs(head.j - start.j)) * RC.TILE_M;
-    const budget = H - RC.energyLoss(run, H - head.k * RC.LEVEL_M);
+    /* The filler has still to be crossed, and it is charged BEFORE the crest is
+       chosen rather than after — a crest picked as though the ride were already
+       home is one the search will only refuse.
 
-    const levelsFor = hold => Math.floor((budget - hold) / RC.LEVEL_M) - start.k;
-    // Balance if the track can afford it; otherwise as high as the band allows,
-    // which is a corner a rider hangs into rather than one they are thrown out
-    // of, and still better than taking the last bend on the floor.
-    let levels = levelsFor(holdBal);
-    if (levels < 2) levels = levelsFor(holdMin);
-    if (levels < 2) return null;              // nothing to lift the corner with
-    levels = Math.min(levels, MAX_H - start.k);
+       What it has to cross is the distance to the corner, not to the station:
+       the corner sits a whole tail's length beyond it. WANDER covers the rest,
+       since a route that has to climb and dodge is longer than the straight
+       line between its ends.
 
-    const descent = finishDescent(levels);
-    if (!descent) return null;
+       Drag is charged at the MEAN energy height over the run, not at the head's
+       own. It goes as v^2, so it is worst at the bottom and the filler spends
+       half its length climbing away from there; charging the bottom rate for
+       all of it overstated the cost by a third, which on a 12 m lift was the
+       whole of the crest. */
+    const tiles = Math.abs(head.i - start.i) + Math.abs(head.j - start.j);
+    const zHead = head.k * RC.LEVEL_M;
+
+    let levels = 0, descent = null;
+    for (let pass = 0; pass < 2; pass++) {
+      const run = WANDER * (tiles + (descent ? descent.tiles + 3 : 5)) * RC.TILE_M;
+      const zCrest = start.k * RC.LEVEL_M + levels * RC.LEVEL_M;
+      const budget = H - RC.energyLoss(run, H - (zHead + zCrest) / 2);
+
+      const levelsFor = hold => Math.floor((budget - hold) / RC.LEVEL_M) - start.k;
+      // Balance if the track can afford it; otherwise as high as the band
+      // allows, which is a corner a rider hangs into rather than one they are
+      // thrown out of, and still better than taking the last bend on the floor.
+      levels = levelsFor(holdBal);
+      if (levels < 2) levels = levelsFor(holdMin);
+      if (levels < 2) return null;            // nothing to lift the corner with
+      levels = Math.min(levels, MAX_H - start.k);
+
+      descent = finishDescent(levels);
+      if (!descent) return null;
+    }
 
     const out = [];
     for (const turnId of FINISH_TURNS) {
@@ -2399,15 +2760,60 @@
     if (sameNode(from, target)) return { ok: false, why: 'The circuit is already complete' };
 
     const shaped = (limits && limits.shaped) ? shapedFinishes() : null;
+    const approach = (!shaped && limits && limits.approach) ? straightApproach() : null;
     const goals = new Map();
-    if (shaped) for (const t of shaped.tails) goals.set(nodeKey(t.from), t);
-    else goals.set(nodeKey(target), null);
-    const goalNodes = shaped ? shaped.tails.map(t => t.from) : [target];
+    let kind = 'plain', goalNodes = [target];
+    if (shaped) {
+      for (const t of shaped.tails) goals.set(nodeKey(t.from), t);
+      goalNodes = shaped.tails.map(t => t.from);
+      kind = 'shaped';
+    } else if (approach) {
+      goals.set(nodeKey(approach.from), approach);
+      goalNodes = [approach.from];
+      kind = 'approach';
+    } else {
+      goals.set(nodeKey(target), null);
+    }
 
     const maxExpand = (limits && limits.maxExpand) || 40000;
     const maxPieces = (limits && limits.maxPieces) || 150;
-    const occ = occupancy();
     const skipPi = RC.track.pieces.length - 1;
+
+    /* WITH ONE GOAL, THE TAIL'S GROUND IS RESERVED. The search knows where its
+       tail goes but the tail is not built yet, so without this the filler is
+       free to route straight through it — and then RC.place refuses the tail
+       and the whole ending falls back to a plainer one. That is exactly what
+       happened to the straight run into gentle-hills' station: two tiles of
+       platform approach, and the filler took them.
+
+       Only when there is a single goal. The shaped ending offers a couple of
+       dozen tails and no two of them want the same ground, so there is nothing
+       to reserve; that case still finds out at build time. */
+    let occ = occupancy();
+    const only = goals.size === 1 ? goals.values().next().value : null;
+    if (only) {
+      const m = new Map(occ);
+      let node = only.from;
+      for (let si = 0; si < only.steps.length; si++) {
+        const def = BY_ID.get(only.steps[si].id);
+        /* NOT THE FIRST PIECE OF THE TAIL. Neighbouring pieces legitimately
+           share their joint tile, and RC.place allows exactly that by skipping
+           the piece behind the head — so the corner that arrives at the tail is
+           allowed to sweep into the tail's first tile and no further. Reserving
+           that tile too refused the corner outright, and refusing the corner
+           was the whole route, which is how gentle-hills came to fall back to
+           an ending with no straight run at all. */
+        if (si > 0) {
+          for (const c of interiorCells(def, node)) {
+            const key = c.i + ',' + c.j;
+            // -2, so it is never the piece skipPi lets the route share with.
+            m.set(key, (m.get(key) || []).concat([{ z: c.z, pi: -2 }]));
+          }
+        }
+        node = RC.exitNode(def, node);
+      }
+      occ = m;
+    }
     const defs = ROUTE_IDS.map(id => BY_ID.get(id)).filter(Boolean);
 
     /* Energy, charged along the route — for a SHAPED finish only.
@@ -2464,7 +2870,8 @@
         // A crest reached too slowly is not a crest. Refusing it here rather
         // than up front lets a nearer corner of the same height still be found.
         const tail = goals.get(cur.key);
-        if (!tail || shaped.H - entry.spent >= node.k * RC.LEVEL_M + shaped.holdMin) {
+        if (!tail || !shaped ||
+            shaped.H - entry.spent >= node.k * RC.LEVEL_M + shaped.holdMin) {
           goal = entry;
           goalKey = cur.key;
           break;
@@ -2512,30 +2919,46 @@
 
     if (!goal) {
       return {
-        // Said of the goals it was actually given, so a shaped attempt that
-        // cannot be reached does not claim the station is unreachable — the
-        // plain attempt that follows it may well get home.
+        // Said of the goals it was actually given, so an attempt at a better
+        // ending that cannot be reached does not claim the station is
+        // unreachable — the plainer one that follows it may well get home.
         ok: false,
-        shaped: !!shaped,
-        why: shaped
+        kind,
+        shaped: kind === 'shaped',
+        why: kind === 'shaped'
           ? 'Could not find room for a hill before the last corner'
-          : (expanded >= maxExpand
-            ? 'Could not find a way back to the station'
-            : 'There is no way back to the station from here')
+          : kind === 'approach'
+            ? 'Could not find room for a straight run into the station'
+            : (expanded >= maxExpand
+              ? 'Could not find a way back to the station'
+              : 'There is no way back to the station from here')
       };
     }
 
+    /* EVERY CORNER THE FILLER LAYS IS BANKED, and that is not a stylistic
+       choice. The search has no idea how fast the train will be where it is
+       building — it is laying track wherever the layout left a gap, which is
+       very often at the bottom of a drop. Unbanked, a wide corner passes the
+       report's 1.5 g at 14.5 m/s and climbs without limit after that; banked,
+       the worst it can ever do is 0.71 g standing still, and it does not reach
+       1.5 g until 20.9 m/s. So banking cannot make a corner worse than not
+       banking it, whatever speed turns up, and not banking can be arbitrarily
+       bad. The old filler was unbanked and first-drop's last corner pulled
+       4.9 g the moment it stopped having a brake run in front of it. */
     const steps = [];
-    for (let e = goal; e && e.defId; e = e.parent) steps.unshift({ id: e.defId });
+    for (let e = goal; e && e.defId; e = e.parent) {
+      steps.unshift({ id: e.defId, bank: BY_ID.get(e.defId).kind === 'turn' });
+    }
     const tail = goals.get(goalKey);
     if (tail) for (const s of tail.steps) steps.push(s);
 
     return {
       ok: true,
-      shaped: !!tail,
+      kind,
+      shaped: kind === 'shaped',
       steps,
       ids: steps.map(s => s.id),
-      crest: tail ? tail.drop * RC.LEVEL_M : 0,
+      crest: kind === 'shaped' ? tail.drop * RC.LEVEL_M : 0,
       expanded
     };
   };
@@ -2545,14 +2968,24 @@
      hand-built track; if any piece is refused the whole lot is rolled back
      rather than leaving a half-finished stub.
 
-     The shaped ending is tried first and the plain one is the fallback, which
-     is what keeps "Finish track" a button that always works. It gets a second
-     chance rather than one attempt because the shaped route is only checked
-     for collisions as it is LAID: the search knows where the tail goes but not
+     THREE ENDINGS, in descending order of how much they ask for: the shaped
+     one, then a plain route with a straight run into the platform, then a
+     plain route to the platform itself. Each is the fallback for the one
+     before, which is what keeps "Finish track" a button that always works.
+
+     They are attempts rather than one shot because a route is only checked for
+     collisions as it is LAID: the search knows where its tail goes but not
      where the filler in front of it will end up, so the two can meet. Rare,
      and cheaper to discover here than to rule out in the search. */
   RC.completeTrack = function (limits) {
-    const plainOnly = limits && limits.shaped === false;
+    /* Each plan asks for everything the one after it does and more, so a plan
+       whose first choice is unavailable degrades inside the one search rather
+       than costing another. */
+    const plans = (limits && limits.shaped === false)
+      ? [{ shaped: false, approach: true }, { shaped: false, approach: false }]
+      : [{ shaped: true, approach: true },
+         { shaped: false, approach: true },
+         { shaped: false, approach: false }];
 
     // One undoable step however many pieces it lays, and however many attempts
     // it took: a student who does not like the filler wants it gone in one
@@ -2560,21 +2993,20 @@
     return RC.edit(() => {
       let last = null;
       const budget = (limits && limits.maxExpand) || 40000;
-      for (const shaped of plainOnly ? [false] : [true, false]) {
-        /* The shaped attempt is speculative and the plain one is the guarantee,
-           so the speculative one gets half the budget and the guarantee keeps
-           all of it. Worst case is one and a half searches rather than two, and
-           a shaped finish that cannot be found never costs the plain one its
-           chance. */
-        const route = RC.findRouteHome(Object.assign({}, limits, {
-          shaped,
-          maxExpand: shaped ? Math.ceil(budget / 2) : budget
+      for (const plan of plans) {
+        /* The shaped attempt is the speculative one and the bare route is the
+           guarantee, so the speculative one gets half the budget and the
+           guarantee keeps all of it. A shaped finish that cannot be found never
+           costs the plainer ones their chance. */
+        const route = RC.findRouteHome(Object.assign({}, limits, plan, {
+          maxExpand: plan.shaped ? Math.ceil(budget / 2) : budget
         }));
         last = route.ok ? buildRoute(route) : route;
         if (last.ok) return last;
-        // A shaped attempt that never got a goal set has already run the plain
-        // search; running it again would only take the same time twice.
-        if (!route.shaped) break;
+        // An attempt that never got the goal set it asked for has already run
+        // the search a later plan would run; repeating it would only take the
+        // same time twice.
+        if (route.kind === 'plain') break;
       }
       return last;
     });
@@ -2596,7 +3028,10 @@
     }
     return {
       ok: true,
-      added: route.steps.length,
+      // Counted off the track rather than off the route, since a run of banked
+      // corners folds itself into one longer bend on the way down — and now
+      // that the filler banks what it lays, that happens to filler too.
+      added: RC.track.pieces.length - before,
       shaped: route.shaped,
       crest: route.crest
     };

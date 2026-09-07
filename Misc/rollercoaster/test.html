@@ -1236,19 +1236,29 @@
      runs straight downhill into the station — but only when the train has the
      energy to get over it. Both halves matter: the shape, and the refusal. */
 
-  /* A lift to 12 m on medium and the whole of it given straight back, which
-     leaves the head at ground level with a real budget still in hand. Eight
-     tiles up and eight down, so it fits in the park from the middle of it. */
+  /* A lift to 24 m on medium and the whole of it given straight back, doubling
+     round so the head finishes CLOSE TO THE STATION at ground level.
+
+     Both halves of that matter, and the second is not obvious. The finisher
+     charges the filler for what crossing it costs, and drag goes as v^2 — a
+     train with 20 m of energy height in it loses about 5 m per hundred metres
+     of track. So a tall ride that ends on the far side of the park arrives at
+     the finisher with nothing to spare, however tall it was, and gets the flat
+     ending. Height alone is not spare energy; height with a short way home is.
+     This is laid out to have both. */
   function buildTallDrop() {
     RC.resetTrack();
-    const up = ['flat-to-gentle-up', 'gentle-to-medium-up', 'medium-up', 'medium-up',
-                'medium-up', 'medium-up', 'medium-to-gentle-up', 'gentle-up-to-flat'];
-    const down = ['flat-to-gentle-down', 'gentle-to-medium-down', 'medium-down',
-                  'medium-down', 'medium-down', 'medium-down', 'medium-to-gentle-down',
-                  'gentle-down-to-flat'];
-    for (const id of up) if (!RC.place(id, { lift: true })) return `${id} refused`;
-    if (!RC.place('turn-right-wide')) return 'turn refused';
-    for (const id of down) if (!RC.place(id)) return `${id} refused`;
+    const ladder = (dir, n) => [`flat-to-gentle-${dir}`, `gentle-to-medium-${dir}`]
+      .concat(new Array(n).fill(`medium-${dir}`))
+      .concat([`medium-to-gentle-${dir}`, `gentle-${dir}-to-flat`]);
+    // 8 + 4n levels: ten constant tiles make 48, which is 24 m.
+    for (const id of ladder('up', 10)) {
+      if (!RC.place(id, { lift: true })) return `${id} refused`;
+    }
+    for (const id of ['turn-right-wide', 'flat', 'flat', 'turn-right-wide']) {
+      if (!RC.place(id)) return `${id} refused`;
+    }
+    for (const id of ladder('down', 10)) if (!RC.place(id)) return `${id} refused`;
     RC.clearHistory();
     return null;
   }
@@ -2091,6 +2101,133 @@
     }
   });
 
+  check('an extreme shared by many features is counted, not attributed to one', () => {
+    /* Every flat-to-gentle transition on the catalogue bends at the same
+       radius, so a ride with a lift, some drops and a hill has a dozen places
+       equal-tightest and no reason to name any of them. The winner used to be
+       decided by floating-point noise in the three-point curvature stencil,
+       which is how first-drop came to report its tightest crest AND its
+       tightest valley "on Lift 1" — both true, both arbitrary. */
+    RC.loadPrefab('first-drop');
+    RC.resetSim();
+    const geo = RC.trackGeometry();
+    if (!(geo.crestN > 1)) {
+      return `the tightest crest is claimed unique, on a ride with ` +
+             `a lift, three drops and an airtime hill`;
+    }
+    if (!(geo.valleyN > 1)) return 'the tightest valley is claimed unique';
+    // And the report says so rather than naming one of them.
+    const html = RC.reportHTML();
+    if (html.indexOf(`at ${geo.crestN} places`) < 0) {
+      return `the report does not say the tightest crest is shared by ${geo.crestN}`;
+    }
+  });
+
+  check('a lone tightest feature is still named', () => {
+    // One tight corner among wide ones: nothing to be coy about.
+    RC.resetTrack();
+    for (const id of ['turn-right-wide', 'flat', 'turn-right-tight', 'flat']) {
+      if (!RC.place(id)) return `${id} refused`;
+    }
+    const geo = RC.trackGeometry();
+    if (geo.turnN !== 1) return `${geo.turnN} turns share the tightest radius, expected 1`;
+    const tight = RC.turnRadius(RC.pieceDef('turn-right-tight')) * RC.TILE_M;
+    if (Math.abs(geo.turnR - tight) > 0.5) {
+      return `tightest turn reads ${geo.turnR.toFixed(1)} m, expected about ${tight.toFixed(1)}`;
+    }
+  });
+
+  check('the limits are judged where the train can go fast, not where it crawls', () => {
+    /* An unbanked tight corner at the top of a lift and an unbanked wide one at
+       the bottom of the drop after it. The tight corner has the lower limit of
+       the two, so it is what "the fastest a train could cross this shape
+       anywhere" reports — and the chain takes the train over it at 4 m/s, so
+       saying anything about the ride on the strength of it is nonsense. The
+       wide one at the bottom is where the track can really outrun its shape. */
+    RC.resetTrack();
+    const build = ['flat-to-gentle-up', 'gentle-to-medium-up',
+                   'medium-up', 'medium-up', 'medium-up', 'medium-up',
+                   'medium-to-gentle-up', 'gentle-up-to-flat'];
+    for (const id of build) if (!RC.place(id, { lift: true })) return `${id} refused`;
+    if (!RC.place('turn-right-tight')) return 'the corner at the top refused';
+    const down = ['flat-to-gentle-down', 'gentle-to-medium-down',
+                  'medium-down', 'medium-down', 'medium-down', 'medium-down',
+                  'medium-to-gentle-down', 'gentle-down-to-flat'];
+    for (const id of down) if (!RC.place(id)) return `${id} refused`;
+    if (!RC.place('turn-right-wide')) return 'the corner at the bottom refused';
+
+    RC.resetSim();
+    const geo = RC.trackGeometry();
+    if (geo.tightV === null) return 'no reading at all';
+
+    // The old figure is set by the corner the chain crawls over.
+    const chain = RC.sim.liftSpeed;
+    const atHonest = RC.reachSpeed(RC.pathAt(geo.honestS, false));
+    if (!(atHonest <= chain + 0.5)) {
+      return `the constant-speed figure is set at ${geo.honestS.toFixed(1)} m, ` +
+             `where the train can already reach ${atHonest.toFixed(1)} m/s — ` +
+             `this track was built so that it would not be`;
+    }
+    // The new one is not, and reports a speed the track can really deliver.
+    if (!(geo.tightV > chain * 2)) {
+      return `the reading is taken at ${geo.tightV.toFixed(1)} m/s, ` +
+             `barely more than the ${chain} m/s the chain hauls at`;
+    }
+    if (geo.tightS === geo.honestS) return 'both readings landed on the same spot';
+
+    // This track really is over its limits, so the report must say so — and
+    // name the corner at the bottom rather than the one at the top.
+    if (!(geo.tightHead < 0)) {
+      return `${geo.tightV.toFixed(1)} m/s against ${geo.tightCap.toFixed(1)} ` +
+             `is inside the limits, but a 14.3 m corner unbanked at the foot ` +
+             `of a 12 m drop should not be`;
+    }
+    if (RC.reportHTML().indexOf('report-warn') < 0) {
+      return 'the report does not warn about a track that outruns its own shape';
+    }
+  });
+
+  check('the reachable speed is a bound the train cannot beat', () => {
+    /* What the whole reading rests on. Run with no friction at all, which is
+       the fastest this ride can ever be, and the train must still not exceed
+       what the energy budget says is possible.
+
+       Measured against the MEAN height of the cars rather than the front one's.
+       The train is not a point mass — its speed comes from where its cars are
+       on average — so on a crest the front car legitimately passes the bound a
+       point mass at that height would have had, and comparing there would be
+       measuring the train's length rather than the budget.
+
+       Sampled only where gravity is the whole story: a drive system anywhere
+       under the train means the budget is changing beneath it. */
+    RC.loadPrefab('first-drop');
+    RC.sim.friction = false;
+    RC.resetSim();
+    const prof = RC.energyProfile({ lossless: true, laps: 2 });
+    let worst = 0, worstS = 0, seen = 0;
+    RC.sim.state = 'running';
+    for (let n = 0; n < 240 * 60 && RC.sim.state === 'running'; n++) {
+      RC.stepSim(1 / 60);
+      const cars = RC.carStates();
+      if (!cars.length) continue;
+      if (cars.some(c => !c.def || c.def.station || c.def.brake || c.def.launch ||
+                         (c.piece && c.piece.lift))) continue;
+      const e = prof[cars[0].pi];
+      if (!e || e.hOut === null) continue;
+      let zMean = 0;
+      for (const c of cars) zMean += c.z;
+      zMean = zMean / cars.length * RC.LEVEL_M;
+      const bound = Math.sqrt(Math.max(0, 2 * RC.G * (e.hOut - zMean)));
+      seen++;
+      const over = Math.abs(RC.sim.v) - bound;
+      if (over > worst) { worst = over; worstS = RC.sim.s; }
+    }
+    if (!seen) return 'the train was never clear of a drive system';
+    if (worst > 0.5) {
+      return `the train beat its own upper bound by ${worst.toFixed(2)} m/s at ${worstS.toFixed(1)} m`;
+    }
+  });
+
   check('the tightest radii are reported with the feature that owns them', () => {
     const bad = shapeTrack(['flat-to-gentle-down', 'gentle-down', 'gentle-down-to-flat',
                             'turn-right-tight', 'flat']);
@@ -2343,19 +2480,33 @@
   });
 
   check('a loop leaves no twist behind it — track after it stays upright', () => {
-    // The bug this guards: a non-planar loop transported a frame with leftover
-    // roll (holonomy), which then contaminated every piece after the loop.
+    /* The bug this guards: a non-planar loop transported a frame with leftover
+       roll (holonomy), which then contaminated every piece after the loop.
+
+       Measured past the ROLL'S REACH rather than from the joint. A loop leans
+       at the bottom, for the sideways step it takes there, and that lean now
+       rolls out over the track after it instead of stopping dead at the joint —
+       six metres of genuine, decaying twist. Holonomy is the opposite of that:
+       it never decays, so it shows up just as plainly further along, and
+       looking there tells the two apart instead of confusing them. */
     RC.resetTrack();
     RC.place('loop-right');
     const loopIdx = RC.track.pieces.findIndex(p => RC.pieceDef(p.defId).kind === 'loop');
-    for (let n = 0; n < 4; n++) RC.place('flat');
+    for (let n = 0; n < 6; n++) RC.place('flat');
+    const spans = RC.pieceSpans();
+    const loopEnd = spans[loopIdx].s1;
+    const reach = RC.BANK_ANGLE / RC.ROLL_RATE;
+    let seen = 0;
     for (const p of RC.trackPath().pts) {
-      if (p.pi <= loopIdx) continue;              // only pieces after the loop
+      if (p.pi <= loopIdx || p.s < loopEnd + reach) continue;
+      seen++;
       const fr = RC.carFrame(p);
       if (fr.u.z < 0.99) {
-        return `track after the loop is twisted: up.z = ${fr.u.z.toFixed(3)} at s = ${p.s.toFixed(1)} m`;
+        return `track after the loop is twisted: up.z = ${fr.u.z.toFixed(3)} at s = ${p.s.toFixed(1)} m, ` +
+               `which is ${(p.s - loopEnd).toFixed(1)} m past it — too far out to be the roll`;
       }
     }
+    if (!seen) return 'no track far enough past the loop to check';
   });
 
   check('a banked turn after a loop is right-side up', () => {
@@ -2553,27 +2704,135 @@
     }
   });
 
-  section('Banking');
-  function bankedTurnSample(id, banked, sOffset) {
+
+  check('a loop rolls into its own lean instead of stepping into it', () => {
+    /* A loop leans at the bottom, where it also steps sideways to line its exit
+       up with the grid: that step is a horizontal bend and leaning into it is
+       what keeps it from being a shove in the ribs. The lean used to arrive in
+       one sample at the joint, because the frame took "up" straight from the
+       loop's curvature — which is right in the body and pure noise at the ends,
+       where the curvature vanishes and normalising it gives whatever direction
+       the rounding left behind. */
     RC.resetTrack();
+    for (const id of ['flat', 'flat', 'loop-right', 'flat', 'flat']) {
+      if (!RC.place(id)) return `${id} refused`;
+    }
+    const pts = RC.trackPath().pts;
+    const loop = pts.filter(p => p.def.kind === 'loop');
+    if (!loop.length) return 'no loop on the track';
+
+    // It does lean somewhere: the bottom, where the sideways step is laid on.
+    const lean = Math.max(...loop.map(p => Math.abs(p.bank)));
+    if (!(lean > 0.02)) {
+      return `the loop never leans at all (peak ${lean.toFixed(4)} rad) — ` +
+             `it is taking its sideways step square`;
+    }
+
+    /* THE FRAME MUST NOT JUMP AT EITHER JOINT, which is what actually went
+       wrong: on the straight, "up" is world up; on the loop's first sample it
+       was the direction of a curvature vector that has not started yet, so it
+       was whatever the rounding left. What a joint may legitimately move by is
+       the roll limit plus the track's own bending over the gap between two
+       samples — anything past that is a step. */
+    const idx = [];
+    for (let n = 0; n < pts.length; n++) if (pts[n].def.kind === 'loop') idx.push(n);
+    for (const n of [idx[0], idx[idx.length - 1] + 1]) {
+      if (!(n > 0 && n < pts.length)) continue;
+      const ds = pts[n].s - pts[n - 1].s;
+      const k = Math.hypot(pts[n].kx, pts[n].ky, pts[n].kz);
+      const allow = (2 * RC.ROLL_RATE + k) * ds + 1e-6;
+      const a = RC.carFrame(pts[n - 1]).u, b = RC.carFrame(pts[n]).u;
+      const dot = Math.max(-1, Math.min(1, a.x * b.x + a.y * b.y + a.z * b.z));
+      const moved = Math.acos(dot);
+      if (moved > allow) {
+        return `the frame steps ${(moved * 180 / Math.PI).toFixed(1)} deg at the loop's ` +
+               `joint at ${pts[n].s.toFixed(1)} m, where ` +
+               `${(allow * 180 / Math.PI).toFixed(1)} is all the roll and the bend account for`;
+      }
+    }
+
+    // And it gets there at a rate the track could physically twist at. The
+    // whole point: rolled in over the straight, not stepped into at the joint.
+    for (let n = 1; n < pts.length; n++) {
+      const ds = pts[n].s - pts[n - 1].s;
+      if (ds <= 1e-9) continue;
+      const rate = Math.abs(pts[n].bank - pts[n - 1].bank) / ds;
+      if (rate > 2 * RC.ROLL_RATE * 1.001) {
+        return `the track twists at ${rate.toFixed(3)} rad/m at ${pts[n].s.toFixed(1)} m, ` +
+               `over the ${(2 * RC.ROLL_RATE).toFixed(3)} two overlapping rolls can need`;
+      }
+    }
+  });
+
+  check('a loop still turns the train over, and comes back level', () => {
+    // The frame's plane normal replaced its curvature as the seed for "up".
+    // In the body of the loop those agree, so the inversion must be untouched.
+    RC.resetTrack();
+    for (const id of ['flat', 'flat', 'loop-right', 'flat', 'flat']) {
+      if (!RC.place(id)) return `${id} refused`;
+    }
+    const pts = RC.trackPath().pts;
+    const loop = pts.filter(p => p.def.kind === 'loop');
+    let lowest = 1;
+    for (const p of loop) lowest = Math.min(lowest, RC.carFrame(p).u.z);
+    if (!(lowest < -0.9)) {
+      return `the most inverted the loop gets is u.z = ${lowest.toFixed(2)}, ` +
+             `so it never properly turns the train over`;
+    }
+    // And the straight track either side is the right way up.
+    for (const p of pts) {
+      if (p.def.kind === 'loop') continue;
+      if (RC.carFrame(p).u.z < 0.5) {
+        return `straight track at ${p.s.toFixed(1)} m has the train on its side or worse`;
+      }
+    }
+  });
+  section('Banking');
+  /* A sample four metres into a corner, on a track with three tiles of PLAIN
+     straight either side of it.
+
+     Not the station's three. A platform is pinned level whatever is built next
+     to it, and takes the first six metres of a corner's bank down with it — so
+     a corner laid straight off one reaches four metres in at about two thirds
+     of full bank, and every reading taken here would be of the clamp rather
+     than of the banking. */
+  function bankedTurnSample(id, banked, sOffset) {
+    RC.track.pieces = [];
+    RC.track.start = { i: 6, j: 20, dir: 0, k: 0, g: 0 };
+    RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
+    for (let n = 0; n < 3; n++) RC.place('flat');
     RC.place(id, { bank: banked });
+    for (let n = 0; n < 3; n++) RC.place('flat');
     const path = RC.trackPath();
     const turnStart = path.pts.find(p => p.def.kind === 'turn').s;
     return RC.pathAt(turnStart + (sOffset == null ? 4 : sOffset), false);
   }
 
-  check('banked pieces still start and finish level', () => {
-    // The whole reason bank never became part of the node state: a banked
-    // turn must join level track at both ends. That lives in the profile,
-    // which must be zero at t=0 and t=1 and full in the middle. The sampled
-    // path never includes t=0 (the joint is shared with the previous piece),
-    // so check the profile directly rather than the first sampled point.
+  check('a corner rolls in over the track before it, not inside itself', () => {
+    /* The bank profile is a TARGET — the bank the corner needs and where it
+       needs it — and what gets laid is the rate-limited version of it. So a
+       banked piece no longer starts and finishes level: the roll spills into
+       whatever is either side, which is what real coasters do and the only
+       place it can go. At SPIRAL_THETA 0.05 the easement is six per cent of
+       the piece, and 45 degrees inside 1.4 m of it is 473 deg/s.
+
+       The target itself is unchanged and still has to be level at both ends
+       and full in the middle. */
     if (RC.bankProfile(0) !== 0) return `bankProfile(0) = ${RC.bankProfile(0)}, expected 0`;
     if (RC.bankProfile(1) !== 0) return `bankProfile(1) = ${RC.bankProfile(1)}, expected 0`;
     if (!near(RC.bankProfile(0.5), 1, 1e-9)) return `bankProfile(0.5) = ${RC.bankProfile(0.5)}`;
 
-    RC.resetTrack();
-    RC.place('turn-right-tight', { bank: true });
+    /* Three tiles of PLAIN straight track ahead of the corner. Not the
+       station's three: a platform is pinned level whatever is next to it, so
+       building this off one would be testing the clamp instead. */
+    RC.track.pieces = [];
+    RC.track.start = { i: 6, j: 20, dir: 0, k: 0, g: 0 };
+    RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
+    for (const id of ['flat', 'flat', 'flat']) if (!RC.place(id)) return `${id} refused`;
+    if (!RC.place('turn-right-tight', { bank: true })) return 'banked turn refused';
+    RC.place('flat');
     RC.place('flat');
     const pts = RC.trackPath().pts;
     const turn = pts.filter(p => p.def.kind === 'turn');
@@ -2583,17 +2842,35 @@
     if (!near(peak, RC.BANK_ANGLE, 1e-9)) {
       return `peak bank is ${(peak * 180 / Math.PI).toFixed(1)} deg, expected 45`;
     }
-    // The sampled ends sit near, not at, t=0 and t=1, so the ramp should have
-    // them well short of full bank.
-    const ts = turn.map(p => p.t);
-    const firstBank = Math.abs(turn[ts.indexOf(Math.min(...ts))].bank);
-    const lastBank = Math.abs(turn[ts.indexOf(Math.max(...ts))].bank);
-    if (firstBank > RC.BANK_ANGLE * 0.4) return `turn begins already at ${firstBank.toFixed(3)} rad`;
-    if (lastBank > RC.BANK_ANGLE * 0.4) return `turn ends still at ${lastBank.toFixed(3)} rad`;
 
-    for (const p of pts) {
-      if (p.def.kind !== 'turn' && !near(p.bank, 0, 1e-9)) {
-        return 'straight track picked up a bank angle';
+    // The straight ahead of it is already leaning by the time it gets there.
+    const joint = Math.min(...turn.map(p => p.s));
+    const before = pts.filter(p => p.def.kind !== 'turn' && p.s < joint);
+    const lean = Math.max(...before.map(p => Math.abs(p.bank)));
+    if (!(lean > RC.BANK_ANGLE * 0.3)) {
+      return `the track ahead of the corner only reaches ${lean.toFixed(3)} rad — ` +
+             `the roll is still happening inside the corner`;
+    }
+
+    // And it is level again further back: the roll takes what it needs of the
+    // straight and no more.
+    const reach = RC.BANK_ANGLE / RC.ROLL_RATE;
+    for (const p of before) {
+      if (p.s < joint - reach && !near(p.bank, 0, 1e-9)) {
+        return `the track is banked ${p.bank.toFixed(3)} rad at ${(joint - p.s).toFixed(1)} m ` +
+               `ahead of the corner, further out than the ${reach.toFixed(1)} m the roll needs`;
+      }
+    }
+
+    // And nowhere does it twist faster than it is allowed to. (One corner, so
+    // no S-bend crossing, where two opposite rolls legitimately overlap.)
+    for (let n = 1; n < pts.length; n++) {
+      const ds = pts[n].s - pts[n - 1].s;
+      if (ds <= 1e-9) continue;
+      const rate = Math.abs(pts[n].bank - pts[n - 1].bank) / ds;
+      if (rate > RC.ROLL_RATE * 1.001) {
+        return `the track twists at ${rate.toFixed(3)} rad/m at ${pts[n].s.toFixed(1)} m, ` +
+               `over the ${RC.ROLL_RATE.toFixed(3)} allowed`;
       }
     }
   });
@@ -2652,10 +2929,9 @@
     }
   });
 
-  check('the roll arrives exactly as fast as the bend does', () => {
-    /* The whole of the bank profile now: bank is the fraction of full curvature
-       the turn has reached, so the train rolls into the corner THROUGH the
-       spiral and is at full bank precisely when the full sideways force is.
+  check('the roll never arrives later than the bend does', () => {
+    /* Bank follows curvature: the train rolls into the corner THROUGH the
+       spiral, and is never short of bank when the sideways force arrives.
 
        It used to be a ramp of its own over the first and last quarter of the
        piece, while curvature arrived in one step at the joint — so the entry of
@@ -2664,7 +2940,14 @@
        against the path's OWN reported curvature rather than against the profile
        function, so the two have to agree about the shape rather than agreeing
        with themselves. */
-    RC.resetTrack();
+    /* Off plain track rather than off the station: a platform is pinned level
+       and takes the first six metres of the corner's bank down with it, which
+       is the one place bank IS allowed to arrive later than the bend. */
+    RC.track.pieces = [];
+    RC.track.start = { i: 6, j: 20, dir: 0, k: 0, g: 0 };
+    RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
+    for (const id of ['flat', 'flat', 'flat']) if (!RC.place(id)) return `${id} refused`;
     if (!RC.place('turn-right-tight', { bank: true })) return 'banked turn refused';
     RC.place('flat');
     const turnPts = RC.trackPath().pts.filter(p => p.def.kind === 'turn');
@@ -2679,9 +2962,13 @@
       if (p.t < 1e-9 || p.t > 1 - 1e-9) continue;
       const want = Math.abs(p.kLat) / peakK;
       const got = Math.abs(p.bank) / RC.BANK_ANGLE;
-      if (Math.abs(got - want) > 0.05) {
+      /* NEVER LESS, rather than equal. The roll is rate-limited now and rolls
+         in over the straight before the corner, so by the time the bend starts
+         the bank is ahead of it — which is the point, and is what a real ride
+         does. Early is free; late is the fault this test exists for. */
+      if (got < want - 0.05) {
         return `at t = ${p.t.toFixed(3)} the track has reached ${(100 * want).toFixed(0)}% ` +
-               `of its bend but ${(100 * got).toFixed(0)}% of its bank`;
+               `of its bend but only ${(100 * got).toFixed(0)}% of its bank`;
       }
     }
   });
@@ -2728,17 +3015,34 @@
       }
       if (!(p.bank > 0)) return 'the bend banks the wrong way for a right-hander';
     }
-    // It still joins level track level at both ends, as any banked piece must.
+    /* It does NOT join level track level any more — the roll is rate-limited
+       and takes what it needs of the straight either side, which is the whole
+       of "a corner rolls in over the track before it". What still has to hold
+       is that it takes no MORE than it needs: the station's three tiles ahead
+       of the bend give room to see the far end of them lying flat. */
+    const joint = Math.min(...turnPts.map(p => p.s));
+    const reach = RC.BANK_ANGLE / RC.ROLL_RATE;
     for (const p of RC.trackPath().pts) {
-      if (p.def.kind !== 'turn' && !near(p.bank, 0, 1e-9)) {
-        return 'straight track picked up a bank angle';
+      if (p.def.kind === 'turn' || p.s >= joint - reach) continue;
+      if (!near(p.bank, 0, 1e-9)) {
+        return `straight track is banked ${p.bank.toFixed(3)} rad ` +
+               `${(joint - p.s).toFixed(1)} m ahead of the bend, beyond the ` +
+               `${reach.toFixed(1)} m the roll needs`;
       }
     }
   });
 
   check('an S-bend of opposite banked turns still rolls through level', () => {
-    // Right then left: the bank must pass through zero at the joint, because
-    // it cannot flip from full-right to full-left instantly.
+    /* Right then left: the bank must pass through zero at the joint, because
+       it cannot flip from full-right to full-left instantly.
+
+       It is also the one place the roll limit cannot hold its own rate. The
+       two rolls are dilated separately and added, so at the crossing both are
+       moving and the sum goes at up to twice ROLL_RATE — 90 degrees to cross
+       with nothing between the halves to cross it in. That is honest rather
+       than a lapse: it is exactly why real layouts put a straight between
+       opposite banked turns, and the price shows up in lateral g. Bounded
+       here, so it stays twice and does not quietly become ten times. */
     RC.resetTrack();
     RC.place('turn-right-tight', { bank: true });
     RC.place('turn-left-tight', { bank: true });
@@ -2759,6 +3063,45 @@
     const second = turnPts.find(p => p.pi === pis[1] && p.t > 0.4 && p.t < 0.6);
     if (!(first.bank * second.bank < 0)) {
       return `the two turns do not bank opposite ways (${first.bank.toFixed(2)}, ${second.bank.toFixed(2)})`;
+    }
+
+    // Twice the rate at the crossing, and nowhere more than that.
+    for (let n = 1; n < pts.length; n++) {
+      const ds = pts[n].s - pts[n - 1].s;
+      if (ds <= 1e-9) continue;
+      const rate = Math.abs(pts[n].bank - pts[n - 1].bank) / ds;
+      if (rate > 2 * RC.ROLL_RATE * 1.001) {
+        return `the S-bend twists at ${rate.toFixed(3)} rad/m, over the ` +
+               `${(2 * RC.ROLL_RATE).toFixed(3)} two opposite rolls can need`;
+      }
+    }
+  });
+
+  check('a station is never banked, whatever is built next to it', () => {
+    /* The one piece of track a train stands still on and people walk onto, so
+       a tilted platform is not a stylistic matter. Rolling into a corner takes
+       six metres, and a corner laid straight off the platform used to take
+       them out of the platform — the last tile of it leaned.
+
+       Built the awkward way round on purpose: the roll spills BACKWARDS into
+       whatever precedes a corner, and what precedes this one is the station. */
+    RC.resetTrack();
+    if (!RC.place('turn-right-wide', { bank: true })) return 'banked turn refused';
+    const pts = RC.trackPath().pts;
+    let platform = 0;
+    for (const p of pts) {
+      if (!p.def.station) continue;
+      platform++;
+      if (Math.abs(p.bank) > 1e-9) {
+        return `the platform leans ${p.bank.toFixed(3)} rad at ${p.s.toFixed(1)} m`;
+      }
+    }
+    if (!platform) return 'no station on the track to check';
+
+    // And the corner still gets its bank; it just has to find it further on.
+    const peak = Math.max(...pts.filter(p => p.def.kind === 'turn').map(p => Math.abs(p.bank)));
+    if (!near(peak, RC.BANK_ANGLE, 1e-9)) {
+      return `the corner only reaches ${(peak * 180 / Math.PI).toFixed(1)} deg of bank`;
     }
   });
 
@@ -3611,7 +3954,20 @@
     if (climbs < 3) return `only ${climbs} climbs — expected the lift plus two hills`;
     if (falls < 3) return `only ${falls} descents — expected three drops`;
 
-    // Each hill must be lower than the last, or the train cannot crest it.
+    /* Every hill after the lift must be below the LIFT, which is where all the
+       ride's energy comes from. That is the real constraint, and it is the one
+       conservation imposes.
+
+       It used to require each hill to be lower than the one before it, which
+       held while every hill here was placed by hand and stopped holding the
+       moment the solver contributed one: the finisher lifts the last corner as
+       high as the train can still afford, and after the 1 m airtime hill —
+       deliberately the smallest thing on the ride — that is higher, not lower.
+       Descending peaks were only ever a proxy for "the train can crest it", and
+       a wrong one: what lets a train over a hill is the energy it has at the
+       bottom of the drop before it, not the height of the last hill it went
+       over. Whether it really crests them is settled properly by the tests
+       that run the ride. */
     const peaks = [];
     let h = pts[0].z;
     for (const r of runs) {
@@ -3619,8 +3975,9 @@
       if (r.dir > 0) peaks.push(h);
     }
     for (let n = 1; n < peaks.length; n++) {
-      if (peaks[n] >= peaks[n - 1]) {
-        return `hill ${n + 1} reaches ${peaks[n]} m, no lower than the ${peaks[n - 1]} m before it`;
+      if (peaks[n] >= peaks[0]) {
+        return `hill ${n + 1} reaches ${peaks[n]} levels, as high as the ` +
+               `${peaks[0]} the lift climbs to`;
       }
     }
   });
@@ -3756,16 +4113,141 @@
     }
   });
 
-  check('the presets with height to spare come back with a raised corner', () => {
-    // Both of these arrive at the finisher with real height unspent, so both
-    // should get the good ending rather than the flat crawl. `first-drop` is
-    // deliberately not in the list: spending the lot is the whole idea of it,
-    // and whether anything is left over is genuinely close.
-    for (const key of ['gentle-hills', 'looper']) {
+  check('a preset with height to spare comes back with a raised corner', () => {
+    /* `first-drop` is the only one of the three, and the reason is worth
+       stating because it is not the obvious one.
+
+       The finisher charges the filler for crossing it, and drag goes as v^2, so
+       a train carrying 20 m of energy height sheds about 5 m per hundred metres
+       of track. What decides whether there is anything left to lift a corner
+       with is therefore the length of the WAY HOME, not the height of the lift.
+       first-drop finishes its airtime hill eight tiles from the platform and
+       has metres to spare; `looper` is taller and finishes nearly as close, but
+       it has spent a 380 m lap and a vertical loop getting there and arrives
+       with nothing; `gentle-hills` never had it, being a 6 m family ride.
+
+       So this holds the mechanism to the one preset the physics says can
+       afford it, rather than to a wish about the other two. */
+    const res = RC.loadPrefab('first-drop');
+    if (!res.ok) return res.why;
+    if (!res.shaped) return 'first-drop closed flat, with no raised corner';
+    if (!(res.crest > 0)) return `it reports a corner ${res.crest} m above the station`;
+  });
+
+  check('the finisher leaves a straight run into the station', () => {
+    /* Every corner the filler lays is banked, and a platform is pinned level —
+       so a corner laid against one has its roll cut off exactly where the
+       train is arriving fastest. The filler stops short and walks in straight
+       instead. Twelve metres, where the roll needs six. */
+    const need = RC.BANK_ANGLE / RC.ROLL_RATE;
+    for (const key of ['first-drop', 'gentle-hills', 'looper']) {
       const res = RC.loadPrefab(key);
       if (!res.ok) return `${key}: ${res.why}`;
-      if (!res.shaped) return `${key} closed flat, with no raised corner`;
-      if (!(res.crest > 0)) return `${key} reports a corner ${res.crest} m above the station`;
+      const total = RC.trackPath().total;
+      let lastTurn = null;
+      for (const sp of RC.pieceSpans()) {
+        if (RC.pieceDef(sp.defId).kind === 'turn') lastTurn = sp;
+      }
+      if (!lastTurn) continue;
+      const gap = total - lastTurn.s1;
+      if (gap < need) {
+        return `${key}: its last corner ends ${gap.toFixed(1)} m from the platform, ` +
+               `inside the ${need.toFixed(1)} m a roll needs`;
+      }
+    }
+  });
+
+  check('gentle hills has hills on every side of the park', () => {
+    /* Two of its four sides used to be bare flat track, on a ride whose entire
+       point is hills. They cost almost nothing: a hill comes back to the height
+       it left, so all it takes is the little extra length that sloping the
+       tiles adds. */
+    RC.loadPrefab('gentle-hills');
+    const pts = RC.trackPath().pts;
+
+    // Monotonic runs of at least a metre, so flat track and rounding are not
+    // mistaken for hills.
+    const climbs = [];
+    let dir = 0, from = pts[0].z;
+    for (let n = 1; n < pts.length; n++) {
+      const d = Math.sign(pts[n].z - pts[n - 1].z);
+      if (d === 0) continue;
+      if (d !== dir) {
+        if (dir > 0 && pts[n - 1].z - from >= 2) climbs.push(pts[n - 1].z - from);
+        if (dir !== 0) from = pts[n - 1].z;
+        dir = d;
+      }
+    }
+    if (dir > 0 && pts[pts.length - 1].z - from >= 2) climbs.push(pts[pts.length - 1].z - from);
+
+    // The lift, then a hill on each of the other three sides — four in all,
+    // and the last side carries two hops.
+    if (climbs.length < 5) {
+      return `${climbs.length} climbs of a metre or more: a lift and ${climbs.length - 1} hills`;
+    }
+    // Nothing after the lift may reach it, or the train could not crest it.
+    for (let n = 1; n < climbs.length; n++) {
+      if (climbs[n] >= climbs[0]) {
+        return `hill ${n} climbs ${climbs[n]} levels, as much as the lift's ${climbs[0]}`;
+      }
+    }
+  });
+
+  check('looper banks the corners it takes at speed, and hills the run home', () => {
+    /* Out of the loop the train still has the whole 18 m of lift in it, which
+       on the ground is 19 m/s. An unbanked wide corner bends at 14.3 m: 2.6 g
+       sideways, past what the report will pass. And twenty-six tiles of flat
+       ground is a waste of the same 18 m. */
+    RC.loadPrefab('looper');
+    const pieces = RC.track.pieces;
+    const loopIdx = pieces.findIndex(p => RC.pieceDef(p.defId).kind === 'loop');
+    if (loopIdx < 0) return 'no loop on looper';
+
+    let turns = 0;
+    for (let n = loopIdx + 1; n < pieces.length; n++) {
+      const def = RC.pieceDef(pieces[n].defId);
+      if (def.kind !== 'turn') continue;
+      turns++;
+      if (!pieces[n].bank) {
+        return `the ${def.label} at piece ${n}, after the loop, is unbanked`;
+      }
+    }
+    if (turns < 2) return `${turns} corners after the loop, expected the two it turns through`;
+
+    // And the ground it covers on the way home is not flat.
+    let high = 0;
+    for (const p of RC.trackPath().pts) {
+      if (p.pi > loopIdx) high = Math.max(high, p.z);
+    }
+    if (!(high * RC.LEVEL_M >= 3)) {
+      return `the highest the track gets after the loop is ${(high * RC.LEVEL_M).toFixed(1)} m`;
+    }
+  });
+
+  check('looper rides its loop and its corners inside the limits', () => {
+    /* The reason the corners are banked, measured rather than asserted. Run
+       with no friction, which is the fastest it can ever take them. */
+    RC.loadPrefab('looper');
+    RC.sim.friction = false;
+    RC.resetSim();
+    runFor(240);
+    const { maxV, maxLatG, maxVertG, minVertG } = RC.sim;
+    if (![maxV, maxLatG, maxVertG, minVertG].every(Number.isFinite)) {
+      return 'a ride statistic is NaN or infinite';
+    }
+    if (maxLatG > RC.G_LIMITS.latExtreme) {
+      return `lateral ${maxLatG.toFixed(2)} g — the report calls that violent`;
+    }
+    /* Vertical is held to the EXTREME figure rather than the high one. The
+       bottom of a 13.5 m loop taken at 19 m/s is heavy by design and always
+       was; this check is about the corners and the hills either side of it,
+       and holding the loop to a limit nobody has asked it to meet would only
+       make it fail for the wrong reason. */
+    if (maxVertG > RC.G_LIMITS.vertExtreme) {
+      return `vertical ${maxVertG.toFixed(2)} g, beyond anything a real coaster pulls`;
+    }
+    if (minVertG < RC.G_LIMITS.airtimeHard) {
+      return `airtime ${minVertG.toFixed(2)} g — past what a restraint is meant to hold`;
     }
   });
   section('Train and losses');
@@ -4474,10 +4956,12 @@
     }
     // Friction's constants are noise when it is off, so they stay out.
     if (html.indexOf('Rolling resistance') >= 0) return 'mu is listed while friction is off';
-    // This ride has a chain and brakes, so those speeds matter and are shown.
+    /* A drive system's speed is listed when the track has one and not when it
+       does not. This ride has a chain and nothing else — it stopped needing a
+       brake run once the station solved for its own braking — so the other two
+       must both stay out. */
     if (html.indexOf('Chain lift speed') < 0) return 'the lift speed is missing';
-    if (html.indexOf('Brake speed') < 0) return 'the brake speed is missing';
-    // It has no launch, so that one must not appear.
+    if (html.indexOf('Brake speed') >= 0) return 'a brake speed is listed on a ride with no brake run';
     if (html.indexOf('Launch speed') >= 0) return 'a launch speed is listed on a ride with no launch';
 
     // With friction on, its constants come with it.
@@ -4495,6 +4979,20 @@
 
     RC.sim.friction = false;
     RC.sim.cars = 4;
+  });
+
+  check('a brake run puts its own speed in the settings', () => {
+    /* Built by hand, because no preset carries a brake any more — first-drop
+       had the last one and stopped needing it when the station started solving
+       for its own braking. The rule under test is unchanged: a drive system's
+       speed is listed exactly when the track has that drive system. */
+    RC.resetTrack();
+    if (!RC.place('brake')) return 'brake refused';
+    if (!RC.completeTrack().ok) return 'could not close a circuit round a brake run';
+    RC.resetSim();
+    const html = RC.reportHTML();
+    if (html.indexOf('Brake speed') < 0) return 'the brake speed is missing on a ride with a brake run';
+    if (html.indexOf('Chain lift speed') >= 0) return 'a lift speed is listed on a ride with no chain';
   });
 
   check('the settings show before the train has been run', () => {

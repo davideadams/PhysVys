@@ -750,26 +750,46 @@
      student can check whether the corner they just laid can carry the speed
      they are about to arrive at, instead of finding out from a warning.
 
-     "Honest to" is the speed at which the first published limit is broken
-     somewhere on the track — see RC.trackGeometry. If the run beat it, that is
-     said plainly, because a ride judged against limits its own pieces cannot
-     meet is the problem this readout exists to make visible. */
+     The limit line asks the question a student actually has: of everywhere on
+     the track, where does the speed the track can DELIVER come closest to what
+     the shape can take? Both halves are worked out from the geometry and the
+     energy budget, so it is available before the train has moved.
+
+     It used to report RC.trackGeometry's honestV — the fastest a train could
+     cross this shape anywhere without breaking a limit. That is a true fact
+     about the track and useless on its own, because it compares a limit that
+     applies at ONE place against a speed reached at another. On first-drop it
+     named the unbanked corner at the top of the lift, whose figure is 14.5 m/s
+     and which the train crosses at four, and then announced that a ride
+     reaching 17.4 m/s was over its limits. It was not: the run's own g figures
+     were comfortably inside them the whole way round. */
   function geometrySection() {
     const geo = RC.trackGeometry();
-    const sim = RC.sim;
     // A park with nothing but level straight track in it has no shape to
     // report, and three em dashes would say less than nothing.
     if (geo.crestR === null && geo.valleyR === null && geo.turnR === null) return '';
-    const R = (r, s) => r === null ? '—' : r.toFixed(1) + ' m' + onFeature(s);
+
+    /* Named only when one feature holds the record. Ties are the normal case —
+       every flat-to-gentle transition bends at the same radius — and naming an
+       arbitrary member of a dozen is worse than counting them. */
+    const R = (r, s, n) => {
+      if (r === null) return '—';
+      const where = n > 1
+        ? ` <span class="muted">at ${n} places</span>`
+        : onFeature(s);
+      return r.toFixed(1) + ' m' + where;
+    };
 
     let html = `<div class="report-hd">Shape</div>`;
-    html += row('Tightest crest', R(geo.crestR, geo.crestS));
-    html += row('Tightest valley', R(geo.valleyR, geo.valleyS));
-    html += row('Tightest turn', R(geo.turnR, geo.turnS));
-    if (geo.honestV !== null) {
-      html += row('Within the limits to',
-                  `${geo.honestV.toFixed(1)} m/s <span class="muted">` +
-                  `(${geo.honestWhy})</span>${onFeature(geo.honestS)}`);
+    html += row('Tightest crest', R(geo.crestR, geo.crestS, geo.crestN));
+    html += row('Tightest valley', R(geo.valleyR, geo.valleyS, geo.valleyN));
+    html += row('Tightest turn', R(geo.turnR, geo.turnS, geo.turnN));
+    if (geo.tightV !== null) {
+      const over = geo.tightHead < 0;
+      html += row(over ? 'Over the limits at' : 'Closest to the limits',
+                  `${geo.tightV.toFixed(1)} m/s <span class="muted">against ` +
+                  `${geo.tightCap.toFixed(1)} ${geo.tightWhy}</span>` +
+                  onFeature(geo.tightS));
     }
 
     // The worst jolts this run actually took. A joint the train never reached
@@ -792,10 +812,17 @@
               `it. Real track eases every joint in and out instead.</p>`;
     }
 
-    if (geo.honestV !== null && sim.maxV > geo.honestV + 0.05) {
-      html += `<p class="report-warn">This track reached ${sim.maxV.toFixed(1)} m/s ` +
-              `but its shape only stays within the limits to ` +
-              `${geo.honestV.toFixed(1)} m/s.</p>`;
+    /* Warned on where the track can outrun its own shape, not on where the run
+       happened to be fast. The two are different questions and only this one
+       points at something the student can go and fix. */
+    if (geo.tightHead !== null && geo.tightHead < -0.05) {
+      let f = null;
+      try { f = RC.featureAt(geo.tightS); } catch (e) { f = null; }
+      const where = f ? ` on ${f.label}` : ` at ${geo.tightS.toFixed(0)} m`;
+      html += `<p class="report-warn">The track can reach ` +
+              `${geo.tightV.toFixed(1)} m/s${where}, where its shape takes ` +
+              `${geo.tightCap.toFixed(1)} ${geo.tightWhy}. ` +
+              `Bank it, widen it, or arrive there slower.</p>`;
     }
     return html;
   }

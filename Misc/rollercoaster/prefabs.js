@@ -145,35 +145,69 @@
 
     'gentle-hills': {
       name: 'Gentle Hills',
-      blurb: 'A tame family ride — a modest lift and a couple of small hills, no big forces.',
+      blurb: 'A tame family ride — a modest lift, then a run of small hills that get ' +
+             'smaller as the speed runs out.',
       finish: true,
       /* The only preset that stays on GENTLE throughout — 9.5 degrees, a metre
          of climb a tile. It is the shallowest thing the palette offers and the
-         whole character of the ride. */
+         whole character of the ride.
+
+         FOUR HILLS, GETTING SMALLER. Two of the four sides used to be bare
+         flat track, which on a ride whose entire point is hills was a wasted
+         half of the park. They cost almost nothing to add: a hill returns to
+         the height it started at, so all it takes from the budget is the
+         little extra length that sloping the tiles adds — a hill over six
+         tiles is 36.5 m of track where six flat ones are 36.
+
+         The sizes descend because the speed does, and at this grade a hill's
+         size is just the number of tiles: 2 + 2n levels over 2 + n tiles each
+         way. So two metres wants three tiles a side and one metre wants two,
+         and the tile counts per side are unchanged from the flat version —
+         which matters, because the solver closes this preset and moving the
+         last corner would move where it has to close from. */
       build: [].concat(
-        // Side 1 (+i): lift to 6 m.
+        // Side 1 (+i), 7 tiles: lift to 6 m.
         [{ id: 'flat-to-gentle-up', lift: true }],
         rep(5, 'gentle-up', { lift: true }),
         [{ id: 'gentle-up-to-flat', lift: true }],
         [{ id: 'turn-right-wide' }],
-        // Side 2 (+j): down to the ground, over a low hill, back to the ground.
+        // Side 2 (+j), 13 tiles: down to the ground, then a 2 m hill.
         [{ id: 'flat-to-gentle-down' }],
         rep(5, 'gentle-down'),
         [{ id: 'gentle-down-to-flat' }],
-        // A 2 m hill, which needs only three tiles at this grade.
         [{ id: 'flat-to-gentle-up' }, { id: 'gentle-up' }, { id: 'gentle-up-to-flat' }],
         [{ id: 'flat-to-gentle-down' }, { id: 'gentle-down' }, { id: 'gentle-down-to-flat' }],
         [{ id: 'turn-right-wide' }],
-        // Side 3 (-i): back across, and round toward the station.
-        rep(9, 'flat'),
+        /* Side 3 (-i), 12 tiles: another 2 m hill, a 1 m hop, two tiles to
+           settle. THREE TILES LONGER THAN THE PARK NEEDS, and that is the
+           point: the return leg has to come at the platform from far enough
+           back along the way it faces to walk in straight, and nine tiles put
+           it too close. Twelve carries the far side of the park out to i = 13,
+           and side 4 comes back down i = 11 — three tiles clear of the two the
+           straight approach wants. */
+        [{ id: 'flat-to-gentle-up' }, { id: 'gentle-up' }, { id: 'gentle-up-to-flat' }],
+        [{ id: 'flat-to-gentle-down' }, { id: 'gentle-down' }, { id: 'gentle-down-to-flat' }],
+        [{ id: 'flat-to-gentle-up' }, { id: 'gentle-up-to-flat' }],
+        [{ id: 'flat-to-gentle-down' }, { id: 'gentle-down-to-flat' }],
+        rep(2, 'flat'),
         [{ id: 'turn-right-wide' }],
-        rep(12, 'flat')
+        /* Side 4 (-j), 13 tiles: two 1 m hops and the run down to the last
+           corner. It ends on the tile a single wide turn reaches the straight
+           approach from, so the solver has one corner and two flats to lay —
+           which is as much as it should ever be asked for, and it will still
+           find its own way if a piece ever changes shape underneath it. */
+        [{ id: 'flat-to-gentle-up' }, { id: 'gentle-up-to-flat' }],
+        [{ id: 'flat-to-gentle-down' }, { id: 'gentle-down-to-flat' }],
+        [{ id: 'flat-to-gentle-up' }, { id: 'gentle-up-to-flat' }],
+        [{ id: 'flat-to-gentle-down' }, { id: 'gentle-down-to-flat' }],
+        rep(5, 'flat')
       )
     },
 
     'looper': {
       name: 'Looper',
-      blurb: 'A lift and a long drop feed a vertical loop, then the track curves back to the station.',
+      blurb: 'A lift and a long drop feed a vertical loop, then banked turns and three ' +
+             'airtime hills bring it back to the station.',
       finish: true,
       /* Its own station, well down one side of the park, because this one needs
          the room. The loop is 13.5 m tall and needs about 17.3 m/s at the
@@ -200,19 +234,91 @@
         [{ id: 'gentle-up-to-flat', lift: true }],
         [{ id: 'flat' }],
         [{ id: 'turn-right-wide' }],
-        // Side 2 (+j): the whole 18 m back down, then straight into the loop.
+        /* Side 2 (+j), 18 tiles: 16 m down, the loop, then the last 2 m down.
+
+           THE LOOP SITS TWO METRES UP, partway down the drop rather than at the
+           bottom of it, and the two metres are worth more than they look. A
+           loop takes a sideways step at its bottom to line its exit up with the
+           grid, and that step is a horizontal bend the train has to be rolled
+           into and back out of inside a few metres. The roll is rate-limited
+           like every other, so what it cannot deliver is left over as sideways
+           force — and force goes as v^2. Two metres off the entry speed takes
+           about a tenth off it.
+
+           Two, and not more, because the loop still has to be got round: it is
+           13.5 m tall and wants 17.3 m/s at the bottom to hold the train
+           through the top. From 2 m up it enters at 18.2, which is margin
+           enough to survive the friction switch. From 4 m it would enter at
+           17.3 exactly, which is no margin at all — the loop's own requirement
+           is what stops this going further, not the park. */
         [{ id: 'flat-to-gentle-down' }, { id: 'gentle-to-medium-down' }],
-        rep(7, 'medium-down'),
+        rep(6, 'medium-down'),
         [{ id: 'medium-to-gentle-down' }, { id: 'gentle-down-to-flat' }],
         [{ id: 'flat' }],
         [{ id: 'loop-right' }],
+        [{ id: 'flat-to-gentle-down' }, { id: 'gentle-down' },
+         { id: 'gentle-down-to-flat' }],
+        /* BANKED, both of the corners after the loop, and not for the look of
+           it. The train comes out of the loop with the whole 18 m still in it,
+           which on the ground is 19 m/s: a wide corner unbanked bends at 14.3 m
+           and that is 2.6 g sideways, well past what the report will pass.
+           Banked it is 1.2 g. The corner at the top of the lift is left
+           unbanked because the chain takes the train over it at 4 m/s, where
+           banking would only lean a crawling train inwards. */
+        [{ id: 'turn-right-wide', bank: true }],
+        /* Side 3 (-i), 16 tiles: a 4 m hill, a 2 m one, and two tiles to settle.
+
+           SHAPING, NOT AIRTIME, and the difference is worth being straight
+           about. transitionTiles solves every transition's length so that they
+           all land on the SAME curvature, which is the whole reason the palette
+           is predictable — and the consequence is that every crest in the
+           catalogue bends at about 24 m, so none of them lifts a rider below
+           roughly 15 m/s. This ride reaches its first hill at about 14, having
+           spent most of its lift on the loop. first-drop gets airtime because
+           its hill sits at the bottom of a 20 m drop; this one cannot, at any
+           size, and shrinking these would only make them crossed faster over
+           exactly the same crest.
+
+           They earn their place anyway: the run home was twenty-six tiles of
+           flat ground, and a hill costs nothing but the length that sloping the
+           tiles adds.
+
+           SIXTEEN TILES, six more than the park needs, and that is the part
+           that is load-bearing. It carries the far side out to i = 11 so side 4
+           comes down i = 9 — which is what leaves the solver room to turn the
+           last corner WIDE. */
+        [{ id: 'flat-to-gentle-up' }, { id: 'gentle-to-medium-up' },
+         { id: 'medium-to-gentle-up' }, { id: 'gentle-up-to-flat' }],
+        [{ id: 'flat-to-gentle-down' }, { id: 'gentle-to-medium-down' },
+         { id: 'medium-to-gentle-down' }, { id: 'gentle-down-to-flat' }],
+        [{ id: 'flat-to-gentle-up' }, { id: 'gentle-up' }, { id: 'gentle-up-to-flat' }],
+        [{ id: 'flat-to-gentle-down' }, { id: 'gentle-down' }, { id: 'gentle-down-to-flat' }],
         rep(2, 'flat'),
-        [{ id: 'turn-right-wide' }],
-        // Side 3 (-i): back across.
-        rep(10, 'flat'),
-        [{ id: 'turn-right-wide' }],
-        // Side 4 (-j): part way home; the solver closes the last corner.
-        rep(16, 'flat')
+        [{ id: 'turn-right-wide', bank: true }],
+        /* Side 4 (-j), 18 tiles: a 2 m hill, a 1 m hop, a 2 m hill, and two
+           tiles at ground level to finish on.
+
+           It ends where ONE WIDE CORNER reaches the straight approach into the
+           platform, so that is all the solver has to lay. That corner was the
+           whole problem: a tight one bends at 8.6 m, which banked is past the
+           report's sideways limit at 16.2 m/s, and the track reaches Turn 5 at
+           18.2. Raising the corner was tried first and does not work here —
+           whichever order the solver takes, the descent to platform height has
+           to happen somewhere in the last few tiles, and the corner ends up on
+           the ground either way. WIDTH is what fixes it: 14.3 m holds out to
+           20.9 m/s, which is clear of anything this ride can deliver.
+
+           Costing the tight corner more did not help either, and the report is
+           what said so — at ten it still laid one, because between side 4 and
+           the platform there were three tiles of i and a wide corner needs
+           three to turn in. There was no route to prefer. Now there is. */
+        [{ id: 'flat-to-gentle-up' }, { id: 'gentle-up' }, { id: 'gentle-up-to-flat' }],
+        [{ id: 'flat-to-gentle-down' }, { id: 'gentle-down' }, { id: 'gentle-down-to-flat' }],
+        [{ id: 'flat-to-gentle-up' }, { id: 'gentle-up-to-flat' }],
+        [{ id: 'flat-to-gentle-down' }, { id: 'gentle-down-to-flat' }],
+        [{ id: 'flat-to-gentle-up' }, { id: 'gentle-up' }, { id: 'gentle-up-to-flat' }],
+        [{ id: 'flat-to-gentle-down' }, { id: 'gentle-down' }, { id: 'gentle-down-to-flat' }],
+        rep(2, 'flat')
       )
     },
 
