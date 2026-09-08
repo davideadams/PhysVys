@@ -349,37 +349,59 @@
      leaves a straight approach so it never puts one there (see
      straightApproach); a student who builds one by hand gets an under-banked
      corner and the lateral g to go with it, which is the honest outcome. */
-  /* A LOOP'S OWN ROLL, worked out as a bank angle so that it goes through the
-     same rate limit as every other roll on the track.
 
-     A loop is not banked through its body — the track IS the bend there, and
-     the frame's plane normal already points into it. It is banked at the
-     BOTTOM, where the piece also steps sideways to line its exit up with the
-     grid. That step is a horizontal bend of its own, and leaning into it is
-     the difference between a loop entry and a shove in the ribs. The old frame
-     did it by pointing "up" straight at the total curvature, which banks the
-     step perfectly and arrives at that bank in a single sample.
+  /* A LOOP LEANS INTO ITS SIDEWAYS STEP, BUT ONLY SO FAR.
 
-     So: the angle from the loop's plane to its curvature, about the tangent.
-     Zero through the body, a lean over the bottom quarter where the sideways
-     step is laid on, and rate-limited afterwards like everything else — which
-     is what lets the roll start on the straight before the loop instead of at
-     the joint.
+     A loop steps one tile sideways at its bottom, because otherwise the
+     descending track runs through the ascending track — they cross at about
+     1.6 m up and 5.3 m along, and by 8 m up the descending branch is eight
+     metres behind. The step is what separates them, and it is a horizontal bend
+     the rider feels: 2.27 g on Looper with no lean at all.
 
-     DAMPED BY THE LOOP'S OWN BEND, the in-plane component — not by the total
+     A REAL LOOP DOES THE SAME THING at about a quarter of the size. Its exit
+     has to clear its entry too, but the offset it needs is the track's own
+     width — a metre or two — where a tile is six. The force we are dealing with
+     is mostly the grid, not the geometry.
+
+     CANCELLING IT ENTIRELY TAKES 44 DEGREES and does not work. At the bottom
+
+        lat.g = v^2.k_lat.cos(phi) - (v^2.k_loop - g).sin(phi)
+
+     which is zero at 44 degrees for the numbers this loop actually runs — but
+     the offset is laid with a smootherstep, whose curvature REVERSES half way
+     through, so the target swings 44 one way and 44 the other inside about
+     eight metres. That is eleven degrees a metre against a roll limit of seven
+     and a half: it cannot be followed, and what is not followed comes back as
+     sideways force anyway. Measured, the full lean gave 1.88 g — seventeen per
+     cent off the unbanked figure, for forty-four degrees of roll through the
+     loop's entry, which is as visible as it sounds.
+
+     SO IT IS CAPPED, and the cap does two things rather than one. It takes the
+     lean to where the arithmetic says 1.33 g, and it takes the SWING to 40
+     degrees over those same eight metres — five degrees a metre, which the roll
+     limit can follow. A target that can be followed is worth more than a larger
+     one that cannot, and that is the whole of why twenty beats forty-four.
+
+     It measures better than the arithmetic promised: with the cap in, the
+     loop is no longer the worst sideways force on the Looper preset — its own
+     corners are — and Shuttle Loop takes the same loop at launch speed for
+     1.03 g. Twenty is a knob rather than a derived figure; fifteen would come
+     in under the report's limit too, at about a quarter of a g more. */
+  const LOOP_BANK_MAX = 20 * Math.PI / 180;
+
+  /* Damped by the loop's own bend, the in-plane component — not by the total
      curvature. An angle measured from a plane means nothing until the bend in
      that plane exists, and at the very start of a loop it does not: the
      clothoid easement begins at zero curvature while the sideways step is
      already being laid on, so the angle there is ninety degrees and is an
      artefact of dividing one small number by a smaller one. Damping on the
      total let it through, and the lean peaked a metre into the piece with
-     nowhere to have rolled in from. Measured against the loop's own peak
-     rather than an absolute figure, since a loop can be resized. */
+     nowhere to have rolled in from. */
   const LOOP_BANK_KNEE = 0.2;
 
   function loopBank(pts) {
-    // Each loop's peak in-plane bend, so the damping below has something to be
-    // a fraction of. Its own curvature at the top, where nothing else is left.
+    // Each loop's peak in-plane bend, so the damping has something to be a
+    // fraction of. Measured per piece, since a loop can be resized.
     const peak = new Map();
     for (const p of pts) {
       if (!p.def || p.def.kind !== 'loop') continue;
@@ -398,6 +420,7 @@
       const fl = Math.hypot(fx, fy, fz) || 1;
       fx /= fl; fy /= fl; fz /= fl;
 
+      // The loop's own plane, the same seed buildFrames uses.
       const lat = D[(p.piece.node.dir + 1) & 3];
       let ux = -fz * lat[1], uy = fz * lat[0], uz = fx * lat[1] - fy * lat[0];
       const ul = Math.hypot(ux, uy, uz);
@@ -409,7 +432,8 @@
       if (knee <= 0) { p.bank = 0; continue; }
       const cu = p.kx * ux + p.ky * uy + p.kz * uz;
       const cr = p.kx * rx + p.ky * ry + p.kz * rz;
-      p.bank = Math.atan2(cr, cu) * Math.min(1, Math.abs(cu) / knee);
+      const want = Math.atan2(cr, cu) * Math.min(1, Math.abs(cu) / knee);
+      p.bank = Math.max(-LOOP_BANK_MAX, Math.min(LOOP_BANK_MAX, want));
     }
   }
 
@@ -699,14 +723,33 @@
      real target a student can aim a lift hill at — which is the exercise.
      13.5 m tall, and 5.1 g at the bottom at 20 m/s against 6.8 g before.
 
-     LOOP_LEN follows from it. The footprint has to hold 2R = 20 m, so four tiles
-     of 6 m rather than three. That used to cost shape: the bare teardrop reaches
-     only B*pi forward, about 10.2 m, so loopDrift had to smear the remaining
-     13.8 m across the bottom — more than the 10.8 m that phase 1 already found
-     marginal. Easing the ends fixed that as a side effect, since a clothoid runs
-     nearly straight where it meets the track: the shape now reaches 14.2 m of
-     its own accord and only 9.8 m is left to smear. */
-  const LOOP_LEN = 4;      // tiles advanced
+     LOOP_LEN IS WHAT THE SHAPE REACHES, rounded up: THREE tiles, not four.
+
+     It was four, priced at 2R = 20 m, and that figure was a rule of thumb
+     rather than a measurement. An eased loop reaches 1.416 R forward of its own
+     accord — 14.2 m at R = 10 — which fits in three tiles of 6 m with room to
+     spare. The fourth tile bought nothing and cost six metres of forward
+     advance that loopDrift had to smear across the bottom on top of what it
+     already owed.
+
+     THAT SMEAR IS NOT FREE, and where it lands is the whole of it. Where the
+     track is VERTICAL the drift's acceleration is entirely perpendicular to it
+     and therefore entirely curvature, and the ramp runs to t = 0.25, which is
+     phi = 87 degrees — so its bend arrives exactly where the loop stands up,
+     and there it ADDS to the teardrop's own. At four tiles, 9.8 m had to be
+     smeared: an added 0.124 /m against the shape's own 0.122, making a 4 m
+     radius where the shape has 8, and 6.8 g on the Looper preset out of a
+     shape designed for 5.1 at 20 m/s.
+
+     At three tiles only 3.8 m is smeared. The added bend goes with how much
+     there is to smear, so it falls to about 0.048 and that point comes back to
+     around 5 g. Nothing else about the loop changes.
+
+     A real loop has no equivalent of this, which is worth saying plainly: a
+     designer picks the g-force profile and integrates to get the shape, so
+     nothing is ever bolted onto a finished curve. The drift is the price of a
+     grid, and the way to pay less of it is to ask for fewer tiles. */
+  const LOOP_LEN = 3;      // tiles advanced — see LOOP_REACH_R
   const LOOP_LAT = 1;      // tiles sideways
   const LOOP_R = 10;       // metres — the bottom radius of curvature
   const LOOP_A = 0.35;     // top radius = LOOP_A * R; the teardrop's pointiness
@@ -807,6 +850,10 @@
      lifts the body clear of the ground before the teardrop starts, and the body
      then climbs from THETA rather than from nothing. About half a percent. */
   RC.loopHeight = (R, a) => loopShape(R, a == null ? LOOP_A : a).top;
+
+  /* How far forward a loop of this size reaches of its own accord, in metres,
+     before loopDrift stretches it to its footprint. */
+  RC.loopReach = (R, a) => loopShape(R, a == null ? LOOP_A : a).reach;
 
   function loop(id, label, side) {
     return {
@@ -988,31 +1035,44 @@
      the ascending side where the two forward speeds cancel. Confining the
      drift to the bottom, where the clothoid is already sweeping forward fast,
      leaves the entire upper body — sides and top — the gentle, undistorted
-     clothoid it should be. Holding it flat through the middle also keeps the
-     sideways offset constant across the top, so the top is planar and the
-     frame inverts cleanly. Smootherstep ramps keep it C^2 at the joins. */
+     clothoid it should be. Smootherstep ramps keep it C^2 at the joins.
+
+     THE SIDEWAYS OFFSET IS DRIVEN FROM HERE TOO, and three attempts to lay it
+     more gently have all made it worse. They are recorded because each was
+     reasoned from h/L^2 — curvature falls as the square of the length you
+     spread an offset over — and that reasoning is sound in isolation and wrong
+     here, for a reason worth understanding before trying a fourth.
+
+       0.25 -> 0.35 of t.  Asked for MORE, not less: t is not length. Through
+       the body the loop runs uniformly in TANGENT ANGLE and ds/dt collapses
+       towards the top, so the extra tenth of t bought almost no extra arc and
+       laid a slice of the offset across the little there was. 13 m -> 6.2 m.
+
+       One smootherstep across the loop's whole ARC LENGTH, which is closed
+       form and needs no table (the body's natural equation r = A + B cos phi
+       integrates to s = A.phi + B sin phi). By h/L^2 this should have gone from
+       13 m to 62 m. It went to 7.0 m, and took the vertical g at the bottom
+       from 5.4 to 6.5 with it.
+
+     WHY IT KEEPS FAILING: the offset does not act alone. The lateral part of
+     the curvature vector is
+
+        k_lat = [ lat'' - (r''.T).lat'/|r'| ] / |r'|^2
+
+     and the second term couples the sideways VELOCITY to the tangential
+     acceleration — which is large exactly where the forward drift is ramping
+     the speed. So laying sideways offset anywhere the forward drift is active
+     produces lateral curvature that has nothing to do with how gently the
+     offset itself is shaped, and h/L^2 predicts none of it. Spreading it wider
+     guarantees more overlap with the forward ramps, which is why every attempt
+     to loosen it has tightened it.
+
+     The two drifts sharing one profile is not an accident to be tidied away,
+     then: laying them together is what keeps lat' small wherever r''.T is not.
+     A fourth attempt would have to move the FORWARD drift as well, and that one
+     cannot move for the reasons above. */
   const LOOP_DRIFT_TAU = 0.25;
 
-  /* SPREADING THE SIDEWAYS OFFSET WIDER WAS TRIED AND IS WRONG, and the reason
-     is worth keeping because it is not the reason the block above gives.
-
-     The idea was sound as far as it went. A smootherstep's curvature reverses
-     half way through, so the offset asks the track to bank one way and then
-     back inside the bottom quarter, and what the roll limit cannot deliver is
-     left over as sideways force. Curvature goes as 1/L^2, so laying it over
-     0.35 of the loop instead of 0.25 ought to have asked for half the angle
-     over 1.4 times the distance.
-
-     IT ASKED FOR MORE. t is not distance. Through the body the loop runs
-     uniformly in TANGENT ANGLE, and ds/dt collapses towards the top where the
-     teardrop is tightest — so the extra tenth of t bought almost no extra
-     arc, and laid a slice of the offset across the little there was. The
-     sideways bend went from the loop's own 10 m to 6.2 m at t = 0.72, tighter
-     than anything in the catalogue, out of a change meant to loosen it.
-
-     Spreading it for real would mean spreading it in arc length, which needs
-     an s(t) table for the loop that nothing else here wants. Until something
-     does, the quarter stays. */
   function loopDrift(t) {
     const tau = LOOP_DRIFT_TAU;
     if (t < tau) return 0.5 * smootherstep(t / tau);
@@ -1296,9 +1356,8 @@
       pts[n].curv = Math.hypot(k[0], k[1], k[2]);
     }
 
-    /* A loop's roll has to wait for the curvature above, since that is what it
-       is measured against. A turn's does not, and is set as each sample is
-       laid.  */
+    /* A loop's lean has to wait for the curvature above, since that is what it
+       is measured against. A turn's does not, and is set as each sample is laid. */
     loopBank(pts);
 
     /* Rate-limit the roll before the frames are built from it, which is what
@@ -1368,8 +1427,10 @@
          The plane normal does not vanish. Taken a right angle round from the
          entry direction it gives world up at the bottom whichever way the loop
          faces, inverts cleanly at the top, and never once degenerates on the
-         way round. The roll that carries the frame from here to the bend is
-         held in pts[].bank like any other roll, and rate-limited with them. */
+         way round. What a loop leans on top of it is capped at twenty degrees
+         and comes from loopBank, for the sideways step it takes at the bottom;
+         a neighbouring corner's roll can reach a loop's first few metres too,
+         since the rate limit works along the track rather than piece by piece. */
       let ux, uy, uz;
       if (pts[n].def && pts[n].def.kind === 'loop') {
         const lat = D[(pts[n].piece.node.dir + 1) & 3];
@@ -2186,24 +2247,32 @@
      down to 6 m. Both directions now go through TILE_M. */
   /* The range a built loop may be resized through. LOOP_R_MAX has to leave the
      default loop room to GROW past its own footprint, or "a loop at the end
-     grows its footprint" stops being a thing that can happen: at 4 tiles the
-     footprint holds 2R = 24 m, so a 12 m ceiling meant the biggest loop fitted
-     exactly and the footprint never moved. 15 m needs five tiles. */
+     grows its footprint" stops being a thing that can happen: three tiles hold
+     12.7 m, so a 15 m ceiling still has somewhere to go. */
   const LOOP_R_MIN = 5, LOOP_R_MAX = 15, LOOP_R_STEP = 1;
   RC.LOOP_R_MIN = LOOP_R_MIN;
   RC.LOOP_R_MAX = LOOP_R_MAX;
   RC.LOOP_R_STEP = LOOP_R_STEP;
 
+  /* HOW FAR A LOOP REACHES FORWARD, as a multiple of its radius. Constant,
+     because every length in loopShape scales with R, so it can be measured once
+     off a unit loop rather than guessed at.
+
+     Both of the functions below used to price a footprint at 2R, which was a
+     rule of thumb and about 40% over. Pricing at the reach makes the cap mean
+     something exact: at the cap the shape lands on the tile boundary of its own
+     accord and loopDrift has NOTHING to smear, which is the best case for the
+     curvature it adds (see LOOP_LEN). Past the cap the smear would go negative
+     and fold the loop back on itself, which is what the cap is really for. */
+  const LOOP_REACH_R = loopShape(1, LOOP_A).reach;
+
   /* Smallest footprint (tiles) that holds a loop of radius R metres. */
   function loopFootprintFor(R, def) {
-    return Math.max(def.L, Math.ceil(2 * R / RC.TILE_M));
+    return Math.max(def.L, Math.ceil(R * LOOP_REACH_R / RC.TILE_M));
   }
-  /* Largest radius (metres) a fixed footprint of L tiles can hold. Deliberately
-     stricter than the shape needs: an eased loop reaches 1.416 R forward on its
-     own, so L tiles would hold R up to 0.706*L*TILE_M, but pricing it at 2R
-     leaves the drift room to work with rather than squeezing it to nothing. */
+  /* Largest radius (metres) a fixed footprint of L tiles can hold. */
   function loopMaxRForFootprint(L) {
-    return Math.min(LOOP_R_MAX, L * RC.TILE_M / 2);
+    return Math.min(LOOP_R_MAX, L * RC.TILE_M / LOOP_REACH_R);
   }
 
   RC.loopR = function (pieceIndex) {

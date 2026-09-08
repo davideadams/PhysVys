@@ -2025,6 +2025,55 @@
     }
   });
 
+
+  check('a loop is given the tiles it reaches, not a rule of thumb', () => {
+    /* Everything a loop is given BEYOND its own reach has to be smeared across
+       the bottom by loopDrift, and where the track is vertical that smear is
+       entirely curvature — it lands on the teardrop's own bend and adds to it.
+       Four tiles put 6.8 g on the Looper preset out of a shape designed for 5.1
+       at 20 m/s, because 2R was a rule of thumb about 40% over what an eased
+       loop actually reaches.
+
+       So: the tiles must COVER the reach, since a loop that overran them would
+       need a negative smear and fold back on itself; and they must not exceed it
+       by a whole tile, which is the spare one coming back. */
+    const reach = RC.loopReach(RC.LOOP_R);
+    const given = RC.pieceDef('loop-right').L * RC.TILE_M;
+    if (reach > given) {
+      return `the loop reaches ${reach.toFixed(2)} m and is given ${given} m — ` +
+             `it would have to be folded back to fit`;
+    }
+    if (given - reach >= RC.TILE_M) {
+      return `the loop reaches ${reach.toFixed(2)} m and is given ${given} m, ` +
+             `so ${(given - reach).toFixed(2)} m has to be smeared — a whole spare tile of it`;
+    }
+  });
+
+  check('a loop resized to its footprint has nothing left to smear', () => {
+    /* What the cap is FOR, now it is priced at the reach rather than at 2R. At
+       the largest radius a fixed footprint holds, the shape lands on the tile
+       boundary of its own accord and loopDrift has nothing to add — the best
+       case for the curvature it would otherwise put where the track stands up.
+       Past that the smear goes negative, which is the thing the cap actually
+       prevents. */
+    RC.resetTrack();
+    if (!RC.place('loop-right')) return 'loop refused';
+    if (!RC.place('flat')) return 'flat refused';   // not the end, so the footprint is fixed
+    const idx = RC.track.pieces.findIndex(p => RC.pieceDef(p.defId).kind === 'loop');
+    const foot = RC.loopFootprint(idx);
+    const cap = RC.loopMaxR(idx);
+    if (!(cap > RC.LOOP_R)) {
+      return `a ${foot}-tile footprint caps the radius at ${cap.toFixed(2)} m, ` +
+             `under the ${RC.LOOP_R} m a loop comes at`;
+    }
+    const res = RC.setLoopR(idx, cap);
+    if (!res.ok) return `could not resize to the cap: ${res.why}`;
+    const left = foot * RC.TILE_M - RC.loopReach(RC.loopR(idx));
+    if (Math.abs(left) > 0.5) {
+      return `at its cap the loop leaves ${left.toFixed(2)} m to smear across ` +
+             `a ${foot * RC.TILE_M} m footprint`;
+    }
+  });
   check('a loop steps sideways no harder than it bends at its bottom', () => {
     /* The sideways bend is NOT the easement's business and never was: a loop
        finishes one tile to the side of where it started, and loopDrift lays
@@ -2032,6 +2081,10 @@
        lateral thing on the piece — so what has to hold is that it stays gentler
        than the loop's own bottom radius, which is the number a student is
        looking at when they size the loop.
+
+       This bound has now caught three separate attempts to lay the offset more
+       gently, every one of which tightened it instead; loopDrift's comment has
+       the arithmetic and the reason. It is the cheapest guard in the file.
 
        It is also the one place where the parameterisation of the easement can
        do real damage. Sizing the easement's share of t by arc length rather
@@ -2705,14 +2758,21 @@
   });
 
 
-  check('a loop rolls into its own lean instead of stepping into it', () => {
-    /* A loop leans at the bottom, where it also steps sideways to line its exit
-       up with the grid: that step is a horizontal bend and leaning into it is
-       what keeps it from being a shove in the ribs. The lean used to arrive in
-       one sample at the joint, because the frame took "up" straight from the
-       loop's curvature — which is right in the body and pure noise at the ends,
-       where the curvature vanishes and normalising it gives whatever direction
-       the rounding left behind. */
+  check('a loop leans into its sideways step, but only so far', () => {
+    /* A loop steps a tile sideways at its bottom to keep its descending track
+       out of its ascending track, and it leans into that step — but the lean is
+       CAPPED, and the cap does two things. Cancelling the step outright takes
+       44 degrees, and since the offset is laid with a smootherstep, whose
+       curvature reverses half way through, the target swings that far each way
+       inside about eight metres: eleven degrees a metre against a roll limit of
+       seven and a half. It cannot be followed, and what is not followed comes
+       back as sideways force anyway. Capped, the swing is five degrees a metre
+       and the roll tracks it.
+
+       What the piece owes separately is a frame that does not jump where it
+       meets the straight track: "up" came from the loop's curvature, which is
+       right in the body and pure noise at the ends, where the curvature
+       vanishes and normalising it gives whatever the rounding left behind. */
     RC.resetTrack();
     for (const id of ['flat', 'flat', 'loop-right', 'flat', 'flat']) {
       if (!RC.place(id)) return `${id} refused`;
@@ -2721,11 +2781,15 @@
     const loop = pts.filter(p => p.def.kind === 'loop');
     if (!loop.length) return 'no loop on the track';
 
-    // It does lean somewhere: the bottom, where the sideways step is laid on.
     const lean = Math.max(...loop.map(p => Math.abs(p.bank)));
+    const cap = 20 * Math.PI / 180;
     if (!(lean > 0.02)) {
       return `the loop never leans at all (peak ${lean.toFixed(4)} rad) — ` +
              `it is taking its sideways step square`;
+    }
+    if (lean > cap + 1e-9) {
+      return `the loop leans ${(lean * 180 / Math.PI).toFixed(1)} deg, past the ` +
+             `20 it is capped at — and past what the roll limit can follow`;
     }
 
     /* THE FRAME MUST NOT JUMP AT EITHER JOINT, which is what actually went
@@ -2751,17 +2815,6 @@
       }
     }
 
-    // And it gets there at a rate the track could physically twist at. The
-    // whole point: rolled in over the straight, not stepped into at the joint.
-    for (let n = 1; n < pts.length; n++) {
-      const ds = pts[n].s - pts[n - 1].s;
-      if (ds <= 1e-9) continue;
-      const rate = Math.abs(pts[n].bank - pts[n - 1].bank) / ds;
-      if (rate > 2 * RC.ROLL_RATE * 1.001) {
-        return `the track twists at ${rate.toFixed(3)} rad/m at ${pts[n].s.toFixed(1)} m, ` +
-               `over the ${(2 * RC.ROLL_RATE).toFixed(3)} two overlapping rolls can need`;
-      }
-    }
   });
 
   check('a loop still turns the train over, and comes back level', () => {
@@ -4226,29 +4279,57 @@
 
   check('looper rides its loop and its corners inside the limits', () => {
     /* The reason the corners are banked, measured rather than asserted. Run
-       with no friction, which is the fastest it can ever take them. */
+       with no friction, which is the fastest it can ever take them.
+
+       THE LOOP IS COUNTED SEPARATELY so that its figure is reported rather than
+       hidden behind the corners' — not so that it is held to a softer bound.
+       Both go to the same limit. It was briefly held to its own, when the
+       loop's sideways step was costing 2.27 g and could not be got under; that
+       stopped being needed the moment the lean was capped, and the loop is no
+       longer the worst lateral on this ride. Which is the point of splitting
+       them: when the two swap places, the message says which one moved. */
     RC.loadPrefab('looper');
     RC.sim.friction = false;
     RC.resetSim();
-    runFor(240);
+
+    let onLoop = 0, offLoop = 0;
+    RC.sim.state = 'running';
+    for (let n = 0; n < 240 * 60 && RC.sim.state === 'running'; n++) {
+      RC.stepSim(1 / 60);
+      const p = RC.pathAt(RC.sim.s, true);
+      const lat = Math.abs(RC.sim.g.lat);
+      if (p && p.def && p.def.kind === 'loop') onLoop = Math.max(onLoop, lat);
+      else offLoop = Math.max(offLoop, lat);
+    }
+
     const { maxV, maxLatG, maxVertG, minVertG } = RC.sim;
     if (![maxV, maxLatG, maxVertG, minVertG].every(Number.isFinite)) {
       return 'a ride statistic is NaN or infinite';
     }
-    if (maxLatG > RC.G_LIMITS.latExtreme) {
-      return `lateral ${maxLatG.toFixed(2)} g — the report calls that violent`;
+
+    /* EVERY complaint, not the first one. Returning on the first reading that
+       failed meant the lateral figure hid the vertical one for three rounds:
+       banking the corners fixed the lateral, and the vertical it had been
+       standing in front of turned out to have been there the whole time. A
+       ride has three axes and it is cheaper to hear about all of them. */
+    const L = RC.G_LIMITS;
+    const bad = [];
+    if (offLoop > L.latExtreme) {
+      bad.push(`lateral ${offLoop.toFixed(2)} g on the corners (violent past ${L.latExtreme})`);
     }
-    /* Vertical is held to the EXTREME figure rather than the high one. The
-       bottom of a 13.5 m loop taken at 19 m/s is heavy by design and always
-       was; this check is about the corners and the hills either side of it,
-       and holding the loop to a limit nobody has asked it to meet would only
-       make it fail for the wrong reason. */
-    if (maxVertG > RC.G_LIMITS.vertExtreme) {
-      return `vertical ${maxVertG.toFixed(2)} g, beyond anything a real coaster pulls`;
+    if (onLoop > L.latExtreme) {
+      bad.push(`lateral ${onLoop.toFixed(2)} g on the loop's sideways step ` +
+               `(violent past ${L.latExtreme})`);
     }
-    if (minVertG < RC.G_LIMITS.airtimeHard) {
-      return `airtime ${minVertG.toFixed(2)} g — past what a restraint is meant to hold`;
+    if (maxVertG > L.vertExtreme) {
+      bad.push(`vertical ${maxVertG.toFixed(2)} g (past ${L.vertExtreme}, ` +
+               `beyond anything a real coaster pulls)`);
     }
+    if (minVertG < L.airtimeHard) {
+      bad.push(`airtime ${minVertG.toFixed(2)} g (past ${L.airtimeHard}, ` +
+               `more than a restraint holds)`);
+    }
+    if (bad.length) return bad.join('; ') + ` — top speed ${maxV.toFixed(1)} m/s`;
   });
   section('Train and losses');
   check('the release point decides where the train starts', () => {

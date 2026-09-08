@@ -256,6 +256,9 @@
         [{ id: 'medium-to-gentle-down' }, { id: 'gentle-down-to-flat' }],
         [{ id: 'flat' }],
         [{ id: 'loop-right' }],
+        // The loop advances three tiles, not four, so this side needs one flat
+        // back to stay eighteen and leave everything after it where it was.
+        [{ id: 'flat' }],
         [{ id: 'flat-to-gentle-down' }, { id: 'gentle-down' },
          { id: 'gentle-down-to-flat' }],
         /* BANKED, both of the corners after the loop, and not for the look of
