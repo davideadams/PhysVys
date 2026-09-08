@@ -235,7 +235,7 @@
     // off the page, so the export does not depend on that window being open.
     const report = RC.reportHTML();
     const ran = sim.time > 0;
-    const title = who ? `${who} — Rollercoaster` : 'Rollercoaster';
+    const title = who ? `${who} - Rollercoaster` : 'Rollercoaster';
 
     let html = '<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n';
     html += `<title>${esc(title)}</title>\n<style>${STYLE}</style>\n</head>\n<body>\n`;
@@ -301,7 +301,7 @@
   };
 
   RC.exportTraceCSV = function (who) {
-    if (!RC.sim.trace.length) return { ok: false, why: 'Run the train first — there is no trace yet' };
+    if (!RC.sim.trace.length) return { ok: false, why: 'Run the train first - there is no trace yet' };
     const stamp = new Date().toISOString().slice(0, 10);
     download(RC.traceCSV(), `${safeName(who)}-rollercoaster-${stamp}.csv`, 'text/csv');
     return { ok: true };

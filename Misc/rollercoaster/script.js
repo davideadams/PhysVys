@@ -304,10 +304,10 @@
     btnShuttle.setAttribute('aria-pressed', on ? 'true' : 'false');
     btnShuttle.title = settled
       ? (kind === 'demo'
-          ? 'This is a demonstration — the trains run their own tracks'
+          ? 'This is a demonstration - the trains run their own tracks'
           : 'This track is a complete circuit, so the train goes round it')
-      : 'Run a track that isn\'t a full circuit as an out-and-back shuttle, ' +
-        'instead of requiring a closed loop';
+      : 'Run an unfinished track out and back, instead of waiting for ' +
+        'a full circuit';
   }
 
   function updateRideUI() {

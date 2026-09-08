@@ -145,7 +145,7 @@
 
     'gentle-hills': {
       name: 'Gentle Hills',
-      blurb: 'A tame family ride — a modest lift, then a run of small hills that get ' +
+      blurb: 'A tame family ride - a modest lift, then a run of small hills that get ' +
              'smaller as the speed runs out.',
       finish: true,
       /* The only preset that stays on GENTLE throughout — 9.5 degrees, a metre
@@ -327,7 +327,7 @@
 
     'custom': {
       name: 'Custom (blank)',
-      blurb: 'Just a station — a blank slate to build your own coaster from.',
+      blurb: 'Just a station - a blank slate to build your own coaster from.',
       blank: true,
       build: []
     },
@@ -416,7 +416,7 @@
     'shuttle-loop': {
       name: 'Shuttle Loop',
       blurb: 'Launched from the station through a loop and up a tall spike, then rolls back ' +
-             'through the loop to the station — an out-and-back, not a circuit.',
+             'through the loop to the station - an out-and-back, not a circuit.',
       shuttle: true,
       build: [].concat(
         // Launched out of the station.

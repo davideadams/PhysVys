@@ -41,7 +41,7 @@
     <button class="tb-btn" id="btn-test" type="button" title="Run the train (Space)">▶ Test</button>
     <button class="tb-btn" id="btn-ride-reset" type="button" title="Put the train back at the station">⟲</button>
     <button class="tb-btn" id="btn-shuttle" type="button" aria-pressed="true"
-            title="Run a track that isn't a full circuit as an out-and-back shuttle, instead of requiring a closed loop">Shuttle</button>
+            title="Run an unfinished track out and back, instead of waiting for a full circuit">Shuttle</button>
   </div>
 
   <div class="tb-sep"></div>
@@ -152,7 +152,7 @@
 
 <section class="window" id="win-setup" hidden style="right: 24px; top: var(--chrome-top, 76px); width: 300px;">
   <div class="window-hd">
-    <span>Setup — train &amp; losses</span>
+    <span>Setup - train &amp; losses</span>
     <button class="window-x" type="button" aria-label="Close">×</button>
   </div>
   <div class="window-body">
@@ -196,7 +196,7 @@
       <label>Friction</label>
       <div class="auto-row">
         <button class="pal-wide" id="btn-friction" type="button"
-                title="Rolling resistance and air drag; losses show up in the Heat bar">Friction off</button>
+                title="Rolling resistance and air drag. The losses show up in the Heat bar">Friction off</button>
       </div>
     </div>
 
@@ -354,7 +354,7 @@
     <p>
       Build a coaster piece by piece, send a train around it, and watch the energy move.
       Every metre the train climbs is gravitational potential energy bought with kinetic
-      energy — <em>E<sub>p</sub> = mgh</em> and <em>E<sub>k</sub> = ½mv²</em> trading back
+      energy - <em>E<sub>p</sub> = mgh</em> and <em>E<sub>k</sub> = ½mv²</em> trading back
       and forth along the track. The chain lift is the only thing adding energy to the ride.
     </p>
     <p>
@@ -364,11 +364,11 @@
     </p>
     <p>
       <strong>Graphs.</strong> <em>Energy bars</em> show the train's kinetic and
-      gravitational potential energy as the ride runs; <em>Energy line</em> and
-      <em>Acceleration</em> plot the whole ride against position along the track,
-      shaded by feature. <em>Report</em> gives the ride's statistics once the train is
-      back at the station, and <em>Setup</em> holds the train, its release point and
-      the friction model.
+      gravitational potential energy as it goes round. <em>Energy line</em>,
+      <em>Acceleration</em> and <em>Speed</em> plot the whole ride against distance
+      or time, shaded by feature. <em>Report</em> sums the ride up once the train is
+      home, and <em>Setup</em> is where you change the train, where it starts from,
+      and the friction.
     </p>
     <p>
       <strong>View.</strong> Drag to pan, scroll to zoom, and the two tile buttons
@@ -377,9 +377,9 @@
     </p>
     <p>
       <strong>Building.</strong> Track grows from the yellow arrow. Pick a direction and
-      the slope you want to be travelling at, then press <em>Build this</em> — the
+      the slope you want to be travelling at, then press <em>Build this</em> - the
       transition onto that slope is added for you, so holding a climb just means pressing
-      build again. Anything the track can't do from where it currently is goes grey.
+      build again. Anything the track can't do from where it is now goes grey.
       Backspace removes the last piece.
     </p>
     <p>
@@ -387,9 +387,9 @@
       corner both ways at the same speed, and watch the lateral g in the ride report.
     </p>
     <p>
-      <strong>Saving.</strong> Whatever you are building is kept in this browser and comes
-      back next time you open the page, on this computer. <em>Save</em> names a copy of it,
-      which then appears in the <em>Track</em> list beside the ready-made rides — use that
+      <strong>Saving.</strong> Whatever you are building is kept in this browser, on this
+      computer, and comes back next time you open the page. <em>Save</em> names a copy of it,
+      which then appears in the <em>Track</em> list beside the ready-made rides - use that
       if you want to keep more than one, or to keep a track safe before changing it.
     </p>
   </div>

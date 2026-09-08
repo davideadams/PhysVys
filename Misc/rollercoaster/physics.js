@@ -498,7 +498,7 @@
       const a = closing * closing / (2 * togo);
       if (a > sim.maxStationBrake) sim.maxStationBrake = a;
       if (a > BRAKE_DECEL) {
-        addWarning(`The station brakes at ${(a / G).toFixed(1)} g to catch the train — ` +
+        addWarning(`The station brakes at ${(a / G).toFixed(1)} g to catch the train - ` +
                    `it arrives at ${closing.toFixed(1)} m/s with only ${togo.toFixed(0)} m ` +
                    `of platform to stop in`,
                    'station-brake', a);
@@ -645,31 +645,31 @@
     const spot = feat ? feat.label : 'track';
 
     if (g.vert > L.vertExtreme) {
-      addWarning(`Vertical ${g.vert.toFixed(1)} g${at} — beyond anything a real coaster pulls`,
+      addWarning(`Vertical ${g.vert.toFixed(1)} g${at} - beyond anything a real coaster pulls`,
                  'vert:' + spot, g.vert);
     } else if (g.vert > L.vertHigh) {
-      addWarning(`Heavy vertical ${g.vert.toFixed(1)} g${at} — at the limit even for a moment`,
+      addWarning(`Heavy vertical ${g.vert.toFixed(1)} g${at} - at the limit even for a moment`,
                  'vert:' + spot, g.vert);
     }
 
     if (g.vert < L.airtimeHard) {
-      addWarning(`Airtime ${g.vert.toFixed(1)} g${at} — riders would be thrown from the train`,
+      addWarning(`Airtime ${g.vert.toFixed(1)} g${at} - riders would be thrown from the train`,
                  'airtime:' + spot, -g.vert);
     } else if (g.vert < L.airtimeGood) {
-      addWarning(`Airtime ${g.vert.toFixed(1)} g${at} — more than a restraint is meant to hold`,
+      addWarning(`Airtime ${g.vert.toFixed(1)} g${at} - more than a restraint is meant to hold`,
                  'airtime:' + spot, -g.vert);
     }
 
     if (lat > L.latExtreme) {
-      addWarning(`Violent sideways ${lat.toFixed(1)} g${at} — it needs banking or a wider radius`,
+      addWarning(`Violent sideways ${lat.toFixed(1)} g${at} - it needs banking or a wider radius`,
                  'lat:' + spot, lat);
     } else if (lat > L.latHigh) {
-      addWarning(`Uncomfortable sideways ${lat.toFixed(1)} g${at} — worth banking`,
+      addWarning(`Uncomfortable sideways ${lat.toFixed(1)} g${at} - worth banking`,
                  'lat:' + spot, lat);
     }
 
     if (sim.maxV > L.speedMax) {
-      addWarning(`Train reaches ${sim.maxV.toFixed(0)} m/s — faster than any coaster ever built`,
+      addWarning(`Train reaches ${sim.maxV.toFixed(0)} m/s - faster than any coaster ever built`,
                  'speed', sim.maxV);
     }
 
@@ -703,7 +703,7 @@
     // come off, and the overhang below decides that.
     if (!sim.overhang && sim.reversals >= 4 && sim.stallTime > 3) {
       sim.state = 'valleyed';
-      sim.note = 'The train valleyed — it never had enough energy for the next hill.';
+      sim.note = 'The train valleyed - it never had enough energy for the next hill.';
       addWarning('Train valleys and rolls back');
       return;
     }
@@ -728,8 +728,8 @@
       if (!oh.committed && sCom > oh.s0) {
         oh.committed = true;
         addWarning(oh.cause === 'inverted'
-          ? 'The whole train came off the track — its centre of mass left the rails'
-          : 'The train tipped over the end — its centre of mass passed the last rail');
+          ? 'The whole train came off the track - its centre of mass left the rails'
+          : 'The train tipped over the end - its centre of mass passed the last rail');
       }
 
       if (sim.s - oh.s0 >= oh.length) { wreck(); return; }
@@ -962,11 +962,11 @@
     sim.wrecked = true;
     sim.state = 'crashed';
     sim.note = oh && oh.cause === 'inverted'
-      ? `Too slow at ${oh.v0.toFixed(1)} m/s to hold the track upside down — the train ` +
+      ? `Too slow at ${oh.v0.toFixed(1)} m/s to hold the track upside down - the train ` +
         `fell out of the loop from ${oh.z0.toFixed(1)} m and hit the ground at ` +
         `${sim.crashSpeed.toFixed(1)} m/s. It is wrecked.`
       : `Dragged over the end of the track and hit the ground at ` +
-        `${sim.crashSpeed.toFixed(1)} m/s — the train is wrecked.`;
+        `${sim.crashSpeed.toFixed(1)} m/s - the train is wrecked.`;
     addWarning(oh && oh.cause === 'inverted'
       ? 'The train fell out of the loop and crashed'
       : 'The train ran off the end of the track and crashed');
@@ -1285,8 +1285,8 @@
     const st = RC.circuitStatus();
     if (!st.ok) {
       sim.note = st.kind === 'open'
-        ? st.label + ' — close the circuit, or switch on Shuttle to run it out-and-back.'
-        : st.label + ' — finish the track before testing.';
+        ? st.label + ' - close the circuit, or switch on Shuttle to run it out-and-back.'
+        : st.label + ' - finish the track before testing.';
       return false;
     }
     if (sim.state !== 'running') {

@@ -629,27 +629,26 @@
     // A wreck outranks any comment on comfort.
     if (sim.state === 'crashed') {
       return sim.overhang && sim.overhang.cause === 'inverted'
-        ? 'The train fell out of the loop and crashed. It needed more speed going in — ' +
+        ? 'The train fell out of the loop and crashed. It needed more speed going in - ' +
           'a bigger drop before it, or a smaller loop.'
         : 'The train left the track and crashed. It needed a slower launch, or more ' +
           'height at the end to climb against.';
     }
     const L = RC.G_LIMITS;
     if (sim.minVertG < L.airtimeHard) {
-      return 'This ride would throw riders out of the train. It needs less speed over ' +
-             'the crests, or gentler ones.';
+      return 'This ride would throw riders out of the train. Slow it down over the ' +
+             'crests, or make them gentler.';
     }
     if (sim.maxLatG > L.latExtreme) {
-      return 'The sideways forces are violent. Banking those turns, or widening them, ' +
-             'would fix it.';
+      return 'The sideways forces are violent. Bank those turns, or make them wider.';
     }
-    if (sim.maxVertG > L.vertExtreme) return 'Brutally heavy through the dips — riders would grey out.';
-    if (sim.minVertG < L.airtimeGood) return 'Strong ejector airtime — right at the edge of what restraints hold.';
-    if (sim.maxVertG > L.vertHigh) return 'Heavy through the dips, but within what a real ride may pull briefly.';
-    if (sim.maxLatG > L.latHigh) return 'Those turns pull harder sideways than most rides allow — bank them.';
-    if (sim.minVertG < -0.05) return 'Has genuine airtime over the crests without being dangerous.';
+    if (sim.maxVertG > L.vertExtreme) return 'Brutally heavy through the dips - riders would grey out.';
+    if (sim.minVertG < L.airtimeGood) return 'Strong ejector airtime - right at the edge of what restraints hold.';
+    if (sim.maxVertG > L.vertHigh) return 'Heavy through the dips, but no more than a real ride pulls for a moment.';
+    if (sim.maxLatG > L.latHigh) return 'Those turns pull harder sideways than most rides allow - bank them.';
+    if (sim.minVertG < -0.05) return 'There is real airtime over the crests, and nothing dangerous about it.';
     if (sim.maxVertG < 1.4 && sim.maxLatG < 0.4) return 'A very gentle ride.';
-    return 'Forces stay within comfortable limits.';
+    return 'Comfortable the whole way round.';
   };
 
   /* Colour a live g reading by how comfortable it is. */
@@ -793,9 +792,12 @@
                          : onFeature(t.s)));
     if (geo.tightV !== null) {
       const over = geo.tightHead < 0;
+      // "17.4 m/s against 14.5 sideways" was two speeds and an axis word with
+      // no unit between them, and read as though 14.5 were a g figure. Say what
+      // the second number is and what is doing the limiting.
       html += row(over ? 'Over the limits at' : 'Closest to the limits',
-                  `${geo.tightV.toFixed(1)} m/s <span class="muted">against ` +
-                  `${geo.tightCap.toFixed(1)} ${geo.tightWhy}</span>` +
+                  `${geo.tightV.toFixed(1)} m/s <span class="muted">where ` +
+                  `${geo.tightWhy} g allows ${geo.tightCap.toFixed(1)}</span>` +
                   onFeature(geo.tightS));
     }
 
@@ -807,9 +809,9 @@
       try { f = RC.featureAt(geo.tightS); } catch (e) { f = null; }
       const where = f ? ` on ${f.label}` : ` at ${geo.tightS.toFixed(0)} m`;
       html += `<p class="report-warn">The track can reach ` +
-              `${geo.tightV.toFixed(1)} m/s${where}, where its shape takes ` +
-              `${geo.tightCap.toFixed(1)} ${geo.tightWhy}. ` +
-              `Bank it, widen it, or arrive there slower.</p>`;
+              `${geo.tightV.toFixed(1)} m/s${where}. Its shape only takes ` +
+              `${geo.tightCap.toFixed(1)} m/s before the ${geo.tightWhy} g ` +
+              `goes over. Bank it, widen it, or arrive there slower.</p>`;
     }
     return html;
   }
@@ -971,7 +973,7 @@
       return row(label,
         `<b style="color:${band(g, warnAt, hardAt)}">${g.toFixed(2)} g</b>` +
         onFeature(at) + more +
-        ` <span class="muted">${word} past ${warnAt}</span>`);
+        `<span class="muted">, ${word} past ${warnAt}</span>`);
     };
     html += gRow('Vertical, greatest', 'vert', sim.maxVertG, sim.maxVertGs,
                  L.vertHigh, L.vertExtreme, 'heavy');

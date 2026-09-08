@@ -371,12 +371,12 @@
         else if (!res.changed) setStatus('No change');
         else {
           setStatus(RC.track.pieces[cursor].lift
-            ? `Chain on — ${res.count} piece${res.count === 1 ? '' : 's'} of climb`
-            : `Chain off — ${res.count} piece${res.count === 1 ? '' : 's'} of climb`);
+            ? `Chain on - ${res.count} piece${res.count === 1 ? '' : 's'} of climb`
+            : `Chain off - ${res.count} piece${res.count === 1 ? '' : 's'} of climb`);
         }
       } else {
         sel.lift = !sel.lift;
-        setStatus(sel.lift ? 'Chain lift on — applies to uphill pieces' : 'Chain lift off');
+        setStatus(sel.lift ? 'Chain lift on - applies to uphill pieces' : 'Chain lift off');
       }
       refresh();
     }));
@@ -469,7 +469,7 @@
       const def = resolveWith(d.id, sel.slope, null);
       const check = def ? RC.canPlace(def, head) : { ok: false, why: 'Not possible here' };
       b.disabled = gate(check);
-      b.title = check.ok ? d.label : `${d.label} — ${check.why}`;
+      b.title = check.ok ? d.label : `${d.label} - ${check.why}`;
       b.classList.toggle('selected', !sel.special && sel.dir === d.id);
     }
 
@@ -479,10 +479,10 @@
       b.disabled = gate(c);
       b.title = c.ok
         ? (c.turning
-            ? `${c.label} — ${c.def.label}`
+            ? `${c.label} - ${c.def.label}`
             // The label says where you'll end up, not which piece gets you there.
             : (c.def.gIn === c.def.gOut ? c.label : `${c.label} (via ${c.def.label.toLowerCase()})`))
-        : `${c.label} — ${c.why}`;
+        : `${c.label} - ${c.why}`;
       // With a corner chosen, mark the one that WILL be built rather than
       // whatever the row was last set to.
       b.classList.toggle('selected', c.turning
@@ -495,7 +495,7 @@
       if (!b) continue;
       const check = RC.canPlace(RC.pieceDef(sp.id), head);
       b.disabled = gate(check);
-      b.title = check.ok ? sp.label : `${sp.label} — ${check.why}`;
+      b.title = check.ok ? sp.label : `${sp.label} - ${check.why}`;
       b.classList.toggle('selected', sel.special === sp.id);
     }
 
@@ -512,7 +512,7 @@
       const b = rollBtns.get(r.bank);
       if (!b) continue;
       b.disabled = inspecting ? false : !canBank;
-      b.title = canBank ? r.label : `${r.label} — only turns can be banked`;
+      b.title = canBank ? r.label : `${r.label} - only turns can be banked`;
       b.classList.toggle('selected', canBank && sel.bank === r.bank);
     }
 
@@ -527,15 +527,15 @@
         liftBtn.disabled = !run;
         liftBtn.classList.toggle('active', !!run && !!RC.track.pieces[cursor].lift);
         liftBtn.title = run
-          ? `Put a chain on this climb, or take it off — ${run.count} piece` +
+          ? `Put a chain on this climb, or take it off - ${run.count} piece` +
             `${run.count === 1 ? '' : 's'}`
-          : 'Chain lift — only track that climbs can carry one';
+          : 'Chain lift - only track that climbs can carry one';
       } else {
         liftBtn.disabled = !canChain;
         liftBtn.classList.toggle('active', sel.lift && canChain);
         liftBtn.title = canChain
           ? 'Put a chain on the pieces you build next'
-          : 'Chain lift — only track that climbs can carry one';
+          : 'Chain lift - only track that climbs can carry one';
       }
     }
 
