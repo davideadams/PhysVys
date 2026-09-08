@@ -6509,6 +6509,56 @@
     if (prof.dashed) return 'the profile is drawn dashed, like the ghost';
   });
 
+  check('the graph cursor marks its place on the track', () => {
+    /* Pointing at a spike named the feature and left the reader to go and find
+       it. The ring closes that loop, so what has to hold is that the place it
+       draws at is the SAME arc position the readout quotes - one cursor, one
+       place - and that it goes through the drawing without complaint. */
+    RC.loadPrefab('first-drop');
+    RC.clearGhosts();
+    RC.sim.cars = 4;
+    RC.sim.friction = false;
+    RC.resetSim();
+    runFor(240);
+
+    // The plot measures its own CSS box, so the canvas has to be in the page.
+    const c = document.createElement('canvas');
+    c.style.position = 'fixed';
+    c.style.left = '-20000px';
+    c.style.width = '420px';
+    c.style.height = '260px';
+    document.body.appendChild(c);
+    const held = RC.graphMode();
+    try {
+      RC.setGraphMode('speed');
+      RC.setGraphCursor(210);            // the middle of a 420 px plot
+      RC.drawEnergyGraph(c);
+
+      const cur = RC.graphCursor;
+      if (!cur) return 'pointing at the middle of the plot picked no sample';
+      const total = RC.trackPath().total;
+      if (!(cur.s >= 0 && cur.s <= total + 1e-6)) {
+        return `the cursor sits at ${cur.s.toFixed(1)} m on a ` +
+               `${total.toFixed(1)} m track`;
+      }
+      // The mark is drawn from that position, so it has to resolve to track.
+      if (!RC.pathAt(cur.s, RC.isClosed())) {
+        return `no track at ${cur.s.toFixed(1)} m, so there is nothing to mark`;
+      }
+      const ctx = c.getContext('2d');
+      RC.drawGraphMark(ctx, RC.camera, { w: 420, h: 260 });
+
+      // And nothing is marked once the pointer has left the plot.
+      RC.setGraphCursor(null);
+      if (RC.graphCursor) return 'the cursor survived the pointer leaving';
+      RC.drawGraphMark(ctx, RC.camera, { w: 420, h: 260 });
+    } finally {
+      RC.setGraphMode(held);
+      RC.setGraphCursor(null);
+      document.body.removeChild(c);
+    }
+  });
+
   check('a plot carrying a ghost and a profile still draws', () => {
     /* The three renderers took a new argument and the speed plot gained a
        filled shape and an axis of its own. Nothing here inspects pixels: what

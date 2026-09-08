@@ -539,6 +539,54 @@
     return best <= threshold ? bestPi : null;
   };
 
+  /* Where the graph's cursor is, marked on the track itself.
+
+     The plot could already say "at 40.0 m, 3.2 s, 1.9 g on Turn 3" and the
+     reader still had to go and find Turn 3. This closes the loop between a
+     spike on a graph and the corner that caused it, which is the question the
+     report's jolts section is otherwise trying to answer in words.
+
+     A ring on the rails with a stalk down to the ground. The stalk is not
+     decoration: in an isometric view a mark floating at track height is
+     ambiguous about where it stands on the park floor, and a lift hill's crest
+     draws over the tiles well behind it. The stalk lands it on a tile.
+
+     Drawn on top rather than sorted into the scene, like the selection above -
+     a locator that can be hidden behind a hill is no locator. */
+  RC.drawGraphMark = function (ctx, cam, view) {
+    const c = RC.graphCursor;
+    if (!c) return;
+    let p = null;
+    try { p = RC.pathAt(c.s, RC.isClosed()); } catch (e) { p = null; }
+    if (!p) return;
+
+    const at = RC.toScreen(p.x, p.y, p.z, cam, view);
+    const foot = RC.toScreen(p.x, p.y, 0, cam, view);
+    const r = Math.max(4, 7 * cam.zoom);
+
+    ctx.save();
+    ctx.strokeStyle = 'rgba(21, 48, 77, 0.45)';
+    ctx.lineWidth = Math.max(1, 1.5 * cam.zoom);
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.moveTo(at.x, at.y);
+    ctx.lineTo(foot.x, foot.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // A white halo under the ring, so it reads against rails, grass and sky
+    // alike rather than only against whichever the track happens to cross.
+    ctx.beginPath();
+    ctx.arc(at.x, at.y, r, 0, Math.PI * 2);
+    ctx.lineWidth = Math.max(3, 4.5 * cam.zoom);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.stroke();
+    ctx.lineWidth = Math.max(1.5, 2.2 * cam.zoom);
+    ctx.strokeStyle = '#15304d';
+    ctx.stroke();
+    ctx.restore();
+  };
+
   /* Bright outline over the selected piece, drawn on top so it's always
      visible regardless of what stands in front of it. */
   RC.drawSelection = function (ctx, cam, view, pieceIndex) {

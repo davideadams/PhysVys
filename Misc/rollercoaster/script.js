@@ -227,6 +227,10 @@
     RC.drawTrack(ctx, cam, view, extras);
     if (state.showHeights) RC.drawHeightLabels(ctx, cam, view);
     RC.drawSelection(ctx, cam, view, RC.buildCursor());
+    // Only while the plot it belongs to is on screen: closing the window with
+    // the pointer still over the canvas fires no mouseleave, and the ring would
+    // be left standing on the track with nothing to explain it.
+    if (visible('win-graphs')) RC.drawGraphMark(ctx, cam, view);
     RC.drawCompass(ctx, cam, view);
   }
 
@@ -420,6 +424,11 @@
   function syncGraphMode() {
     const mode = RC.graphMode();
     const axis = RC.graphAxis();
+    /* The pointer is over a canvas that is about to be swapped for another, so
+       no mouseleave is coming. Only the line plots publish a cursor, and the
+       bars have no position to mark at all. */
+    RC.setGraphCursor(null);
+    state.dirty = true;
     graphModeBtns.forEach(b => b.classList.toggle('active', b.dataset.graph === mode));
     graphAxisBtns.forEach(b => b.classList.toggle('active', b.dataset.axis === axis));
     const show = (id, on) => {
@@ -462,17 +471,23 @@
   /* Pointing at the line plot reads off the values there. The crosshair is
      drawn by energy.js as part of the plot, which then publishes the sample it
      landed on; this turns that into words. Without it the only way to ask
-     "what was the speed at 40 m" was to open the exported CSV. */
+     "what was the speed at 40 m" was to open the exported CSV.
+
+     The park is redrawn too, because the sample it publishes is also marked on
+     the track. Without the dirty flag the ring only appeared on whatever next
+     happened to trigger a frame, which on a finished ride is nothing at all. */
   const graphLine = document.getElementById('graph-line');
   if (graphLine) {
     graphLine.addEventListener('mousemove', e => {
       // fit() draws in CSS pixels, so an offset needs no scaling.
       RC.setGraphCursor(e.offsetX);
       updateEnergyPanels();
+      state.dirty = true;
     });
     graphLine.addEventListener('mouseleave', () => {
       RC.setGraphCursor(null);
       updateEnergyPanels();
+      state.dirty = true;
     });
   }
 
