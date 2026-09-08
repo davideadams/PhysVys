@@ -262,6 +262,20 @@
       // its key is settled here rather than in syncGraphMode.
       const heatKey = document.getElementById('legend-heat');
       if (heatKey) heatKey.hidden = !RC.graphHasHeat();
+
+      /* Keys the markup cannot carry, because they depend on what has been run
+         rather than on which plot is showing: the track profile, and the kept
+         run from the other friction setting. Both appear and disappear. */
+      const extra = document.getElementById('legend-extra');
+      if (extra) {
+        const rows = RC.graphKey(RC.graphMode()).filter(r => r.dynamic);
+        extra.hidden = !rows.length;
+        extra.innerHTML = rows.map(r =>
+          '<span>' + (r.dashed
+            ? `<i class="dashed" style="border-top-color:${r.colour}"></i>`
+            : `<i style="background:${r.colour}"></i>`) +
+          r.label + '</span>').join('');
+      }
       showGraphPick();
       setText('ro-e-v', Math.abs(sim.v).toFixed(1) + ' m/s');
       setText('ro-e-h', e.h.toFixed(2) + ' m');

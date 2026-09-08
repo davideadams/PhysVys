@@ -1276,7 +1276,12 @@
     // A sample on the ride clock while it runs, and one more the frame it
     // stops, so the plot reaches the train instead of ending short of it.
     if (sim.state === 'running') record();
-    else if (wasRunning) record(true);
+    else if (wasRunning) {
+      record(true);
+      // The run is over and its trace is complete. Whoever wants to keep it
+      // says so here; the physics does not need to know why.
+      if (RC.onRunEnd) RC.onRunEnd();
+    }
     return true;
   };
 

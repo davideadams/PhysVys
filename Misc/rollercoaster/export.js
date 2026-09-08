@@ -106,11 +106,13 @@
      was made, so four unlabelled coloured lines are worth very little. The
      colours come from energy.js rather than being written out again here. */
   function keyFor(which) {
-    const rows = (RC.GRAPH_KEY[which] || [])
-      .filter(r => !r.onlyWithHeat || RC.graphHasHeat());
-    return '<div class="key">' + rows.map(r =>
-      '<span>' + (r.dashed ? '<i class="dashed"></i>'
-                           : `<i style="background:${r.colour}"></i>`) +
+    // RC.graphKey, not RC.GRAPH_KEY: the plot may carry a track profile or a
+    // kept run from the other friction setting, and a page read on its own has
+    // nothing but this to say what the extra marks are.
+    return '<div class="key">' + RC.graphKey(which).map(r =>
+      '<span>' + (r.dashed
+        ? `<i class="dashed"${r.colour ? ` style="border-top-color:${r.colour}"` : ''}></i>`
+        : `<i style="background:${r.colour}"></i>`) +
       esc(r.label) + '</span>').join('') + '</div>';
   }
 

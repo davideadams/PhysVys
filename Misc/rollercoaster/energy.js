@@ -184,8 +184,35 @@
       { dashed: true, label: '1 g (sitting still)' },
       { colour: 'rgba(198,40,40,0.35)', label: 'Beyond real limits' }
     ],
-    // One line and a labelled axis needs no key.
+    // One line and a labelled axis needs no key of its own; the track profile
+    // behind it is added by RC.graphKey, since it is only there once a run is.
     speed: []
+  };
+
+  /* The key for a plot: the static rows above, plus whatever this particular
+     run has put on it. The static half stays in GRAPH_KEY because the window's
+     own legends in index.html mirror it by hand, where a wrong colour is
+     obvious on sight. The dynamic half has to be built, because neither the
+     window nor the exported page can know in advance whether there is a ghost
+     to name. Marked so the window can render only what its markup does not
+     already carry, while the export - which has no markup - takes the lot. */
+  RC.graphKey = function (mode) {
+    const rows = (RC.GRAPH_KEY[mode] || [])
+      .filter(r => !r.onlyWithHeat || RC.graphHasHeat())
+      .slice();
+    // The same test drawSpeed uses, so the key cannot name a shape that is not
+    // there: a track that never leaves the ground has no profile to draw.
+    if (mode === 'speed' && RC.sim.trace.some(p => p.h > 0.5)) {
+      rows.push({ colour: PROFILE_EDGE, label: 'Track height', dynamic: true });
+    }
+    const g = ghostRun();
+    if (g && GHOST_SERIES[mode]) {
+      rows.push({
+        colour: GHOST, dashed: true, dynamic: true,
+        label: g.friction ? 'Same run, friction on' : 'Same run, friction off'
+      });
+    }
+    return rows;
   };
 
   /* Four plots share one window: 'bars' is the train's energy right now; the
@@ -383,14 +410,82 @@
     ctx.restore();
   }
 
+  /* ---- the other run ----------------------------------------------------
+
+     A finished run is kept so the next one can be drawn against it, but only
+     across the ONE change this sim exists to make a student notice: friction
+     on against friction off. Anything else and the two plots would differ for
+     a reason the picture does not show.
+
+     So a ghost has to have been run on THE SAME TRACK under THE SAME SETTINGS,
+     and the key below is everything that bears on a run except the friction
+     switch itself. RC.version is in it, so any edit to the track retires both
+     ghosts on its own - no clearing needed, they simply stop matching.
+
+     Kept per setting rather than as one "last run", because the interesting
+     pair is on-against-off, not this-against-previous: running frictionless
+     three times in a row should still leave the friction run standing as the
+     thing to compare against. */
+  let ghosts = { on: null, off: null };
+
+  function conditionsKey() {
+    const s = RC.sim;
+    return [RC.version, s.cars, s.carMass, s.releaseS, s.liftSpeed,
+            s.brakeSpeed, s.launchSpeed, s.shuttleMode].join('|');
+  }
+
+  /* Called when a run ends. The trace array is replaced rather than emptied by
+     resetSim, so holding the reference is enough to keep it. */
+  RC.onRunEnd = function () {
+    const s = RC.sim;
+    if (!s.trace || s.trace.length < 10) return;
+    ghosts[s.friction ? 'on' : 'off'] = {
+      trace: s.trace, key: conditionsKey(), friction: s.friction
+    };
+  };
+  RC.clearGhosts = function () { ghosts = { on: null, off: null }; };
+
+  /* The kept run made under the OPPOSITE friction setting, if it was made on
+     this track under otherwise identical conditions. Null until the student
+     has actually run it both ways, which is the point: there is nothing to
+     compare against until there is. */
+  function ghostRun() {
+    const g = ghosts[RC.sim.friction ? 'off' : 'on'];
+    return g && g.key === conditionsKey() && g.trace.length > 1 ? g : null;
+  }
+  RC.graphGhost = ghostRun;
+
+  /* Grey and dashed, never a series colour. A ghost is not another reading of
+     the same thing - it is the same reading under a different rule - and if it
+     were drawn in the trace's own colour the eye would merge the two. */
+  const GHOST = 'rgba(21,48,77,0.42)';
+
+  /* Which single series stands for each plot. One pale line, not a whole
+     second plot: the ghost is a reference, and five more lines on the energy
+     graph would bury the run the student is actually looking at. */
+  const GHOST_SERIES = { energy: 'total', accel: 'vg', speed: 'v' };
+
+  /* The track's own profile, drawn behind the speed trace as a filled shape.
+     Height is already in every sample and was readable only under the cursor,
+     yet it is half of what the sim is about - and against distance it is a
+     side elevation of the track the student built. Filled rather than drawn as
+     a line so it cannot be mistaken for the ghost, which is a dashed line and
+     no fill. */
+  const PROFILE_FILL = 'rgba(74, 144, 217, 0.16)';
+  const PROFILE_EDGE = 'rgba(74, 144, 217, 0.55)';
+
   RC.drawEnergyGraph = function (canvas) {
     const f = fit(canvas);
     if (!f) return;
     const { ctx, w, h } = f;
     const trace = RC.sim.trace;
     const total = RC.trackPath().total;
+    const gh = ghostRun();
 
-    const padL = 36, padR = 8, padT = 14, padB = 24;
+    // Speed mode carries the track profile on a second axis down the right,
+    // so it needs room for those labels where the others do not.
+    const padL = 36, padT = 14, padB = 24;
+    const padR = (graphMode === 'speed' && trace.length) ? 32 : 8;
     const plotW = w - padL - padR;
     const plotH = h - padT - padB;
 
@@ -412,9 +507,13 @@
 
     /* The axis. Distance spans the whole track whether or not the train got
        round it, so two runs of the same track are directly comparable; time
-       spans however long this run has lasted, which is all there is to span. */
+       spans however long this run has lasted, which is all there is to span -
+       or, with a ghost on the plot, however long the LONGER of the two lasted,
+       since a friction run and a frictionless one take different times and
+       cutting one off at the other's end would read as the ride stopping. */
     const tEnd = trace[trace.length - 1].t;
-    const span = graphAxis === 's' ? total : Math.max(tEnd, 0.001);
+    const ghEnd = gh ? gh.trace[gh.trace.length - 1].t : 0;
+    const span = graphAxis === 's' ? total : Math.max(tEnd, ghEnd, 0.001);
     const xOf = p => padL + plotW * Math.min(1, Math.max(0, p[graphAxis] / span));
 
     const bands = traceBands(trace);
@@ -423,7 +522,8 @@
     // Feature bands go down first so the traces read on top of them.
     drawFeatureBands(ctx, trace, bands, xOf, padT, plotH);
 
-    const args = [ctx, trace, xOf, breaks, padL, padT, plotW, plotH];
+    const args = [ctx, trace, xOf, breaks, padL, padT, plotW, plotH,
+                  gh ? gh.trace : null];
     if (graphMode === 'accel') drawAccel.apply(null, args);
     else if (graphMode === 'speed') drawSpeed.apply(null, args);
     else drawEnergy.apply(null, args);
@@ -499,9 +599,19 @@
     ctx.stroke();
   }
 
-  function drawEnergy(ctx, trace, xOf, breaks, padL, padT, plotW, plotH) {
+  /* The kept run, under whichever series stands for this plot. Drawn before
+     the live traces so it sits behind them, and on the SAME scale - a ghost on
+     a scale of its own would be a picture of nothing. Its own lap wraps have to
+     be worked out separately, since it is a different run. */
+  function plotGhost(ctx, gh, key, xOf, Y, total) {
+    if (!gh) return;
+    plotSeries(ctx, gh, key, xOf, Y, lapBreaks(gh, total), GHOST, 1.4, [5, 4]);
+  }
+
+  function drawEnergy(ctx, trace, xOf, breaks, padL, padT, plotW, plotH, gh) {
     let top = 0;
     for (const p of trace) top = Math.max(top, p.total, p.supplied);
+    if (gh) for (const p of gh) top = Math.max(top, p.total, p.supplied);
     top = Math.max(top * 1.1, 1);
     const Y = j => padT + plotH * (1 - j / top);
 
@@ -509,6 +619,7 @@
     for (let n = 0; n <= 4; n++) marks.push(top * n / 4);
     drawScale(ctx, Y, marks, 'kJ', padL, padT, plotW, v => kJ(v).toFixed(0), false);
 
+    plotGhost(ctx, gh, GHOST_SERIES.energy, xOf, Y, RC.trackPath().total);
     plotSeries(ctx, trace, 'supplied', xOf, Y, breaks, SUPPLIED, 1.5, [4, 3]);
     plotSeries(ctx, trace, 'total', xOf, Y, breaks, TOTAL, 2);
     // Heat under the two it is stealing from, so they stay the easiest to
@@ -524,27 +635,71 @@
      fast is it going here" is the question students actually ask, and it was
      only ever available as a live number or a column of the exported CSV.
      Against time this is the v-t graph off the syllabus. */
-  function drawSpeed(ctx, trace, xOf, breaks, padL, padT, plotW, plotH) {
+  function drawSpeed(ctx, trace, xOf, breaks, padL, padT, plotW, plotH, gh) {
     let top = 1;
     for (const p of trace) top = Math.max(top, p.v);
+    if (gh) for (const p of gh) top = Math.max(top, p.v);
     top = Math.max(top * 1.1, 1);
     const Y = v => padT + plotH * (1 - v / top);
+
+    /* THE TRACK'S OWN PROFILE, behind the speed trace.
+
+       Height is in every sample and was readable only under the cursor, which
+       is a poor place for half of what the sim is about. Against distance this
+       is a side elevation of the track the student built, and the lesson reads
+       off it without a word: the trace is high where the shape is low.
+
+       Its own scale, from the ground to the highest point of the ride, with
+       the axis down the right so it cannot be read against the speed figures
+       on the left. FILLED rather than drawn as a line, because the plot also
+       carries a dashed ghost line and two thin curves would be one too many
+       things to tell apart - a solid mass rising from the baseline reads as
+       ground at a glance and never as a reading. */
+    let hTop = 0;
+    for (const p of trace) hTop = Math.max(hTop, p.h);
+    if (hTop > 0.5) {
+      const Yh = m => padT + plotH * (1 - m / (hTop * 1.08));
+      ctx.beginPath();
+      ctx.moveTo(xOf(trace[0]), padT + plotH);
+      for (const p of trace) ctx.lineTo(xOf(p), Yh(p.h));
+      ctx.lineTo(xOf(trace[trace.length - 1]), padT + plotH);
+      ctx.closePath();
+      ctx.fillStyle = PROFILE_FILL;
+      ctx.fill();
+      ctx.strokeStyle = PROFILE_EDGE;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // Right-hand axis: ground and the top, which is all it needs to be read.
+      ctx.fillStyle = PROFILE_EDGE;
+      ctx.font = FONT;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('0', padL + plotW + 4, Yh(0));
+      ctx.fillText(hTop.toFixed(0) + ' m', padL + plotW + 4, Yh(hTop));
+    }
 
     const marks = [];
     for (let n = 0; n <= 4; n++) marks.push(top * n / 4);
     drawScale(ctx, Y, marks, 'm/s', padL, padT, plotW, v => v.toFixed(0), false);
 
+    plotGhost(ctx, gh, GHOST_SERIES.speed, xOf, Y, RC.trackPath().total);
     plotSeries(ctx, trace, 'v', xOf, Y, breaks, KE, 2);
     drawAxes(ctx, padL, padT, plotW, plotH, true);
   }
 
-  function drawAccel(ctx, trace, xOf, breaks, padL, padT, plotW, plotH) {
+  function drawAccel(ctx, trace, xOf, breaks, padL, padT, plotW, plotH, gh) {
     // Range always spans 0..1 g (weightless to sitting still) plus the data,
     // so the 1 g reference line is meaningful and airtime shows below zero.
     let lo = -0.5, hi = 1.4;
     for (const p of trace) {
       lo = Math.min(lo, p.vg, p.lg);
       hi = Math.max(hi, p.vg, Math.abs(p.lg));
+    }
+    // The ghost shares the scale, so it has to be in the range that sets it.
+    if (gh) for (const p of gh) {
+      lo = Math.min(lo, p.vg);
+      hi = Math.max(hi, p.vg);
     }
     lo = Math.floor(lo * 2) / 2;
     hi = Math.ceil(hi * 2) / 2;
@@ -594,6 +749,7 @@
     dashAt(L.latHigh, 'rgba(194,24,91,0.38)');
     dashAt(-L.latHigh, 'rgba(194,24,91,0.38)');
 
+    plotGhost(ctx, gh, GHOST_SERIES.accel, xOf, Y, RC.trackPath().total);
     plotSeries(ctx, trace, 'vg', xOf, Y, breaks, VERT_G, 1.8);
     plotSeries(ctx, trace, 'lg', xOf, Y, breaks, LAT_G, 1.8);
 

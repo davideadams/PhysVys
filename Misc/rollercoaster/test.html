@@ -6431,6 +6431,125 @@
     }
   });
 
+  check('the other friction run is kept, and shown only once there is one', () => {
+    /* The comparison this sim exists to make: the same track, the same train,
+       run once with friction and once without. A ghost is offered only when
+       the OTHER setting has actually been run, because until then there is
+       nothing to compare against and a line drawn from nowhere is worse than
+       no line. */
+    RC.loadPrefab('first-drop');
+    RC.sim.cars = 4;
+    RC.clearGhosts();
+
+    RC.sim.friction = false;
+    RC.resetSim();
+    if (RC.graphGhost()) return 'a ghost appeared before anything had been run';
+
+    runFor(240);
+    if (RC.sim.state !== 'finished') return `frictionless run: state "${RC.sim.state}"`;
+
+    // One run, under this very setting. A run against itself says nothing.
+    RC.resetSim();
+    if (RC.graphGhost()) return 'a frictionless run is offered as its own ghost';
+
+    // Switch the one thing the comparison is about, and there it is.
+    RC.sim.friction = true;
+    RC.resetSim();
+    const g = RC.graphGhost();
+    if (!g) return 'the frictionless run is not offered to the friction run';
+    if (g.friction) return 'the ghost is the friction run, not the frictionless one';
+    if (!(g.trace.length > 10)) return `the kept trace is only ${g.trace.length} samples`;
+
+    // Named wherever it is drawn, and nowhere it is not.
+    if (!RC.graphKey('speed').some(r => /friction off/i.test(r.label))) {
+      return 'the ghost is drawn on the speed plot but the key does not name it';
+    }
+    if (RC.graphKey('bars').some(r => /friction/i.test(r.label))) {
+      return 'the energy bars name a ghost they cannot draw';
+    }
+
+    /* Anything else that changes the run retires it. Two plots that differ for
+       a reason the picture does not show are worse than one plot. */
+    RC.sim.cars = 2;
+    if (RC.graphGhost()) return 'a ghost survived a change of train';
+    RC.sim.cars = 4;
+    if (!RC.graphGhost()) return 'putting the train back did not bring the ghost back';
+    RC.resetTrack();
+    if (RC.graphGhost()) return 'a ghost survived a change of track';
+
+    RC.clearGhosts();
+    RC.sim.friction = false;
+  });
+
+  check('the speed plot names the track profile behind it', () => {
+    /* Height is in every sample and used to be readable only under the cursor,
+       which is a poor place for half of what the sim is about. Against distance
+       the profile is a side elevation of the track the student built. It is the
+       speed plot's alone - the others have no room for it and do not draw it. */
+    RC.loadPrefab('first-drop');
+    RC.clearGhosts();
+    RC.sim.cars = 4;
+    RC.sim.friction = false;
+    RC.resetSim();
+    if (RC.graphKey('speed').some(r => /height/i.test(r.label))) {
+      return 'the track profile is named before the train has run';
+    }
+    runFor(240);
+    if (!RC.graphKey('speed').some(r => /height/i.test(r.label))) {
+      return 'the speed plot draws a profile it does not name';
+    }
+    for (const m of ['energy', 'accel', 'bars']) {
+      if (RC.graphKey(m).some(r => /height/i.test(r.label))) {
+        return `the ${m} plot names a track profile it does not draw`;
+      }
+    }
+    /* The two marks have to be told apart on sight, so they are different KINDS
+       of mark: the profile is a filled shape, the ghost a dashed line. */
+    const prof = RC.graphKey('speed').find(r => /height/i.test(r.label));
+    if (prof.dashed) return 'the profile is drawn dashed, like the ghost';
+  });
+
+  check('a plot carrying a ghost and a profile still draws', () => {
+    /* The three renderers took a new argument and the speed plot gained a
+       filled shape and an axis of its own. Nothing here inspects pixels: what
+       is under test is that a run with both on it goes through the drawing at
+       all, on both axes, which is where a signature slip would show. */
+    RC.loadPrefab('first-drop');
+    RC.clearGhosts();
+    RC.sim.cars = 4;
+    RC.sim.friction = false;
+    RC.resetSim();
+    runFor(240);
+    RC.sim.friction = true;
+    RC.resetSim();
+    runFor(240);
+    if (!RC.graphGhost()) return 'no ghost was kept, so this proves nothing';
+
+    // The drawing measures the canvas's CSS box, so it has to be in the page.
+    const c = document.createElement('canvas');
+    c.style.position = 'fixed';
+    c.style.left = '-20000px';
+    c.style.width = '420px';
+    c.style.height = '260px';
+    document.body.appendChild(c);
+    const held = RC.graphMode(), heldAxis = RC.graphAxis();
+    try {
+      for (const m of ['energy', 'accel', 'speed']) {
+        for (const ax of ['s', 't']) {
+          RC.setGraphMode(m);
+          RC.setGraphAxis(ax);
+          RC.drawEnergyGraph(c);
+        }
+      }
+    } finally {
+      RC.setGraphMode(held);
+      RC.setGraphAxis(heldAxis);
+      document.body.removeChild(c);
+      RC.clearGhosts();
+      RC.sim.friction = false;
+    }
+  });
+
   check('both axes plot the same run, and the trace carries what each needs', () => {
     /* The time axis is not a second copy of the data — it is the same trace
        read down a different column. So what has to hold is that both columns
