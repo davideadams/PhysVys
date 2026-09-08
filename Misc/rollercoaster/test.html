@@ -1421,6 +1421,22 @@
     }
   }
 
+  /* A point inside the first feature of a given kind on the current track, and
+     what that feature is called. Found by walking the track rather than written
+     down: the presets get rebuilt often enough that a hard-coded arc position
+     would rot, and a test that says which loop it means is more use than one
+     carrying a magic number. */
+  function featureSpot(type) {
+    const total = RC.trackPath().total;
+    for (let s = 0; s < total; s += 0.5) {
+      const f = RC.featureAt(s);
+      if (f && f.type === type) return { s, label: f.label };
+    }
+    return null;
+  }
+  const loopSpot = () => featureSpot('loop');
+  const turnSpot = () => featureSpot('turn');
+
   /* How far along a path the train is still descending: the arc position where
      it first reaches ground level. This, not the total, is what separates the
      demo's routes — every lane is padded with level track to a common finish
@@ -5380,6 +5396,72 @@
       return 'no kinetic energy is reported while the train is moving';
     }
     RC.sim.friction = false;
+  });
+
+  check('the verdict says where the force was, not what axis it was on', () => {
+    /* "Heavy through the dips" described a LOOP, because the sentence worked
+       the place out from the axis: vertical g meant the dips, sideways meant
+       the turns. That holds for a layout of hills and corners and stops holding
+       the moment a loop is on the track - a loop's worst vertical g is at the
+       bottom of it, which is not a dip.
+
+       Put to rideVerdict directly rather than found by running a preset. This
+       first went the other way and asked Looper for a heavy reading on its
+       loop, which is how the report screenshot that prompted the fix was
+       produced - but the preset pulls 4.4 g at four cars, under the 5 the
+       branch needs, and a test pinned to a preset's g figure would break every
+       time the geometry moved. It has moved a lot. rideVerdict reads nothing
+       but the sim's own fields, so the case can simply be handed to it. */
+    RC.loadPrefab('looper');
+    RC.resetSim();
+    const loop = loopSpot();
+    if (!loop) return 'the looper preset has no loop on it';
+
+    const L = RC.G_LIMITS;
+    const say = over => RC.rideVerdict(
+      Object.assign({}, RC.sim, { state: 'finished' }, over));
+
+    // Both branches that describe a heavy vertical reading.
+    for (const g of [L.vertHigh + 0.1, L.vertExtreme + 0.1]) {
+      const v = say({ maxVertG: g, maxVertGs: loop.s });
+      if (/dip/i.test(v)) return `at ${g.toFixed(1)} g on the loop: "${v}"`;
+      if (v.indexOf(loop.label) < 0) return `the loop is not named: "${v}"`;
+    }
+
+    // And with nothing to name, it still says something sensible.
+    const plain = say({ maxVertG: L.vertHigh + 0.1, maxVertGs: null });
+    if (!/dip/i.test(plain)) {
+      return `off a named feature the verdict lost its fallback: "${plain}"`;
+    }
+  });
+
+  check('a loop is not told to bank itself', () => {
+    /* Banking is the fix for a corner. A loop is already leaning as far as the
+       roll limit lets it, and there is no banking control on one at all, so
+       "bank those turns" sends a student looking for something that is not
+       there. What is left is arriving slower, or building it smaller.
+
+       rideVerdict reads nothing but the sim's own fields, so the case can be
+       put to it directly rather than hunting for a track that produces it. */
+    RC.loadPrefab('looper');
+    RC.resetSim();
+
+    const loop = loopSpot(), turn = turnSpot();
+    if (!loop) return 'the looper preset has no loop on it';
+    if (!turn) return 'the looper preset has no turn on it';
+
+    const L = RC.G_LIMITS;
+    const say = (g, s) => RC.rideVerdict(
+      Object.assign({}, RC.sim, { state: 'finished', maxLatG: g, maxLatGs: s }));
+
+    for (const g of [L.latHigh + 0.1, L.latExtreme + 0.1]) {
+      const onLoop = say(g, loop.s);
+      if (/bank/i.test(onLoop)) return `at ${g.toFixed(1)} g on the loop: "${onLoop}"`;
+      if (onLoop.indexOf(loop.label) < 0) return `the loop is not named: "${onLoop}"`;
+      // A corner still gets the advice that works on a corner.
+      const onTurn = say(g, turn.s);
+      if (!/bank/i.test(onTurn)) return `at ${g.toFixed(1)} g on a turn: "${onTurn}"`;
+    }
   });
 
   check('the exported summary states the scale it was built at', () => {

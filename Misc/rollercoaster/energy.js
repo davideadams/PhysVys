@@ -624,6 +624,26 @@
     return parts.length ? parts.join(', ') : 'straight';
   };
 
+  /* The feature an extreme happened on, and that feature named as a phrase.
+
+     The verdict used to describe the PLACE from the AXIS: vertical g meant "the
+     dips", sideways meant "those turns". That is right for a layout of hills
+     and corners and wrong the moment a loop is on the track. A loop's worst
+     vertical g is at the bottom of it, which is not a dip, and a loop's own
+     sideways step can be the hardest thing on the ride without being a corner
+     at all - which is how "Heavy through the dips" came to describe a loop and
+     "bank those turns" came to be the advice for one.
+
+     The sim already records where each extreme was, so the sentence can say. */
+  function featureOf(s) {
+    try { return s == null ? null : RC.featureAt(s); } catch (e) { return null; }
+  }
+  // "on Loop 1", to match the way the rows above already name a place.
+  const atFeature = (s, fallback) => {
+    const f = featureOf(s);
+    return f && f.label ? ' on ' + f.label : fallback;
+  };
+
   /* A plain-English read on how the ride feels, from the g extremes. */
   RC.rideVerdict = function (sim) {
     // A wreck outranks any comment on comfort.
@@ -635,18 +655,55 @@
           'height at the end to climb against.';
     }
     const L = RC.G_LIMITS;
+
+    /* Sideways advice depends on what is doing the pulling. Banking a corner is
+       the fix for a corner; a loop is already leaning as far as it is allowed
+       to, and the only thing left is to arrive at it slower or build it
+       smaller. Telling a student to bank a loop sends them looking for a
+       control that is not there. */
+    const sideways = (violent) => {
+      const f = featureOf(sim.maxLatGs);
+      const where = f && f.label ? f.label : null;
+      if (f && f.type === 'loop') {
+        return violent
+          ? `The sideways forces on ${where} are violent. It needs less ` +
+            `speed going in, or a smaller loop.`
+          : `${where} pulls harder sideways than most rides allow. It would ` +
+            `take it better a little slower.`;
+      }
+      if (violent) {
+        return where
+          ? `The sideways forces on ${where} are violent. Bank it, or make it wider.`
+          : 'The sideways forces are violent. Bank those turns, or make them wider.';
+      }
+      return where
+        ? `${where} pulls harder sideways than most rides allow - bank it.`
+        : 'Those turns pull harder sideways than most rides allow - bank them.';
+    };
+
     if (sim.minVertG < L.airtimeHard) {
-      return 'This ride would throw riders out of the train. Slow it down over the ' +
-             'crests, or make them gentler.';
+      return 'This ride would throw riders out of the train' +
+             atFeature(sim.minVertGs, ' over the crests') +
+             '. Slow it down there, or make it gentler.';
     }
-    if (sim.maxLatG > L.latExtreme) {
-      return 'The sideways forces are violent. Bank those turns, or make them wider.';
+    if (sim.maxLatG > L.latExtreme) return sideways(true);
+    if (sim.maxVertG > L.vertExtreme) {
+      return 'Brutally heavy' + atFeature(sim.maxVertGs, ' through the dips') +
+             ' - riders would grey out.';
     }
-    if (sim.maxVertG > L.vertExtreme) return 'Brutally heavy through the dips - riders would grey out.';
-    if (sim.minVertG < L.airtimeGood) return 'Strong ejector airtime - right at the edge of what restraints hold.';
-    if (sim.maxVertG > L.vertHigh) return 'Heavy through the dips, but no more than a real ride pulls for a moment.';
-    if (sim.maxLatG > L.latHigh) return 'Those turns pull harder sideways than most rides allow - bank them.';
-    if (sim.minVertG < -0.05) return 'There is real airtime over the crests, and nothing dangerous about it.';
+    if (sim.minVertG < L.airtimeGood) {
+      return 'Strong ejector airtime' + atFeature(sim.minVertGs, '') +
+             ' - right at the edge of what restraints hold.';
+    }
+    if (sim.maxVertG > L.vertHigh) {
+      return 'Heavy' + atFeature(sim.maxVertGs, ' through the dips') +
+             ', but no more than a real ride pulls for a moment.';
+    }
+    if (sim.maxLatG > L.latHigh) return sideways(false);
+    if (sim.minVertG < -0.05) {
+      return 'There is real airtime' + atFeature(sim.minVertGs, ' over the crests') +
+             ', and nothing dangerous about it.';
+    }
     if (sim.maxVertG < 1.4 && sim.maxLatG < 0.4) return 'A very gentle ride.';
     return 'Comfortable the whole way round.';
   };
