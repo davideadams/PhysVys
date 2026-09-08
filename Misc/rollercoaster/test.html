@@ -1405,10 +1405,13 @@
 
   /* Step at ~60 Hz frames, as the real render loop does, not one substep at a
      time. stepSim subdivides each frame into 1/240 s substeps internally, so
-     the physics is identical, but the trace records once per frame — at the
-     same cadence as real use. Stepping at 1/240 here recorded four times too
-     fast and filled the 4000-sample cap after ~17 s, truncating the trace of
-     any longer ride. */
+     the physics is identical either way.
+
+     This used to matter for the trace as well: recording happened once a frame,
+     so stepping at 1/240 filled the sample cap four times too fast and
+     truncated the trace of any longer ride. The trace is on the ride clock now
+     and does not care what dt it is fed — that is its own check below — but a
+     frame-sized step is still what real use looks like, so it stays. */
   function runFor(seconds) {
     RC.sim.state = 'running';
     const dt = 1 / 60;
@@ -3224,6 +3227,94 @@
     }
     if (!(tr[tr.length - 1].th > 0)) return 'friction was on but nothing was lost to heat';
     RC.sim.friction = false;
+  });
+
+  check('the trace is sampled on the ride clock, not the frame rate', () => {
+    /* Recording once a frame made the trace a property of the monitor. The
+       same ride gave four times as many samples on a 240 Hz display as on a
+       60 Hz one, filled the cap four times sooner, and produced two CSVs that
+       could not be laid against each other — which is exactly what a class
+       comparing runs wants to do. */
+    const err = buildTestCircuit();
+    if (err) return err;
+    const runAt = (dt, seconds) => {
+      RC.resetSim(RC.stationEndS() + 1);
+      RC.sim.state = 'running';
+      for (let n = 0; n < seconds / dt && RC.sim.state === 'running'; n++) RC.stepSim(dt);
+      return { n: RC.sim.trace.length, t: RC.sim.time };
+    };
+    const slow = runAt(1 / 60, 5);
+    const fast = runAt(1 / 240, 5);
+    // Same ride, same clock: the physics must land in the same place too, or
+    // the sample counts are being compared across two different runs.
+    if (!near(slow.t, fast.t, 0.05)) {
+      return `the two runs covered ${slow.t.toFixed(2)} s and ${fast.t.toFixed(2)} s`;
+    }
+    if (Math.abs(slow.n - fast.n) > 2) {
+      return `${slow.t.toFixed(1)} s of ride gave ${slow.n} samples at 60 Hz ` +
+             `and ${fast.n} at 240 Hz`;
+    }
+    // Guards against the comparison passing because both runs recorded nothing.
+    if (slow.n < 20) return `only ${slow.n} samples in ${slow.t.toFixed(1)} s`;
+  });
+
+  check('a long ride loses resolution, never the end of its trace', () => {
+    /* The cap used to be a cliff. Recording stopped dead at the last sample the
+       trace would hold, so the traces ended mid-canvas, the "now" line parked
+       there with them, and the ride looked as though it had finished early with
+       nothing on screen saying otherwise.
+
+       Now the trace halves and the interval doubles, which costs detail and
+       keeps the newest sample — the one the "now" line is drawn at. Forced
+       samples here rather than a real run, because recording can only happen
+       once a frame and filling the trace honestly would take minutes. */
+    const err = buildTestCircuit();
+    if (err) return err;
+    RC.resetSim(RC.stationEndS() + 1);
+    const dt0 = RC.sim.traceDt;
+    const want = Math.round(RC.TRACE_CAP * 1.5);
+    for (let n = 0; n < want; n++) {
+      RC.sim.time += 0.01;              // so the samples are genuinely ordered
+      RC.recordTrace(true);
+    }
+    const tr = RC.sim.trace;
+    if (tr.length > RC.TRACE_CAP) {
+      return `${want} samples left a trace of ${tr.length}, past the ${RC.TRACE_CAP} cap`;
+    }
+    if (tr.length < RC.TRACE_CAP / 4) return `the trace collapsed to ${tr.length} samples`;
+    if (!(RC.sim.traceDt > dt0)) return 'the trace filled but the interval never widened';
+    const last = tr[tr.length - 1];
+    if (!near(last.t, RC.sim.time, 1e-6)) {
+      return `the ride is at ${RC.sim.time.toFixed(2)} s but the trace stops at ` +
+             `${last.t.toFixed(2)} s — the plot would end short of the train`;
+    }
+    for (let n = 1; n < tr.length; n++) {
+      if (tr[n].t < tr[n - 1].t) return `time goes backwards at sample ${n}`;
+    }
+  });
+
+  check('the trace reaches the point where the train stopped', () => {
+    /* The last sample is where the graph's "now" line lands, so a trace that
+       stops a frame short of the end of the run draws the train somewhere it
+       never was. Sampling on the ride clock makes that the normal case — the
+       run can end between two scheduled samples — so the frame a run finishes
+       on takes one whatever the clock says. */
+    RC.loadPrefab('first-drop');
+    RC.sim.cars = 4;
+    RC.sim.friction = false;
+    RC.resetSim();
+    runFor(240);
+    if (RC.sim.state !== 'finished') return `state "${RC.sim.state}" after 240 s`;
+    const last = RC.sim.trace[RC.sim.trace.length - 1];
+    if (!last) return 'the run left no trace at all';
+    if (!near(last.t, RC.sim.time, 1e-6)) {
+      return `the run ended at ${RC.sim.time.toFixed(3)} s but the trace ` +
+             `stops at ${last.t.toFixed(3)} s`;
+    }
+    if (!near(last.s, RC.sim.s, 1e-6)) {
+      return `the train stopped at ${RC.sim.s.toFixed(3)} m but the trace ` +
+             `stops at ${last.s.toFixed(3)} m`;
+    }
   });
 
   check('train length changes the effective slope (mean over cars)', () => {

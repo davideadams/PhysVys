@@ -30,6 +30,19 @@
 
   const SUBSTEP = 1 / 240;   // s — fixed physics step
   const MAX_FRAME = 0.1;     // s — ignore huge gaps after a tab switch
+  /* s of RIDE time between trace samples, and how many the trace holds. Up
+     here with the other clocks rather than beside the trace code, because the
+     sim literal below has to start with an interval in it. See the trace
+     section for why the sampling is on this clock and not on the frame.
+
+     The cap is a memory bound and nothing else, and 4000 was far too mean a
+     one: a sample is thirteen numbers, so 12000 of them is a megabyte and a
+     half, on a page that holds a track and its render. Twelve thousand is 200 s
+     of riding before the trace has to give up any resolution at all, which no
+     ride on this grid comes close to. */
+  const TRACE_DT = 1 / 60;
+  const TRACE_CAP = 12000;
+  RC.TRACE_CAP = TRACE_CAP;   // the suite checks the trace stays inside it
   const STATION_DISPATCH = 2.5; // m/s — drive tyres pushing the train out
   const STATION_HOME = 1.5;     // m/s — and walking it back into its berth
   /* m/s^2 — how hard a brake run bites. About 1.5 g, which is a firm but
@@ -107,6 +120,7 @@
     warnKeys: {},
     warnSeverity: {},
     trace: [],
+    traceDt: TRACE_DT,   // grows when a long ride fills the trace; see record()
     note: ''
   };
 
@@ -331,6 +345,7 @@
     sim.warnKeys = {};       // key -> index in warnings, so repeats collapse
     sim.warnSeverity = {};   // key -> worst reading seen for that key
     sim.trace = [];
+    sim.traceDt = TRACE_DT;  // back to full resolution for the new run
     sim.jolts = [];          // indexed by joint; sparse until one is crossed
     sim.kVert = 0;
     sim.kLat = 0;
@@ -1175,13 +1190,44 @@
   };
 
   /* ---- trace ------------------------------------------------------------
-     One sample per frame, not per substep — the graph only needs enough
-     points to draw a smooth line, and 240 Hz would fill the cap in seconds. */
-  const TRACE_CAP = 4000;
 
-  function record() {
+     Sampled on the RIDE CLOCK, not once a frame, and never truncated.
+
+     Recording one sample per frame made the graph a picture of the monitor as
+     much as of the ride. At the old cap of 4000 the trace filled after 66 s of
+     riding on a 60 Hz laptop and after 33 s on a 120 Hz one — and plenty of
+     school laptops are now the latter. Two students running the same track on
+     different machines got different traces, and the exported CSV could not be
+     compared between them.
+
+     Worse, the cap was a cliff. Recording simply stopped: the "now" line parked
+     mid-plot, the traces ended in the middle of the canvas, and the ride looked
+     as though it had finished early with nothing on screen saying otherwise.
+
+     So a sample every TRACE_DT of ride time, and on reaching the cap the trace
+     is HALVED — every second sample dropped, the interval doubled — which costs
+     resolution and never the end of the plot. With the cap at 12000 the first
+     halving is at 200 s of ride and the second at 400, so decimation is a
+     backstop for a train circling all lesson rather than something an ordinary
+     ride ever meets. */
+  function decimate(sim) {
+    const tr = sim.trace;
+    const kept = [];
+    for (let n = 0; n < tr.length; n += 2) kept.push(tr[n]);
+    // The newest sample is where the train IS. Dropping it would move the
+    // "now" line backwards, which is the artefact this is here to prevent.
+    if (kept[kept.length - 1] !== tr[tr.length - 1]) kept.push(tr[tr.length - 1]);
+    sim.trace = kept;
+    sim.traceDt *= 2;
+  }
+
+  /* `force` takes a sample whatever the clock says — for the one at the end of
+     a run, so the plot reaches the train rather than stopping a frame short. */
+  function record(force) {
     const sim = RC.sim;
-    if (sim.trace.length >= TRACE_CAP) return;
+    const last = sim.trace[sim.trace.length - 1];
+    if (!force && last && sim.time - last.t < sim.traceDt - 1e-9) return;
+    if (sim.trace.length >= TRACE_CAP) decimate(sim);
     const e = RC.energy();
     sim.trace.push({
       s: sim.s, t: sim.time, v: Math.abs(sim.v), h: e.h,
@@ -1217,6 +1263,7 @@
     const going = () => sim.state === 'running' || RC.demoRunning();
     if (!going()) return false;
 
+    const wasRunning = sim.state === 'running';
     let dt = Math.min(MAX_FRAME, Math.max(0, dtFrame));
     while (dt > 0 && going()) {
       const step = Math.min(SUBSTEP, dt);
@@ -1226,7 +1273,10 @@
       if (RC.demo) for (const tr of RC.demo.trains) stepDemoTrain(tr, step);
       dt -= step;
     }
+    // A sample on the ride clock while it runs, and one more the frame it
+    // stops, so the plot reaches the train instead of ending short of it.
     if (sim.state === 'running') record();
+    else if (wasRunning) record(true);
     return true;
   };
 
