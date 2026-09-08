@@ -267,9 +267,12 @@
       html += keyFor('accel');
     }
 
+    // Read off the constants, not typed out: this line said a height step was
+    // 1 m, which is twice what LEVEL_M has ever been, on the one page that
+    // leaves the app and gets marked.
     html += `<p class="foot">Made with the PhysVys Rollercoaster Builder. ` +
-            `One tile is 6&nbsp;m and one height step is 1&nbsp;m; heights are ` +
-            `measured from ground level.</p>`;
+            `One tile is ${RC.TILE_M}&nbsp;m and one height step is ` +
+            `${RC.LEVEL_M}&nbsp;m; heights are measured from ground level.</p>`;
     html += '\n</body>\n</html>\n';
     return html;
   };

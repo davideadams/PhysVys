@@ -718,13 +718,7 @@
      chain on it. */
   function settingsSection() {
     const sim = RC.sim;
-    let hasLift = false, hasBrake = false, hasLaunch = false;
-    for (const p of RC.track.pieces) {
-      const def = RC.pieceDef(p.defId);
-      if (p.lift) hasLift = true;
-      if (def.brake) hasBrake = true;
-      if (def.launch) hasLaunch = true;
-    }
+    const has = RC.trackDrives();
 
     let html = `<div class="report-hd">Settings</div>`;
     // Mass and length both, since either can be changed on its own and either
@@ -739,9 +733,9 @@
       html += row('Rolling resistance <span class="muted">&mu;</span>', sim.mu.toFixed(3));
       html += row('Air drag <span class="muted">k</span>', sim.kDrag.toFixed(4));
     }
-    if (hasLift) html += row('Chain lift speed', sim.liftSpeed.toFixed(1) + ' m/s');
-    if (hasBrake) html += row('Brake speed', sim.brakeSpeed.toFixed(1) + ' m/s');
-    if (hasLaunch) html += row('Launch speed', sim.launchSpeed.toFixed(1) + ' m/s');
+    if (has.lift) html += row('Chain lift speed', sim.liftSpeed.toFixed(1) + ' m/s');
+    if (has.brake) html += row('Brake speed', sim.brakeSpeed.toFixed(1) + ' m/s');
+    if (has.launch) html += row('Launch speed', sim.launchSpeed.toFixed(1) + ' m/s');
     return html;
   }
 
@@ -769,47 +763,40 @@
     // report, and three em dashes would say less than nothing.
     if (geo.crestR === null && geo.valleyR === null && geo.turnR === null) return '';
 
-    /* Named only when one feature holds the record. Ties are the normal case —
-       every flat-to-gentle transition bends at the same radius — and naming an
-       arbitrary member of a dozen is worse than counting them. */
-    const R = (r, s, n) => {
-      if (r === null) return '—';
-      const where = n > 1
-        ? ` <span class="muted">at ${n} places</span>`
-        : onFeature(s);
-      return r.toFixed(1) + ' m' + where;
-    };
+    /* ONE ROW, not the three this used to be.
+
+       A crest radius, a valley radius and a turn radius side by side ask the
+       reader to work out which of them binds, and on this grid two of the three
+       are usually the same number anyway: transitionTiles solves every
+       transition to the same curvature by design, so nearly every crest and
+       nearly every valley on any track bends at about 24 m. A track with three
+       turns on it got a row announcing which of the three was tightest, which
+       is not a fact worth a line.
+
+       So: name the bend that actually holds the record, and say which kind it
+       is. The row below — where the speed the track can deliver comes closest
+       to what its shape will take — is the one that answers a question, and it
+       reads better with one radius above it than three.
+
+       Ties are still the normal case, so a record shared by a dozen transitions
+       is counted rather than having an arbitrary member of it named. */
+    const bends = [
+      { r: geo.crestR, s: geo.crestS, n: geo.crestN, kind: 'crest' },
+      { r: geo.valleyR, s: geo.valleyS, n: geo.valleyN, kind: 'valley' },
+      { r: geo.turnR, s: geo.turnS, n: geo.turnN, kind: 'turn' }
+    ].filter(b => b.r !== null).sort((a, b) => a.r - b.r);
 
     let html = `<div class="report-hd">Shape</div>`;
-    html += row('Tightest crest', R(geo.crestR, geo.crestS, geo.crestN));
-    html += row('Tightest valley', R(geo.valleyR, geo.valleyS, geo.valleyN));
-    html += row('Tightest turn', R(geo.turnR, geo.turnS, geo.turnN));
+    const t = bends[0];
+    html += row('Tightest bend', `${t.r.toFixed(1)} m ${t.kind}` +
+                (t.n > 1 ? ` <span class="muted">at ${t.n} places</span>`
+                         : onFeature(t.s)));
     if (geo.tightV !== null) {
       const over = geo.tightHead < 0;
       html += row(over ? 'Over the limits at' : 'Closest to the limits',
                   `${geo.tightV.toFixed(1)} m/s <span class="muted">against ` +
                   `${geo.tightCap.toFixed(1)} ${geo.tightWhy}</span>` +
                   onFeature(geo.tightS));
-    }
-
-    // The worst jolts this run actually took. A joint the train never reached
-    // has no entry, so an untested corner is silent rather than reassuring.
-    const jolts = RC.worstJolts ? RC.worstJolts(3) : [];
-    if (jolts.length && jolts[0].g > 0.05) {
-      html += `<div class="report-hd">Jolts</div>`;
-      for (const j of jolts) {
-        if (j.g <= 0.05) continue;
-        // Plain track is deliberately unnamed, so a jolt on it would otherwise
-        // say only how fast the train was going — no use to someone trying to
-        // find the joint. Fall back to the distance, which always locates it.
-        const where = onFeature(j.s, 0.05) ||
-                      ` <span class="muted">at ${j.s.toFixed(0)} m</span>`;
-        html += row(`At ${j.v.toFixed(1)} m/s${where}`,
-                    j.g.toFixed(2) + ' g, all at once');
-      }
-      html += `<p class="report-note">Each piece meets the next with a step in ` +
-              `curvature, so that much force arrives with nothing leading up to ` +
-              `it. Real track eases every joint in and out instead.</p>`;
     }
 
     /* Warned on where the track can outrun its own shape, not on where the run
@@ -827,6 +814,42 @@
     return html;
   }
 
+  /* The worst jolts this run actually took. A joint the train never reached has
+     no entry, so an untested corner is silent rather than reassuring.
+
+     This used to sit inside the Shape section, above the g-forces. It has been
+     moved to the end of the report, below the warnings, because of what it
+     actually measures: not the ride, but the MODEL. Track here is built from a
+     catalogue of fixed pieces, and where two of them meet the curvature steps
+     rather than easing, so the force arrives all at once. Real track does not
+     do that, as the note says. It is worth knowing and worth keeping — a
+     student comparing this sim to a real ride should be told where it differs —
+     but it is a footnote about the simulation, and it was standing between the
+     reader and the figures about their coaster. */
+  function joltsSection() {
+    const jolts = RC.worstJolts ? RC.worstJolts(3) : [];
+    if (!jolts.length || jolts[0].g <= 0.05) return '';
+    let html = `<div class="report-hd">Jolts</div>`;
+    for (const j of jolts) {
+      if (j.g <= 0.05) continue;
+      // Plain track is deliberately unnamed, so a jolt on it would otherwise
+      // say only how fast the train was going — no use to someone trying to
+      // find the joint. Fall back to the distance, which always locates it.
+      const where = onFeature(j.s, 0.05) ||
+                    ` <span class="muted">at ${j.s.toFixed(0)} m</span>`;
+      html += row(`At ${j.v.toFixed(1)} m/s${where}`,
+                  j.g.toFixed(2) + ' g, all at once');
+    }
+    html += `<p class="report-note">Each piece meets the next with a step in ` +
+            `curvature, so that much force arrives with nothing leading up to ` +
+            `it. Real track eases every joint in and out instead.</p>`;
+    return html;
+  }
+
+  /* Once per run, not once per frame: the report is rebuilt every frame the
+     window is open, and a console that scrolls is a console nobody reads. */
+  let driftLogged = false;
+
   /* The report as a string, so it can be written to the page or dropped into an
      exported document without either having to know about the other. */
   RC.reportHTML = function () {
@@ -835,6 +858,8 @@
     const st = RC.circuitStatus();
 
     if (!sim.time) {
+      // A run that has not started yet is a new run: arm the drift check again.
+      driftLogged = false;
       return row('Track length', RC.trackLength().toFixed(0) + ' m') +
              row('Circuit', st.label) +
              settingsSection() +
@@ -892,17 +917,19 @@
 
     html += geometrySection();
 
-    html += `<div class="report-hd">G-force</div>`;
-    html += row('Vertical, greatest',
-                sim.maxVertG.toFixed(2) + ' g' + onFeature(sim.maxVertGs));
-    html += row('Vertical, least',
-                sim.minVertG.toFixed(2) + ' g' + onFeature(sim.minVertGs));
-    html += row('Lateral, greatest',
-                sim.maxLatG.toFixed(2) + ' g' + onFeature(sim.maxLatGs));
-    // The published short-burst limits, as a figure to read the rows against
-    // rather than a paragraph explaining them.
-    html += row('Allowed briefly <span class="muted">(ASTM/EN)</span>',
-                `${L.vertHigh} · ${L.airtimeGood} · ${L.latHigh} g`);
+    /* Each reading against the limit that bounds IT. The three limits used to
+       share a row of their own — "5 · -1.1 · 1.5 g" — which asked the reader to
+       match three unlabelled numbers to the three rows above by position, and
+       gave no clue which way round the airtime one ran. The attribution moves
+       to the heading, where it belongs anyway. */
+    html += `<div class="report-hd">G-force ` +
+            `<span class="muted">limits from ASTM F2291 / EN 13814</span></div>`;
+    const gRow = (label, g, at, limit) =>
+      row(label, `${g.toFixed(2)} g <span class="muted">limit ${limit}</span>` +
+                 onFeature(at));
+    html += gRow('Vertical, greatest', sim.maxVertG, sim.maxVertGs, L.vertHigh);
+    html += gRow('Vertical, least', sim.minVertG, sim.minVertGs, L.airtimeGood);
+    html += gRow('Lateral, greatest', sim.maxLatG, sim.maxLatGs, L.latHigh);
     html += `<p class="report-note">${RC.rideVerdict(sim)}</p>`;
 
     html += `<div class="report-hd">Energy</div>`;
@@ -914,15 +941,28 @@
     html += row('<strong>Total now</strong>', '<strong>' + fmt(e.total) + '</strong>');
     html += row('<strong>Supplied</strong>', '<strong>' + fmt(e.supplied) + '</strong>');
 
-    if (driftPct > 1) {
-      html += `<p class="report-warn">Energy is not adding up (${driftPct.toFixed(1)}% out) — ` +
-              `this is a bug in the simulation, not something you did.</p>`;
+    /* Conservation is an assertion about THIS CODE, not about the student's
+       coaster, so it no longer goes on the page. It used to print a red warning
+       that ended "this is a bug in the simulation, not something you did" — an
+       apology for a fault the reader can neither cause nor fix, in the middle of
+       a report they may be handing in.
+
+       The check itself is worth keeping and stays, in the console, where the
+       person who can act on it is the one who looks. The suite tests the same
+       invariant per sample and would fail long before this fired. */
+    if (driftPct > 1 && !driftLogged) {
+      driftLogged = true;
+      console.warn(`Rollercoaster: energy is ${driftPct.toFixed(1)}% out — ` +
+                   `total ${fmt(e.total)} against supplied ${fmt(e.supplied)}.`);
     }
 
     if (sim.warnings.length) {
       html += `<div class="report-hd">Warnings</div>`;
       for (const wmsg of sim.warnings) html += `<p class="report-warn">${wmsg}</p>`;
     }
+
+    // Last: it is a note about how this simulation is built, not about the ride.
+    html += joltsSection();
 
     return html;
   };

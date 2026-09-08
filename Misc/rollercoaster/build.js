@@ -622,13 +622,18 @@
          app multiplies it by LEVEL_M first (the Heights overlay, the release
          readout, the energy budget). This one did not, so the build head read
          double what the Heights labels put on the same piece, on the readout a
-         student watches while building a lift hill. */
+         student watches while building a lift hill.
+
+         The tile indices this used to lead with are gone. They are a piece's
+         internal address: nothing else in the app names one, and there is
+         nothing a builder can do with the answer. What is left is the two
+         facts that decide what can be built next. */
       const metres = k => (k * RC.LEVEL_M).toFixed(1) + ' m';
       if (inspecting) {
         const n = RC.track.pieces[cursor].node;
-        roHead.textContent = `piece ${cursor + 1} · (${n.i}, ${n.j}) · ${metres(n.k)}`;
+        roHead.textContent = `piece ${cursor + 1} · ${metres(n.k)}`;
       } else if (head) {
-        roHead.textContent = `(${head.i}, ${head.j}) · ${metres(head.k)} · ${RC.slopeName(head.g)}`;
+        roHead.textContent = `${metres(head.k)} · ${RC.slopeName(head.g)}`;
       }
     }
     const st = RC.circuitStatus();

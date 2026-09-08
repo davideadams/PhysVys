@@ -72,11 +72,11 @@
      Sits above the park rather than over it, so the sim is usable behind it. -->
 <div class="save-notice" id="save-notice" hidden></div>
 
+<!-- Only things that CHANGE. The grid size and the scale used to sit at the
+     front of this bar; both were written once at startup and never touched
+     again, so they were constants taking up the half of the bar nearest the
+     eye. They are in About, in prose, where a scale belongs. -->
 <div class="statusbar" id="statusbar">
-  <span id="ro-tile">—</span>
-  <span class="sb-sep"></span>
-  <span id="ro-scale"></span>
-  <span class="sb-sep"></span>
   <span>Track <b id="ro-length">0 m</b></span>
   <span class="sb-sep"></span>
   <span id="ro-circuit">No track</span>
@@ -269,8 +269,8 @@
       <button class="pal-wide" data-axis="t" type="button">vs time</button>
     </div>
 
-    <canvas id="graph-bars" class="mini-canvas" style="height: 200px;"></canvas>
-    <canvas id="graph-line" class="mini-canvas" style="height: 200px;" hidden></canvas>
+    <canvas id="graph-bars" class="mini-canvas" style="height: 260px;"></canvas>
+    <canvas id="graph-line" class="mini-canvas" style="height: 260px;" hidden></canvas>
 
     <div class="legend" id="legend-bars">
       <span><i style="background:#e8963c"></i>Kinetic</span>
@@ -298,13 +298,23 @@
       <span id="graph-pick-at">—</span><span id="graph-pick-vals">—</span>
     </div>
 
-    <!-- The train's live state, useful whichever plot is on screen. -->
+    <!-- The train's live state. Speed and height are the two state variables
+         and stay whatever is plotted; the rest FOLLOW THE MODE, as the pick row
+         above them already does — kinetic and potential beside an acceleration
+         trace are two figures nobody is reading, and a pair of g cells under
+         the energy bars are two more. Toggled in syncGraphMode.
+
+         A Total row went too. The bars sitting directly above it are a stack of
+         the two rows that remain, drawn against the supplied line, which is the
+         same comparison in the form that makes it obvious. The report keeps its
+         own copy — the exported summary carries no bars. -->
     <div class="readout-row"><span>Speed</span><span id="ro-e-v">—</span></div>
     <div class="readout-row"><span>Height</span><span id="ro-e-h">—</span></div>
-    <div class="readout-row"><span>E<sub>k</sub> = ½mv²</span><span id="ro-e-ke">—</span></div>
-    <div class="readout-row"><span>E<sub>p</sub> = mgh</span><span id="ro-e-pe">—</span></div>
-    <div class="readout-row"><span>Total</span><span id="ro-e-tot">—</span></div>
-    <div class="g-live">
+    <div id="live-energy">
+      <div class="readout-row"><span>E<sub>k</sub> = ½mv²</span><span id="ro-e-ke">—</span></div>
+      <div class="readout-row"><span>E<sub>p</sub> = mgh</span><span id="ro-e-pe">—</span></div>
+    </div>
+    <div class="g-live" id="live-g">
       <div class="g-cell">
         <span class="g-label">Vertical</span>
         <span class="g-value" id="ro-g-vert">—</span>
@@ -314,7 +324,6 @@
         <span class="g-value" id="ro-g-lat">—</span>
       </div>
     </div>
-    <div class="readout-row"><span>Train</span><span id="e-mass">—</span></div>
   </div>
 </section>
 

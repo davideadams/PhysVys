@@ -2172,10 +2172,43 @@
              `a lift, three drops and an airtime hill`;
     }
     if (!(geo.valleyN > 1)) return 'the tightest valley is claimed unique';
-    // And the report says so rather than naming one of them.
+
+    /* And the report obeys the same rule. It reports ONE bend now — the three
+       radii it used to list side by side were mostly the same number, and made
+       the reader work out which of them bound — so the rule applies to whichever
+       of the three holds the record: count it when it is shared, name it when it
+       is not, and never do both. Work out which wins rather than assuming, since
+       a preset's tightest bend is a fact about its layout. */
+    const tightest = [
+      { r: geo.crestR, n: geo.crestN, kind: 'crest' },
+      { r: geo.valleyR, n: geo.valleyN, kind: 'valley' },
+      { r: geo.turnR, n: geo.turnN, kind: 'turn' }
+    ].filter(b => b.r !== null).sort((a, b) => a.r - b.r)[0];
     const html = RC.reportHTML();
-    if (html.indexOf(`at ${geo.crestN} places`) < 0) {
-      return `the report does not say the tightest crest is shared by ${geo.crestN}`;
+    const counted = /Tightest bend[\s\S]{0,200}at (\d+) places/.exec(html);
+    if (tightest.n > 1) {
+      if (!counted || Number(counted[1]) !== tightest.n) {
+        return `the tightest bend is a ${tightest.kind} shared by ${tightest.n}, ` +
+               `and the report ${counted ? 'says ' + counted[1] : 'does not say so'}`;
+      }
+    } else if (counted) {
+      return `the tightest bend is a lone ${tightest.kind} but the report ` +
+             `counts it at ${counted[1]} places`;
+    }
+
+    /* The counted branch, built rather than borrowed, so it is exercised
+       whatever the presets happen to look like: two identical wide corners and
+       no slope anywhere, so the record is shared by exactly two and there is
+       nothing that bends tighter to displace it. */
+    RC.resetTrack();
+    for (const id of ['turn-right-wide', 'flat', 'turn-right-wide', 'flat']) {
+      if (!RC.place(id)) return `${id} refused`;
+    }
+    RC.resetSim();
+    const pair = RC.trackGeometry();
+    if (pair.turnN !== 2) return `${pair.turnN} corners share the record, expected 2`;
+    if (RC.reportHTML().indexOf('at 2 places') < 0) {
+      return 'two identical corners are not reported as a record shared by two';
     }
   });
 
@@ -5179,6 +5212,99 @@
     if (html.indexOf('Launch speed') < 0) return 'the launch speed is missing on a launched ride';
     if (html.indexOf('Chain lift speed') >= 0) return 'a lift speed is listed on a ride with no chain';
     RC.sim.cars = 4;
+  });
+
+  check('one answer for which drives a track carries', () => {
+    /* The report lists a drive's speed exactly when the track has that drive,
+       and the Setup window now hides the slider on the same test — a chain
+       speed is not a control on a ride with no chain. They worked it out
+       separately before, which is two places to get it wrong. */
+    RC.resetTrack();
+    let d = RC.trackDrives();
+    if (d.lift || d.brake || d.launch) return 'a bare station reports a drive on it';
+
+    if (!RC.place('brake')) return 'brake refused';
+    d = RC.trackDrives();
+    if (!d.brake) return 'a brake run is not reported';
+    if (d.lift || d.launch) return 'a brake run reports a lift or a launch as well';
+
+    RC.loadPrefab('shuttle-loop');
+    if (!RC.trackDrives().launch) return 'the launched preset does not report its launch';
+
+    RC.loadPrefab('first-drop');
+    if (!RC.trackDrives().lift) return 'the chain-lift preset does not report its chain';
+  });
+
+  check('the shape reads as one bend, not three', () => {
+    /* Crest, valley and turn radii side by side asked the reader to work out
+       which of them binds, and on this grid two of the three are usually the
+       same number anyway — transitionTiles solves every transition to the same
+       curvature, so nearly every crest and valley on any track bends at about
+       24 m. Name the one that actually holds the record, and say what kind it
+       is, since a bare radius does not tell you what you are looking at. */
+    RC.loadPrefab('first-drop');
+    RC.resetSim();
+    const html = RC.reportHTML();
+    if (html.indexOf('Tightest bend') < 0) return 'the shape section names no bend';
+    for (const gone of ['Tightest crest', 'Tightest valley', 'Tightest turn']) {
+      if (html.indexOf(gone) >= 0) return `"${gone}" is still a row of its own`;
+    }
+    if (!/Tightest bend[\s\S]{0,160}(crest|valley|turn)/.test(html)) {
+      return 'the tightest bend does not say which kind of bend it is';
+    }
+  });
+
+  check('the report does not apologise to the reader for its own bugs', () => {
+    /* Energy conservation is an assertion about THIS CODE. It used to print a
+       red warning ending "this is a bug in the simulation, not something you
+       did" — an apology for a fault the reader can neither cause nor fix, in
+       the middle of a report they may be handing in. The check itself is not
+       gone: it warns in the console, and this suite tests the same invariant
+       per sample and would fail long before it fired. */
+    RC.loadPrefab('first-drop');
+    RC.resetSim();
+    runFor(240);
+    if (RC.reportHTML().indexOf('bug in the simulation') >= 0) {
+      return 'the report still blames itself on the page';
+    }
+  });
+
+  check('the jolts note comes last, after the ride it is not about', () => {
+    /* A jolt measures the MODEL, not the coaster: track here is built from a
+       catalogue of fixed pieces, so where two meet the curvature steps instead
+       of easing and the force arrives all at once. Real track does not do that,
+       and the note says so. Worth keeping; not worth standing between a reader
+       and the figures about their own ride, which is where it used to sit.
+
+       Forged, because a well-formed preset barely jolts at all — the readout
+       being empty is what the catalogue is meant to achieve. */
+    RC.loadPrefab('first-drop');
+    RC.resetSim();
+    runFor(240);
+    RC.sim.jolts = [{ g: 0.9, s: 30, v: 18, joint: { dVert: 0.01, dLat: 0 } }];
+    const html = RC.reportHTML();
+    const at = html.indexOf('>Jolts<');
+    if (at < 0) return 'a run with a jolt in it reports no jolts';
+    for (const heading of ['>G-force', '>Energy<']) {
+      const h = html.indexOf(heading);
+      if (h < 0) return `the report has no ${heading} heading`;
+      if (h > at) return `${heading} is printed after the jolts`;
+    }
+  });
+
+  check('the exported summary states the scale it was built at', () => {
+    // Read off the constants rather than typed out: this footer claimed a
+    // height step was 1 m, twice what LEVEL_M has ever been, on the one page
+    // that leaves the app and gets marked.
+    RC.loadPrefab('first-drop');
+    RC.resetSim();
+    const html = RC.buildExportHTML('');
+    if (html.indexOf(`One tile is ${RC.TILE_M}&nbsp;m`) < 0) {
+      return `the footer does not say a tile is ${RC.TILE_M} m`;
+    }
+    if (html.indexOf(`height step is ${RC.LEVEL_M}&nbsp;m`) < 0) {
+      return `the footer does not say a height step is ${RC.LEVEL_M} m`;
+    }
   });
 
   check('an unrun track still exports, and says so', () => {

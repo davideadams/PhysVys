@@ -83,15 +83,32 @@
     const hEl = document.getElementById('ro-release-h');
     if (hEl) hEl.textContent = p ? (p.z * RC.LEVEL_M).toFixed(1) + ' m up' : '—';
 
-    // The friction sliders do nothing while friction is off.
-    const on = RC.sim.friction;
-    for (const id of ['mu', 'drag']) {
+    /* Show only what can do something.
+
+       The two friction constants used to sit here dimmed and disabled whenever
+       friction was off — which is the default — so the window opened with two
+       dead sliders in it, one of them labelled m^-1. Dimming says "not now";
+       what a student needs is for the control to appear when it starts to
+       matter, which is the moment they press Friction on.
+
+       The three drive speeds go the same way, on the same test the report uses
+       to decide whether to list them: a chain speed means nothing on a ride
+       with no chain on it. Build a lift hill and the slider arrives with it. */
+    const show = (id, on) => {
       const e = els.get(id);
-      if (!e) continue;
+      if (!e || !e.row) return;
+      e.row.hidden = !on;
       e.range.disabled = !on;
       e.num.disabled = !on;
-      if (e.row) e.row.classList.toggle('dimmed', !on);
-    }
+    };
+    const on = RC.sim.friction;
+    show('mu', on);
+    show('drag', on);
+    const drives = RC.trackDrives();
+    show('lift', drives.lift);
+    show('brake', drives.brake);
+    show('launch', drives.launch);
+
     const fb = document.getElementById('btn-friction');
     if (fb) {
       fb.classList.toggle('active', on);

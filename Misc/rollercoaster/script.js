@@ -195,11 +195,6 @@
     state.dirty = true;
   });
 
-  /* ---- readouts -------------------------------------------------------- */
-  document.getElementById('ro-tile').textContent = `${RC.GRID} × ${RC.GRID} tiles`;
-  document.getElementById('ro-scale').textContent =
-    `1 tile = ${RC.TILE_M} m · 1 step = ${RC.LEVEL_M} m`;
-
   /* ---- render ---------------------------------------------------------- */
   function render() {
     const view = state.view;
@@ -272,7 +267,6 @@
       setText('ro-e-h', e.h.toFixed(2) + ' m');
       setText('ro-e-ke', RC.fmtEnergy(e.ke));
       setText('ro-e-pe', RC.fmtEnergy(e.pe));
-      setText('ro-e-tot', RC.fmtEnergy(e.total));
 
       const g = sim.g || { vert: 1, lat: 0 };
       const vEl = document.getElementById('ro-g-vert');
@@ -287,7 +281,6 @@
         lEl.textContent = Math.abs(g.lat).toFixed(2) + ' g' + side;
         lEl.style.color = RC.gColour(g.lat, 'lat');
       }
-      setText('e-mass', `${sim.cars} cars, ${(RC.trainMass() / 1000).toFixed(1)} t`);
     }
     if (visible('win-report')) {
       RC.updateReport();
@@ -427,6 +420,13 @@
     show('legend-energy', mode === 'energy');
     show('legend-accel', mode === 'accel');
     // Speed is a single line against a labelled axis, so it needs no key.
+
+    /* The live readouts follow the plot for the same reason the pick row does:
+       kinetic and potential beside an acceleration trace are two figures nobody
+       is reading, and a pair of g cells under the energy bars is two more.
+       Speed and height stay throughout — they are the state, not the subject. */
+    show('live-energy', mode === 'bars' || mode === 'energy');
+    show('live-g', mode === 'accel');
   }
 
   graphModeBtns.forEach(btn => {

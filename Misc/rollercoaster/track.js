@@ -2429,6 +2429,23 @@
     return RC.track.pieces.reduce((s, p) => s + RC.pieceLength(BY_ID.get(p.defId)), 0);
   };
 
+  /* Which drive systems this track actually carries. A chain speed means
+     nothing on a ride with no chain on it, and the report already left such a
+     setting out of the conditions it lists; the Setup window now hides the
+     slider on the same test, so a student is not offered a control that cannot
+     move anything. One answer, so the two cannot disagree. */
+  RC.trackDrives = function () {
+    const has = { lift: false, brake: false, launch: false };
+    for (const p of RC.track.pieces) {
+      const def = BY_ID.get(p.defId);
+      if (!def) continue;
+      if (p.lift) has.lift = true;
+      if (def.brake) has.brake = true;
+      if (def.launch) has.launch = true;
+    }
+    return has;
+  };
+
   /* Arc position, in metres, at the exit of the station the train starts in —
      the first contiguous run of station pieces from the start of the track.
      Returns 0 if there is no station. The train parks with its front car
