@@ -5508,8 +5508,11 @@
     const lines = csv.split('\n');
     if (lines.length < 20) return `only ${lines.length} lines of trace`;
     const head = lines[0].split(',');
-    if (head[0] !== 'distance_m') return 'no header row';
-    if (head.length !== 13) return `${head.length} columns, expected 13`;
+    if (head[0] !== 'travelled_m') return 'no header row';
+    // Travelled distance and arc position both: the graphs are drawn against
+    // the first, and only the second says where on the track a sample was.
+    if (head[1] !== 'distance_m') return 'the trace does not carry arc position';
+    if (head.length !== 14) return `${head.length} columns, expected 14`;
     for (let n = 1; n < lines.length; n++) {
       const cells = lines[n].split(',');
       if (cells.length !== head.length) return `row ${n} has ${cells.length} cells`;
@@ -6507,6 +6510,59 @@
        of mark: the profile is a filled shape, the ghost a dashed line. */
     const prof = RC.graphKey('speed').find(r => /height/i.test(r.label));
     if (prof.dashed) return 'the profile is drawn dashed, like the ghost';
+  });
+
+  check('the graphs run from a standstill to a standstill', () => {
+    /* The x-axis used to be POSITION ON THE TRACK, which put the ride's start
+       and its finish at the same place: the train leaves the berth a few metres
+       in and comes back to it. On a 549 m circuit with a 12 m station that
+       squeezed the whole departure and the whole arrival into the leftmost two
+       per cent, on top of each other, and left the plot's right-hand edge
+       showing whatever speed the train had crossing the start line - so a ride
+       that plainly ends at a standstill appeared to finish at 19 m/s.
+
+       Travelled distance instead: 0 where the train sets off, whatever arc
+       position that berth happens to sit at, and monotonic all the way home. */
+    RC.loadPrefab('first-drop');
+    RC.clearGhosts();
+    RC.sim.cars = 4;
+    RC.sim.friction = true;
+    RC.resetSim();
+    const berth = RC.sim.s;
+    if (!(berth > 1)) return 'this preset starts at the very start of the track';
+
+    runFor(240);
+    if (RC.sim.state !== 'finished') return `state "${RC.sim.state}" after 240 s`;
+
+    const tr = RC.sim.trace;
+    const first = tr[0], last = tr[tr.length - 1];
+
+    // Starts at the origin, standing still, however far in the berth is.
+    if (first.d !== 0) return `the trace opens at ${first.d.toFixed(2)} m travelled`;
+    if (first.t !== 0) return `the trace opens at ${first.t.toFixed(3)} s`;
+    if (!near(first.v, 0, 1e-9)) return `the train is already at ${first.v.toFixed(2)} m/s`;
+    if (!near(first.s, berth, 1e-6)) {
+      return `the first sample is at ${first.s.toFixed(1)} m, not the ${berth.toFixed(1)} m berth`;
+    }
+
+    // Ends at a standstill, back where it started.
+    if (!near(last.v, 0, 1e-9)) return `the ride ends at ${last.v.toFixed(2)} m/s`;
+    if (!near(last.s, berth, 1e-6)) return `it ends at ${last.s.toFixed(1)} m, not the berth`;
+
+    /* And travelled distance only ever grows, which is what lets the plot drop
+       the lap-wrap breaks: a lap now reads as a lap rather than as a line
+       leaping back across the canvas. */
+    for (let n = 1; n < tr.length; n++) {
+      if (tr[n].d < tr[n - 1].d - 1e-9) {
+        return `travelled distance went backwards at sample ${n}`;
+      }
+    }
+    // A whole circuit was covered, so d is a journey and not a stuck counter.
+    if (!(last.d > RC.trackPath().total * 0.9)) {
+      return `the trace covers ${last.d.toFixed(0)} m of a ` +
+             `${RC.trackPath().total.toFixed(0)} m circuit`;
+    }
+    RC.sim.friction = false;
   });
 
   check('the graph cursor marks its place on the track', () => {

@@ -166,7 +166,7 @@
 
   /* ---- the trace, for anyone who wants the figures ----------------------- */
   RC.traceCSV = function () {
-    const rows = [['distance_m', 'time_s', 'speed_ms', 'height_m',
+    const rows = [['travelled_m', 'distance_m', 'time_s', 'speed_ms', 'height_m',
                    'kinetic_J', 'potential_J', 'heat_J', 'total_J', 'supplied_J',
                    'vertical_g', 'lateral_g',
                    'vertical_curvature_perm', 'lateral_curvature_perm'].join(',')];
@@ -177,7 +177,7 @@
     const dp3 = n => Math.round(n * 1000) / 1000;
     const dp6 = n => Math.round((n || 0) * 1e6) / 1e6;
     for (const p of RC.sim.trace) {
-      rows.push([p.s, p.t, p.v, p.h, p.ke, p.pe, p.th, p.total, p.supplied, p.vg, p.lg]
+      rows.push([p.d, p.s, p.t, p.v, p.h, p.ke, p.pe, p.th, p.total, p.supplied, p.vg, p.lg]
         .map(dp3).concat([dp6(p.kv), dp6(p.kl)]).join(','));
     }
     return rows.join('\n');

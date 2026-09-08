@@ -498,8 +498,8 @@
     row.hidden = !p;
     if (!p) return;
     const at = RC.graphAxis() === 's'
-      ? `At ${p.s.toFixed(1)} m (${p.t.toFixed(1)} s)`
-      : `At ${p.t.toFixed(1)} s (${p.s.toFixed(1)} m)`;
+      ? `At ${p.d.toFixed(1)} m travelled (${p.t.toFixed(1)} s)`
+      : `At ${p.t.toFixed(1)} s (${p.d.toFixed(1)} m travelled)`;
     setText('graph-pick-at', at);
     // Whatever the plot on show is about, plus height, which every mode needs.
     const mode = RC.graphMode();

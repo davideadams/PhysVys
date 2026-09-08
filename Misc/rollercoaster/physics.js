@@ -120,6 +120,7 @@
     warnKeys: {},
     warnSeverity: {},
     trace: [],
+    dist: 0,          // how far the train has gone, as against where it is
     traceDt: TRACE_DT,   // grows when a long ride fills the trace; see record()
     note: ''
   };
@@ -345,6 +346,7 @@
     sim.warnKeys = {};       // key -> index in warnings, so repeats collapse
     sim.warnSeverity = {};   // key -> worst reading seen for that key
     sim.trace = [];
+    sim.dist = 0;
     sim.traceDt = TRACE_DT;  // back to full resolution for the new run
     sim.jolts = [];          // indexed by joint; sparse until one is crossed
     sim.kVert = 0;
@@ -1223,6 +1225,18 @@
 
   /* `force` takes a sample whatever the clock says — for the one at the end of
      a run, so the plot reaches the train rather than stopping a frame short. */
+  /* How far the train moved between two arc positions, with a lap wrap counted
+     as the short way round rather than as a leap back to the start line. */
+  function moved(s0, s1) {
+    const total = RC.trackPath().total;
+    let d = s1 - s0;
+    if (total > 0) {
+      if (d > total / 2) d -= total;
+      else if (d < -total / 2) d += total;
+    }
+    return Math.abs(d);
+  }
+
   function record(force) {
     const sim = RC.sim;
     const last = sim.trace[sim.trace.length - 1];
@@ -1230,7 +1244,7 @@
     if (sim.trace.length >= TRACE_CAP) decimate(sim);
     const e = RC.energy();
     sim.trace.push({
-      s: sim.s, t: sim.time, v: Math.abs(sim.v), h: e.h,
+      s: sim.s, d: sim.dist, t: sim.time, v: Math.abs(sim.v), h: e.h,
       ke: e.ke, pe: e.pe, th: e.thermal, total: e.total, supplied: e.supplied,
       vg: sim.g.vert, lg: sim.g.lat,
       kv: sim.kVert, kl: sim.kLat
@@ -1264,10 +1278,30 @@
     if (!going()) return false;
 
     const wasRunning = sim.state === 'running';
+
+    /* One sample of the train standing still before it moves, so the plots
+       start at the origin: 0 m travelled, 0 s, 0 m/s. Without it the first
+       sample was a frame in, with the station's drive tyres already pushing,
+       and the speed graph began part way up its own first rise.
+
+       Here rather than in startSim, because startSim is not the only way into a
+       run - the test harness sets the state itself - and here is where the rest
+       of the trace is written. Not in resetSim either: a track that has been
+       reset but never run has no trace at all, and the graph says so rather
+       than drawing a single point. */
+    if (wasRunning && !sim.trace.length) record(true);
+
     let dt = Math.min(MAX_FRAME, Math.max(0, dtFrame));
     while (dt > 0 && going()) {
       const step = Math.min(SUBSTEP, dt);
-      if (sim.state === 'running') substep(step);
+      if (sim.state === 'running') {
+        // How far the train has gone, as against where it is. Accumulated here
+        // rather than inside substep because this is the one place the move
+        // begins and ends, whatever route through the drive systems it took.
+        const s0 = sim.s;
+        substep(step);
+        sim.dist += moved(s0, sim.s);
+      }
       // Comparison trains run on the same clock, so they are genuinely
       // released together with the ride's own train.
       if (RC.demo) for (const tr of RC.demo.trains) stepDemoTrain(tr, step);

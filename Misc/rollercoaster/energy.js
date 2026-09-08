@@ -238,22 +238,7 @@
   };
   RC.graphAxis = () => graphAxis;
 
-  /* Sample indices where a lap wraps past the start line. Against distance the
-     line would streak back across the plot from right to left, so the polyline
-     is broken there. Against time nothing ever goes backwards and there is
-     nothing to break — which is also why a shuttle's return leg must not be
-     broken here: it retraces the track legitimately, and only a jump of half a
-     lap or more is a wrap. */
-  function lapBreaks(trace, total) {
-    const at = new Set();
-    if (graphAxis !== 's' || !(total > 0)) return at;
-    for (let n = 1; n < trace.length; n++) {
-      if (trace[n].s < trace[n - 1].s - total * 0.5) at.add(n);
-    }
-    return at;
-  }
-
-  function plotSeries(ctx, trace, key, xOf, Y, breaks, colour, width, dash) {
+  function plotSeries(ctx, trace, key, xOf, Y, colour, width, dash) {
     ctx.strokeStyle = colour;
     ctx.lineWidth = width;
     ctx.setLineDash(dash || []);
@@ -261,7 +246,6 @@
     let started = false;
     for (let n = 0; n < trace.length; n++) {
       const p = trace[n];
-      if (breaks.has(n)) started = false;
       const x = xOf(p), y = Y(p[key]);
       if (!started) { ctx.moveTo(x, y); started = true; }
       else ctx.lineTo(x, y);
@@ -505,24 +489,41 @@
       return;
     }
 
-    /* The axis. Distance spans the whole track whether or not the train got
-       round it, so two runs of the same track are directly comparable; time
-       spans however long this run has lasted, which is all there is to span -
-       or, with a ghost on the plot, however long the LONGER of the two lasted,
-       since a friction run and a frictionless one take different times and
-       cutting one off at the other's end would read as the ride stopping. */
-    const tEnd = trace[trace.length - 1].t;
-    const ghEnd = gh ? gh.trace[gh.trace.length - 1].t : 0;
-    const span = graphAxis === 's' ? total : Math.max(tEnd, ghEnd, 0.001);
-    const xOf = p => padL + plotW * Math.min(1, Math.max(0, p[graphAxis] / span));
+    /* The axis is DISTANCE TRAVELLED, not position on the track.
+
+       It used to be arc position, which put the ride's beginning and its end
+       at the same x - the train sets off from the berth a few metres in and
+       comes back to it - so a lap read as a line that leapt from the right-hand
+       edge back to the left, and the plot's own right edge showed whatever
+       speed the train happened to have crossing the start line. On a 549 m
+       circuit with a 12 m station, the whole of the departure and the whole of
+       the arrival were squeezed into the leftmost two per cent, on top of each
+       other, and a ride that plainly ends at a standstill appeared to finish at
+       19 m/s.
+
+       Travelled distance is monotonic, so the plot starts at 0 with the train
+       at rest and ends at the total it covered, also at rest. It costs nothing
+       in comparability - two runs of the same track cover the same ground - and
+       it retires the lap-wrap machinery entirely, since nothing goes backwards
+       any more. A second lap now reads as a second lap rather than overdrawing
+       the first.
+
+       Both axes span the LONGER of the live run and its ghost: a frictionless
+       lap is quicker and shorter, and cutting either off at the other's end
+       would read as the ride stopping there. */
+    const end = p => (graphAxis === 's' ? p.d : p.t);
+    const tEnd = end(trace[trace.length - 1]);
+    const ghEnd = gh ? end(gh.trace[gh.trace.length - 1]) : 0;
+    const span = Math.max(tEnd, ghEnd, 0.001);
+    const xOf = p => padL + plotW *
+      Math.min(1, Math.max(0, (graphAxis === 's' ? p.d : p.t) / span));
 
     const bands = traceBands(trace);
-    const breaks = lapBreaks(trace, total);
 
     // Feature bands go down first so the traces read on top of them.
     drawFeatureBands(ctx, trace, bands, xOf, padT, plotH);
 
-    const args = [ctx, trace, xOf, breaks, padL, padT, plotW, plotH,
+    const args = [ctx, trace, xOf, padL, padT, plotW, plotH,
                   gh ? gh.trace : null];
     if (graphMode === 'accel') drawAccel.apply(null, args);
     else if (graphMode === 'speed') drawSpeed.apply(null, args);
@@ -545,10 +546,12 @@
     ctx.font = FONT;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
+    // Zero is where the train set off from, not the start line of the track:
+    // the berth is a few metres in, and the ride begins where the ride begins.
     ctx.fillText('0', padL, padT + plotH + 4);
     ctx.fillText(graphAxis === 's'
-      ? total.toFixed(0) + ' m along the track'
-      : tEnd.toFixed(1) + ' s since it set off',
+      ? span.toFixed(0) + ' m travelled'
+      : span.toFixed(1) + ' s since it set off',
       padL + plotW / 2, padT + plotH + 4);
   };
 
@@ -603,12 +606,12 @@
      the live traces so it sits behind them, and on the SAME scale - a ghost on
      a scale of its own would be a picture of nothing. Its own lap wraps have to
      be worked out separately, since it is a different run. */
-  function plotGhost(ctx, gh, key, xOf, Y, total) {
+  function plotGhost(ctx, gh, key, xOf, Y) {
     if (!gh) return;
-    plotSeries(ctx, gh, key, xOf, Y, lapBreaks(gh, total), GHOST, 1.4, [5, 4]);
+    plotSeries(ctx, gh, key, xOf, Y, GHOST, 1.4, [5, 4]);
   }
 
-  function drawEnergy(ctx, trace, xOf, breaks, padL, padT, plotW, plotH, gh) {
+  function drawEnergy(ctx, trace, xOf, padL, padT, plotW, plotH, gh) {
     let top = 0;
     for (const p of trace) top = Math.max(top, p.total, p.supplied);
     if (gh) for (const p of gh) top = Math.max(top, p.total, p.supplied);
@@ -619,14 +622,14 @@
     for (let n = 0; n <= 4; n++) marks.push(top * n / 4);
     drawScale(ctx, Y, marks, 'kJ', padL, padT, plotW, v => kJ(v).toFixed(0), false);
 
-    plotGhost(ctx, gh, GHOST_SERIES.energy, xOf, Y, RC.trackPath().total);
-    plotSeries(ctx, trace, 'supplied', xOf, Y, breaks, SUPPLIED, 1.5, [4, 3]);
-    plotSeries(ctx, trace, 'total', xOf, Y, breaks, TOTAL, 2);
+    plotGhost(ctx, gh, GHOST_SERIES.energy, xOf, Y);
+    plotSeries(ctx, trace, 'supplied', xOf, Y, SUPPLIED, 1.5, [4, 3]);
+    plotSeries(ctx, trace, 'total', xOf, Y, TOTAL, 2);
     // Heat under the two it is stealing from, so they stay the easiest to
     // follow — it is a slow climb, they are the ones swapping back and forth.
-    if (tracedHeat(trace)) plotSeries(ctx, trace, 'th', xOf, Y, breaks, TH, 1.6);
-    plotSeries(ctx, trace, 'pe', xOf, Y, breaks, PE, 1.6);
-    plotSeries(ctx, trace, 'ke', xOf, Y, breaks, KE, 1.6);
+    if (tracedHeat(trace)) plotSeries(ctx, trace, 'th', xOf, Y, TH, 1.6);
+    plotSeries(ctx, trace, 'pe', xOf, Y, PE, 1.6);
+    plotSeries(ctx, trace, 'ke', xOf, Y, KE, 1.6);
 
     drawAxes(ctx, padL, padT, plotW, plotH, true);
   }
@@ -635,7 +638,7 @@
      fast is it going here" is the question students actually ask, and it was
      only ever available as a live number or a column of the exported CSV.
      Against time this is the v-t graph off the syllabus. */
-  function drawSpeed(ctx, trace, xOf, breaks, padL, padT, plotW, plotH, gh) {
+  function drawSpeed(ctx, trace, xOf, padL, padT, plotW, plotH, gh) {
     let top = 1;
     for (const p of trace) top = Math.max(top, p.v);
     if (gh) for (const p of gh) top = Math.max(top, p.v);
@@ -683,12 +686,12 @@
     for (let n = 0; n <= 4; n++) marks.push(top * n / 4);
     drawScale(ctx, Y, marks, 'm/s', padL, padT, plotW, v => v.toFixed(0), false);
 
-    plotGhost(ctx, gh, GHOST_SERIES.speed, xOf, Y, RC.trackPath().total);
-    plotSeries(ctx, trace, 'v', xOf, Y, breaks, KE, 2);
+    plotGhost(ctx, gh, GHOST_SERIES.speed, xOf, Y);
+    plotSeries(ctx, trace, 'v', xOf, Y, KE, 2);
     drawAxes(ctx, padL, padT, plotW, plotH, true);
   }
 
-  function drawAccel(ctx, trace, xOf, breaks, padL, padT, plotW, plotH, gh) {
+  function drawAccel(ctx, trace, xOf, padL, padT, plotW, plotH, gh) {
     // Range always spans 0..1 g (weightless to sitting still) plus the data,
     // so the 1 g reference line is meaningful and airtime shows below zero.
     let lo = -0.5, hi = 1.4;
@@ -749,9 +752,9 @@
     dashAt(L.latHigh, 'rgba(194,24,91,0.38)');
     dashAt(-L.latHigh, 'rgba(194,24,91,0.38)');
 
-    plotGhost(ctx, gh, GHOST_SERIES.accel, xOf, Y, RC.trackPath().total);
-    plotSeries(ctx, trace, 'vg', xOf, Y, breaks, VERT_G, 1.8);
-    plotSeries(ctx, trace, 'lg', xOf, Y, breaks, LAT_G, 1.8);
+    plotGhost(ctx, gh, GHOST_SERIES.accel, xOf, Y);
+    plotSeries(ctx, trace, 'vg', xOf, Y, VERT_G, 1.8);
+    plotSeries(ctx, trace, 'lg', xOf, Y, LAT_G, 1.8);
 
     // No baseline: zero g is a gridline inside the plot, not the floor of it.
     drawAxes(ctx, padL, padT, plotW, plotH, false);
