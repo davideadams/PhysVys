@@ -917,27 +917,93 @@
 
     html += geometrySection();
 
-    /* Each reading against the limit that bounds IT. The three limits used to
-       share a row of their own — "5 · -1.1 · 1.5 g" — which asked the reader to
-       match three unlabelled numbers to the three rows above by position, and
-       gave no clue which way round the airtime one ran. The attribution moves
-       to the heading, where it belongs anyway. */
+    /* THE ROW IS THE WARNING NOW.
+
+       These three readings used to be stated three times over. The row gave the
+       figure; a red box under the Warnings heading gave the same figure at one
+       decimal, on the same feature, with a phrase; and the verdict note between
+       them gave a third reading in prose. On the Looper preset that came out as
+       "Vertical, greatest 5.55 g on Loop 1" and "Heavy vertical 5.6 g on Loop 1
+       — at the limit even for a moment", six lines apart, disagreeing about the
+       rounding.
+
+       That happened because the warnings were written when the rows carried no
+       limits at all, so a reader had no way to tell 5.55 g from a safe figure.
+       Now each row carries the threshold it is measured against, in the words
+       the warning used, and colours the reading when it passes one. The warning
+       is then saying nothing new and is filtered out of the section below.
+
+       The threshold is stated as "past N" rather than "limit N" because it is
+       not a limit: G_LIMITS.vertHigh is where a ride becomes heavy, and the
+       standards' short-burst ceiling is the vertExtreme above it. Calling 5 the
+       limit while the verdict called 5.55 g "within what a real ride may pull
+       briefly" was the report contradicting itself. */
     html += `<div class="report-hd">G-force ` +
-            `<span class="muted">limits from ASTM F2291 / EN 13814</span></div>`;
-    const gRow = (label, g, at, limit) =>
-      row(label, `${g.toFixed(2)} g <span class="muted">limit ${limit}</span>` +
-                 onFeature(at));
-    html += gRow('Vertical, greatest', sim.maxVertG, sim.maxVertGs, L.vertHigh);
-    html += gRow('Vertical, least', sim.minVertG, sim.minVertGs, L.airtimeGood);
-    html += gRow('Lateral, greatest', sim.maxLatG, sim.maxLatGs, L.latHigh);
+            `<span class="muted">thresholds from ASTM F2291 / EN 13814</span></div>`;
+
+    /* How many separate features drew each complaint. addWarning files them by
+       key — 'vert:Loop 1', 'lat:Turn 4' — collapsed one per feature, so this is
+       the count the Warnings section used to show as one box each. A row names
+       the worst; where there are others, it says how many rather than making
+       the reader count boxes. */
+    const spots = { vert: 0, airtime: 0, lat: 0 };
+    for (const k in sim.warnKeys) {
+      const m = /^(vert|airtime|lat):/.exec(k);
+      if (m) spots[m[1]]++;
+    }
+
+    /* Coloured on the ladder the WARNINGS use, not on RC.gColour. That one is
+       for the live readout, where any negative vertical g is worth a glance,
+       and it would paint healthy floater airtime amber in a report whose own
+       verdict calls airtime the point of a coaster. Here the colour has to mean
+       the same thing as the words beside it. */
+    const OK = '#15304d', WARN = '#b06a12', BAD = '#b3261e';
+    const band = (v, warnAt, hardAt) => {
+      const past = warnAt < 0 ? (x, t) => x < t : (x, t) => x > t;
+      return past(v, hardAt) ? BAD : past(v, warnAt) ? WARN : OK;
+    };
+
+    const gRow = (label, axis, g, at, warnAt, hardAt, word) => {
+      const more = spots[axis] > 1
+        ? ` <span class="muted">and ${spots[axis] - 1} other ` +
+          `${spots[axis] === 2 ? 'place' : 'places'}</span>`
+        : '';
+      return row(label,
+        `<b style="color:${band(g, warnAt, hardAt)}">${g.toFixed(2)} g</b>` +
+        onFeature(at) + more +
+        ` <span class="muted">${word} past ${warnAt}</span>`);
+    };
+    html += gRow('Vertical, greatest', 'vert', sim.maxVertG, sim.maxVertGs,
+                 L.vertHigh, L.vertExtreme, 'heavy');
+    html += gRow('Vertical, least', 'airtime', sim.minVertG, sim.minVertGs,
+                 L.airtimeGood, L.airtimeHard, 'ejector airtime');
+    html += gRow('Lateral, greatest', 'lat', sim.maxLatG, sim.maxLatGs,
+                 L.latHigh, L.latExtreme, 'uncomfortable');
     html += `<p class="report-note">${RC.rideVerdict(sim)}</p>`;
 
+    /* Rows that hold a figure. A completed circuit ends with the train at rest
+       at ground level in the station it set off from, so "started with",
+       "kinetic now" and "potential now" are all structurally 0.00 kJ — three
+       zeros in a column, and none of them a reading. A launched ride has no
+       chain to have added anything, and a ride with no losses has made no heat.
+
+       So each row appears when it has something in it, and the pair of "now"
+       figures gives way, once the train has stopped, to the peak the ride was
+       built to reach. That is the number the whole track is FOR: the chain put
+       369 kJ in, and at the bottom of the drop the train was carrying this
+       much of it as motion. */
+    const THRESH = 1;      // joules; below this a row is a zero, not a figure
     html += `<div class="report-hd">Energy</div>`;
-    html += row('Started with', fmt(sim.E0));
-    html += row('Chain lift added', fmt(sim.eMotor));
-    html += row('Lost to heat', fmt(sim.eThermal));
-    html += row('Kinetic now', fmt(e.ke));
-    html += row('Potential now', fmt(e.pe));
+    if (sim.E0 > THRESH) html += row('Started with', fmt(sim.E0));
+    if (sim.eMotor > THRESH) html += row('Chain lift added', fmt(sim.eMotor));
+    if (sim.eThermal > THRESH) html += row('Lost to heat', fmt(sim.eThermal));
+    if (e.ke > THRESH || e.pe > THRESH) {
+      html += row('Kinetic now', fmt(e.ke));
+      html += row('Potential now', fmt(e.pe));
+    } else if (sim.maxV > 0.1) {
+      html += row('Most kinetic', fmt(0.5 * RC.trainMass() * sim.maxV * sim.maxV) +
+                  ` <span class="muted">at ${sim.maxV.toFixed(1)} m/s</span>`);
+    }
     html += row('<strong>Total now</strong>', '<strong>' + fmt(e.total) + '</strong>');
     html += row('<strong>Supplied</strong>', '<strong>' + fmt(e.supplied) + '</strong>');
 
@@ -956,9 +1022,25 @@
                    `total ${fmt(e.total)} against supplied ${fmt(e.supplied)}.`);
     }
 
-    if (sim.warnings.length) {
+    /* Only what nothing else has said. The g-force complaints are still
+       recorded — they are the per-feature record the rows above count from, and
+       the collapsing machinery that keeps one line per feature rather than one
+       per substep is worth having — but they are no longer printed here, where
+       they repeated a row six lines up. What is left is what only a warning
+       knows: a station braking harder than it should have to, a train that
+       valleys and rolls back, one that tips off the end or falls out of a loop.
+
+       Recognised by their KEY, not their text: addWarning files each under
+       'vert:', 'airtime:' or 'lat:' plus the feature, so this cannot drift out
+       of step with a reworded message. */
+    const covered = new Set();
+    for (const k in sim.warnKeys) {
+      if (/^(vert|airtime|lat):/.test(k)) covered.add(sim.warnKeys[k]);
+    }
+    const events = sim.warnings.filter((w, n) => !covered.has(n));
+    if (events.length) {
       html += `<div class="report-hd">Warnings</div>`;
-      for (const wmsg of sim.warnings) html += `<p class="report-warn">${wmsg}</p>`;
+      for (const wmsg of events) html += `<p class="report-warn">${wmsg}</p>`;
     }
 
     // Last: it is a note about how this simulation is built, not about the ride.

@@ -5292,6 +5292,96 @@
     }
   });
 
+  check('a g-force complaint is made once, not three times over', () => {
+    /* The row, the red box and the verdict note used to state the same reading
+       three times, disagreeing about the rounding: "Vertical, greatest 5.55 g
+       on Loop 1" and "Heavy vertical 5.6 g on Loop 1 — at the limit even for a
+       moment", six lines apart. The complaint is still RECORDED per feature —
+       that is what the rows count "and 2 other places" from, and the collapsing
+       that keeps one line per feature rather than one per substep is worth
+       having — it is just no longer printed a second time. */
+    RC.track.pieces = [];
+    RC.track.start = { i: 4, j: 20, dir: 0, k: 28, g: 0 };
+    RC.track.head = Object.assign({}, RC.track.start);
+    RC.version++;
+    const seq = ['flat-to-gentle-down', 'gentle-to-medium-down']
+      .concat(new Array(4).fill('medium-down'))
+      .concat(['medium-to-gentle-down', 'gentle-down-to-flat', 'flat',
+               'turn-right-tight', 'flat']);
+    for (const id of seq) {
+      if (!RC.place(id)) return `${id} refused`;
+    }
+    RC.sim.cars = 1;
+    RC.sim.friction = false;
+    RC.resetSim(onConstantGrade());
+    runFor(60);
+
+    if (!RC.sim.warnings.some(w => /sideways/i.test(w))) {
+      return 'the sideways complaint is not recorded at all any more';
+    }
+    const html = RC.reportHTML();
+
+    /* Scoped to the red boxes. The VERDICT note says "sideways" too — both its
+       lateral branches do — and it is meant to: one sentence of prose about how
+       the ride feels is the second statement of this reading, not the third,
+       and it is the one a student quotes. What had to go was the box repeating
+       the row's own figure back at it. */
+    const boxes = html.match(/<p class="report-warn">[\s\S]*?<\/p>/g) || [];
+    if (boxes.some(b => /sideways/i.test(b))) {
+      return 'the report still prints the sideways complaint as a warning of its own';
+    }
+    // And the reading really was over the threshold, or none of this is tested.
+    if (!(RC.sim.maxLatG > RC.G_LIMITS.latHigh)) {
+      return `only ${RC.sim.maxLatG.toFixed(2)} g sideways — nothing to complain about`;
+    }
+    // What replaced it: the row states the threshold, in the warning's words.
+    if (html.indexOf('uncomfortable past') < 0) {
+      return 'the lateral row does not say what threshold it is measured against';
+    }
+
+    /* And a warning the rows do NOT cover still prints. The filter goes by the
+       key addWarning filed the complaint under, so it cannot drift out of step
+       with a reworded message — and anything without such a key is an event
+       only the warning knows about. */
+    RC.sim.warnings.push('The train tipped over the end');
+    if (RC.reportHTML().indexOf('tipped over the end') < 0) {
+      return 'an event warning was filtered out along with the g-force ones';
+    }
+    RC.sim.cars = 4;
+  });
+
+  check('the energy rows hold figures, not a column of zeros', () => {
+    /* A completed circuit ends with the train at rest at ground level in the
+       station it set off from, so "started with", "kinetic now" and "potential
+       now" all read 0.00 kJ by construction. Three zeros in a column is not a
+       reading. What takes their place is the peak the ride was built to reach,
+       which is the number the whole track is for. */
+    RC.loadPrefab('first-drop');
+    RC.sim.cars = 4;
+    RC.sim.friction = true;
+    RC.resetSim();
+    runFor(240);
+    if (RC.sim.state !== 'finished') return `state "${RC.sim.state}" after 240 s`;
+
+    const html = RC.reportHTML();
+    if (html.indexOf('Started with') >= 0) {
+      return 'the report still lists the zero the train started with';
+    }
+    if (html.indexOf('Kinetic now') >= 0) {
+      return 'the report still lists a kinetic energy of zero for a parked train';
+    }
+    if (html.indexOf('Most kinetic') < 0) return 'the peak kinetic energy is not reported';
+
+    // Mid-run they come back, because then they hold something.
+    RC.resetSim();
+    runFor(6);
+    const mid = RC.reportHTML();
+    if (mid.indexOf('Kinetic now') < 0) {
+      return 'no kinetic energy is reported while the train is moving';
+    }
+    RC.sim.friction = false;
+  });
+
   check('the exported summary states the scale it was built at', () => {
     // Read off the constants rather than typed out: this footer claimed a
     // height step was 1 m, twice what LEVEL_M has ever been, on the one page
