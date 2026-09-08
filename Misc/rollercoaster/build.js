@@ -618,11 +618,17 @@
     if (roHeadLabel) roHeadLabel.textContent = inspecting ? 'Selected' : 'Build head';
     const roHead = document.getElementById('ro-head');
     if (roHead) {
+      /* A node's k is a LEVEL INDEX, not a height — every other height in the
+         app multiplies it by LEVEL_M first (the Heights overlay, the release
+         readout, the energy budget). This one did not, so the build head read
+         double what the Heights labels put on the same piece, on the readout a
+         student watches while building a lift hill. */
+      const metres = k => (k * RC.LEVEL_M).toFixed(1) + ' m';
       if (inspecting) {
         const n = RC.track.pieces[cursor].node;
-        roHead.textContent = `piece ${cursor + 1} · (${n.i}, ${n.j}) · ${n.k} m`;
+        roHead.textContent = `piece ${cursor + 1} · (${n.i}, ${n.j}) · ${metres(n.k)}`;
       } else if (head) {
-        roHead.textContent = `(${head.i}, ${head.j}) · ${head.k} m · ${RC.slopeName(head.g)}`;
+        roHead.textContent = `(${head.i}, ${head.j}) · ${metres(head.k)} · ${RC.slopeName(head.g)}`;
       }
     }
     const st = RC.circuitStatus();
