@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Organic Molecule Builder</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <a class="hero-link" href="../index.html">&#8592; Back to Chemistry</a>
+      <p class="eyebrow">SACE Stage 2 Chemistry</p>
+      <h1>Organic Molecule Builder</h1>
+      <details class="intro-toggle">
+        <summary>Info</summary>
+        <div class="intro">
+          <p>
+            Draw a carbon compound and see it written several ways: skeletal, structural and displayed
+            formulae, a condensed formula, molecular and empirical formulae, SMILES, and a 3D model.
+            The page also works out the IUPAC name and can show each step of the naming.
+          </p>
+          <p>
+            The naming covers alkanes, alkenes, alkynes, haloalkanes, alcohols, aldehydes, ketones,
+            carboxylic acids, esters, amines and amides, without rings. When a molecule is outside
+            that, the page says so and why, instead of guessing.
+          </p>
+          <p>
+            It follows the 2013 IUPAC recommendations: the longest chain comes first, even if a
+            double bond ends up in a side chain (3-methylidenehexane); side chains are named like
+            propan-2-yl and prop-2-en-1-yl; and locants are kept unless the rules drop them
+            (prop-1-ene, propan-2-one, but ethanol). It uses the systematic names taught in school,
+            such as ethanoic acid and methanal, rather than the retained names acetic acid and
+            formaldehyde. E/Z and R/S prefixes are not assigned, but the page tells you when a name
+            needs one.
+          </p>
+          <p>
+            The name starts hidden and fills in as you work through the naming steps. Turn off
+            "Build the name in the steps" to see it straight away.
+          </p>
+        </div>
+      </details>
+    </section>
+
+    <section class="layout">
+      <aside class="panel controls">
+        <div class="control-group">
+          <span class="section-label">Practice</span>
+          <div class="toggle-grid">
+            <button id="btn-rand-stage1" class="toggle-chip" type="button">Random Stage 1</button>
+            <button id="btn-rand-stage2" class="toggle-chip" type="button">Random Stage 2</button>
+          </div>
+          <details class="name-more stage-info">
+            <summary>What does each stage include?</summary>
+            <p class="hint"><b>Stage 1:</b> alkanes, alkenes, alkynes, haloalkanes, alcohols,
+              carboxylic acids and esters. C=C and C&#8801;C bonds appear only in alkenes and alkynes.</p>
+            <p class="hint"><b>Stage 2:</b> adds aldehydes, ketones, amines and amides, more
+              molecules with two functional groups, and C=C bonds alongside functional groups.</p>
+          </details>
+        </div>
+
+        <div class="control-group">
+          <label for="preset-select" class="section-label">Start from</label>
+          <select id="preset-select"></select>
+        </div>
+
+        <details class="collapsible draw-tools">
+          <summary>Draw your own molecule</summary>
+          <div class="collapsible-body">
+            <div class="help">
+              <p><b>Click</b> empty space to place an atom.</p>
+              <p><b>Click an atom</b> to grow a new bond from it. If a different element is selected, the click changes that atom instead.</p>
+              <p><b>Drag</b> from an atom to make a bond to a new atom or to an existing one.</p>
+              <p><b>Click a bond</b> to switch single &#8594; double &#8594; triple.</p>
+              <p><b>Ctrl+Z</b> undoes.</p>
+            </div>
+
+            <div class="control-group">
+              <span class="section-label">Tool</span>
+              <div class="seg" id="tool-seg">
+                <button type="button" class="seg-btn active" data-tool="draw">Draw</button>
+                <button type="button" class="seg-btn" data-tool="erase">Erase</button>
+                <button type="button" class="seg-btn" data-tool="move">Move</button>
+              </div>
+            </div>
+
+            <div class="control-group">
+              <span class="section-label">Element</span>
+              <div class="element-grid" id="element-grid">
+                <button type="button" class="element-chip active" data-el="C">C</button>
+                <button type="button" class="element-chip" data-el="O">O</button>
+                <button type="button" class="element-chip" data-el="N">N</button>
+                <button type="button" class="element-chip" data-el="F">F</button>
+                <button type="button" class="element-chip" data-el="Cl">Cl</button>
+                <button type="button" class="element-chip" data-el="Br">Br</button>
+                <button type="button" class="element-chip" data-el="I">I</button>
+              </div>
+              <p class="hint">Hydrogens are added automatically.</p>
+            </div>
+
+            <div class="seg">
+              <button id="btn-undo" class="seg-btn" type="button">&#8630; Undo</button>
+              <button id="btn-tidy" class="seg-btn" type="button">Tidy</button>
+              <button id="btn-clear" class="seg-btn" type="button">Clear</button>
+            </div>
+          </div>
+        </details>
+
+        <div class="control-group">
+          <span class="section-label">Drawing style</span>
+          <div class="seg" id="view-seg">
+            <button type="button" class="seg-btn" data-view="skeletal">Skeletal</button>
+            <button type="button" class="seg-btn" data-view="labelled">Structural</button>
+            <button type="button" class="seg-btn active" data-view="displayed">Displayed</button>
+          </div>
+          <button id="btn-3d" class="switch" type="button" aria-pressed="true">
+            <span class="switch-label">Show 3D model</span>
+            <span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span>
+          </button>
+          <button id="btn-groups" class="switch" type="button" aria-pressed="false">
+            <span class="switch-label">Colour functional groups</span>
+            <span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span>
+          </button>
+          <button id="btn-quiz" class="switch" type="button" aria-pressed="true">
+            <span class="switch-label">Build the name in the steps</span>
+            <span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span>
+          </button>
+        </div>
+      </aside>
+
+      <section class="main-col">
+        <section class="panel name-panel" id="name-panel">
+          <div class="name-head">
+            <span class="badge" id="name-badge">Empty</span>
+            <button id="btn-steps" class="ghost-chip" type="button" aria-expanded="false">Show naming steps</button>
+          </div>
+          <p class="name-text" id="name-text">Nothing to name yet</p>
+          <button id="btn-reveal" class="reveal" type="button" hidden>Build the name step by step</button>
+          <p class="name-reason" id="name-reason"></p>
+          <details class="name-more" id="name-more" hidden>
+            <summary>Learn more: this molecule has more than one 3D form</summary>
+            <ul class="name-notes" id="name-notes"></ul>
+          </details>
+
+          <div class="steps" id="steps" hidden>
+            <div class="steps-head">
+              <button id="step-prev" class="step-nav" type="button" aria-label="Previous step">&#9664;</button>
+              <div class="step-dots" id="step-dots"></div>
+              <button id="step-next" class="step-nav" type="button" aria-label="Next step">&#9654;</button>
+            </div>
+            <h3 class="step-title" id="step-title"></h3>
+            <div class="step-body" id="step-body"></div>
+          </div>
+        </section>
+
+        <section class="panel visual-panel">
+          <div class="visual-grid" id="visual-grid">
+            <div class="canvas-wrap">
+              <canvas id="editor" data-tool="draw" aria-label="Molecule drawing area"></canvas>
+              <p class="flash" id="flash" role="status"></p>
+            </div>
+            <div class="three-wrap" id="three-wrap">
+              <div class="three-root" id="three-root" aria-label="3D model"></div>
+              <div class="seg seg-small" id="model-seg">
+                <button type="button" class="seg-btn active" data-model="ball">Ball and stick</button>
+                <button type="button" class="seg-btn" data-model="space">Space-filling</button>
+              </div>
+              <p class="three-note">Drag to turn, scroll to zoom.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="notation-grid" id="notations">
+          <div class="readout-card"><span class="readout-label">Molecular formula</span><span class="readout-value" id="n-molecular">&#8212;</span></div>
+          <div class="readout-card"><span class="readout-label">Empirical formula</span><span class="readout-value" id="n-empirical">&#8212;</span></div>
+          <div class="readout-card"><span class="readout-label">Molar mass</span><span class="readout-value" id="n-mass">&#8212;</span></div>
+          <div class="readout-card wide"><span class="readout-label">Condensed structural formula</span><span class="readout-value mono" id="n-condensed">&#8212;</span></div>
+          <div class="readout-card wide"><span class="readout-label">SMILES</span><span class="readout-value mono" id="n-smiles">&#8212;</span></div>
+          <div class="readout-card wide"><span class="readout-label">Functional groups</span><span class="readout-value" id="n-groups">&#8212;</span></div>
+        </section>
+      </section>
+    </section>
+  </main>
+
+  <script src="../../vendor/three/three.min.js"></script>
+  <script src="../titration/shared/atomic-masses.js"></script>
+  <script src="molecule.js"></script>
+  <script src="naming-groups.js"></script>
+  <script src="naming-chain.js"></script>
+  <script src="naming-build.js"></script>
+  <script src="naming-steps.js"></script>
+  <script src="notations.js"></script>
+  <script src="geometry3d.js"></script>
+  <script src="view3d.js"></script>
+  <script src="practice.js"></script>
+  <script src="editor.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Organic builder self-test</title>
+  <style>
+    body { font-family: "Consolas", "Courier New", monospace; margin: 1.5rem; background: #fafcff; color: #15304d; }
+    h1 { font-family: "Trebuchet MS", sans-serif; }
+    pre { background: white; padding: 1rem; border: 1px solid #d9e8ff; border-radius: 8px; line-height: 1.45; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>Organic Molecule Builder: self-test</h1>
+  <p>Checks names, verdicts, stereo warnings, formulae and SMILES against known answers. Copy the box below and paste it back.</p>
+  <pre id="out">Running...</pre>
+  <script src="../titration/shared/atomic-masses.js"></script>
+  <script src="molecule.js"></script>
+  <script src="naming-groups.js"></script>
+  <script src="naming-chain.js"></script>
+  <script src="naming-build.js"></script>
+  <script src="naming-steps.js"></script>
+  <script src="notations.js"></script>
+  <script src="geometry3d.js"></script>
+  <script src="practice.js"></script>
+  <script>
+    window.addEventListener('error', e => {
+      document.getElementById('out').textContent = 'Script error: ' + e.message + ' (' + e.filename + ':' + e.lineno + ')';
+    });
+  </script>
+  <script src="tests.js"></script>
+</body>
+</html>
