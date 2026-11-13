@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Classroom Ciphers — self-test</title>
+  <style>
+    body { font-family: "Trebuchet MS", "Segoe UI", sans-serif; margin: 2rem; color: #15304d; background: #f4f9ff; }
+    h1 { font-size: 1.4rem; margin: 0 0 0.2rem; }
+    .sub { color: #55708d; margin: 0 0 1.2rem; font-size: 0.9rem; }
+    #summary { padding: 0.7rem 1rem; border-radius: 10px; font-weight: 700; margin-bottom: 1rem; }
+    .allpass { background: #d6f5e8; color: #0f5132; border: 1px solid #0d9488; }
+    .anyfail { background: #fde2e2; color: #7a1f1f; border: 1px solid #c62828; }
+    ul { list-style: none; padding: 0; margin: 0; }
+    li { padding: 0.35rem 0.6rem; border-bottom: 1px solid rgba(21,48,77,0.1); font-size: 0.88rem; }
+    .group { margin-top: 1.1rem; padding: 0.3rem 0.6rem; background: #e7eef7; font-weight: 700; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    li.group:first-child { margin-top: 0; }
+    .pass::before { content: "PASS"; color: #0d9488; font-weight: 700; margin-right: 0.6rem; }
+    .fail::before { content: "FAIL"; color: #c62828; font-weight: 700; margin-right: 0.6rem; }
+    .fail { background: #fff4f4; }
+    .detail { display: block; color: #7a1f1f; font-size: 0.8rem; margin-left: 3.2rem; white-space: pre-wrap; font-family: Consolas, monospace; }
+    #fail-text { width: 100%; min-height: 8rem; box-sizing: border-box; font-family: Consolas, monospace; font-size: 0.8rem; margin-bottom: 1rem; }
+  </style>
+</head>
+<body>
+  <h1>Classroom Ciphers — self-test</h1>
+  <p class="sub">
+    Checks every cipher against published worked examples and checks that
+    decoding undoes encoding. Everything should say PASS; if anything fails,
+    copy the box that appears and paste it back.
+  </p>
+  <div id="summary">Running…</div>
+  <textarea id="fail-text" hidden readonly></textarea>
+  <ul id="results"></ul>
+
+<script src="ciphers.js"></script>
+<script>
+"use strict";
+const C = Ciphers;
+const list = document.getElementById("results");
+const fails = [];
+let passed = 0;
+
+function group(name) {
+  const li = document.createElement("li");
+  li.className = "group";
+  li.textContent = name;
+  list.appendChild(li);
+}
+function eq(name, got, want) {
+  const ok = JSON.stringify(got) === JSON.stringify(want);
+  const li = document.createElement("li");
+  li.className = ok ? "pass" : "fail";
+  li.textContent = name;
+  if (!ok) {
+    const d = document.createElement("span");
+    d.className = "detail";
+    d.textContent = `got:  ${JSON.stringify(got)}\nwant: ${JSON.stringify(want)}`;
+    li.appendChild(d);
+    fails.push(`${name}\n  got:  ${JSON.stringify(got)}\n  want: ${JSON.stringify(want)}`);
+  } else passed++;
+  list.appendChild(li);
+}
+function run(name, fn) {
+  try { fn(); } catch (e) { eq(`${name} threw`, String(e), "no error"); }
+}
+
+run("caesar", () => {
+  group("Caesar shift");
+  eq("HELLO shift 3 -> KHOOR", C.caesar("HELLO", 3, false), "KHOOR");
+  eq("keeps case and punctuation", C.caesar("Hello, World!", 3, false), "Khoor, Zruog!");
+  eq("ROT13", C.caesar("Hello, World!", 13, false), "Uryyb, Jbeyq!");
+  eq("ROT13 twice is the message", C.caesar(C.caesar("Hello, World!", 13, false), 13, false), "Hello, World!");
+  eq("wraps past Z", C.caesar("XYZ xyz", 3, false), "ABC abc");
+  eq("decode undoes encode for every shift",
+    [...Array(26).keys()].every((k) => C.caesar(C.caesar("The quick brown fox, 42!", k, false), k, true) === "The quick brown fox, 42!"),
+    true);
+  eq("decode 3 = encode 23", C.caesar("Khoor", 3, true), C.caesar("Khoor", 23, false));
+});
+
+run("keyword", () => {
+  group("Keyword");
+  eq("KRYPTOS alphabet (Wikipedia)", C.keywordAlphabet("KRYPTOS", false), "KRYPTOSABCDEFGHIJLMNQUVWXZ");
+  eq("Knowledge is Power (Wikipedia)", C.keywordCipher("Knowledge is Power", "KRYPTOS", false).text, "Dghvetpst bm Ihvtl");
+  eq("decode back", C.keywordCipher("Dghvetpst bm Ihvtl", "KRYPTOS", true).text, "Knowledge is Power");
+  eq("ZEBRAS from A", C.keywordAlphabet("zebras", false), "ZEBRASCDFGHIJKLMNOPQTUVWXY");
+  eq("ZEBRAS after the keyword", C.keywordAlphabet("ZEBRAS", true), "ZEBRASTUVWXYCDFGHIJKLMNOPQ");
+  eq("KRYPTOS after the keyword", C.keywordAlphabet("KRYPTOS", true), "KRYPTOSUVWXZABCDEFGHIJLMNQ");
+  eq("repeats dropped", C.keywordAlphabet("BALLOON", false).slice(0, 7), "BALONCD");
+  eq("letters that map to themselves", C.keywordCipher("", "KRYPTOS", false).fixed, ["Z"]);
+  eq("no keyword is the plain alphabet", C.keywordAlphabet("", false), C.ALPHA);
+  const msg = "Meet me at 3pm, by the old oak tree!";
+  eq("round trip, both fill orders",
+    [false, true].every((fe) => C.keywordCipher(C.keywordCipher(msg, "SECRET", false, { fromKeyEnd: fe }).text, "SECRET", true, { fromKeyEnd: fe }).text === msg),
+    true);
+  eq("every keyword alphabet uses each letter once",
+    ["KRYPTOS", "ZEBRAS", "QUIZ", "THE QUICK BROWN FOX"].every((k) => [false, true].every((fe) => {
+      const a = C.keywordAlphabet(k, fe);
+      return a.length === 26 && new Set(a).size === 26;
+    })), true);
+});
+
+run("format", () => {
+  group("Ciphertext layout");
+  eq("as typed", C.formatOutput("Khoor, Zruog!", "keep"), "Khoor, Zruog!");
+  eq("capitals only", C.formatOutput("Khoor, Zruog!", "letters"), "KHOORZRUOG");
+  eq("blocks of five", C.formatOutput("Khoor, Zruog!", "blocks5"), "KHOOR ZRUOG");
+  eq("blocks of five, ragged end", C.formatOutput("abcdefghijkl", "blocks5"), "ABCDE FGHIJ KL");
+});
+
+run("vigenere", () => {
+  group("Vigenère");
+  eq("ATTACKATDAWN / LEMON (Wikipedia)", C.vigenere("ATTACKATDAWN", "LEMON", false).text, "LXFOPVEFRNHR");
+  eq("decode back", C.vigenere("LXFOPVEFRNHR", "LEMON", true).text, "ATTACKATDAWN");
+  eq("spaces do not use up key letters", C.vigenere("Attack at dawn!", "LEMON", false).text, "Lxfopv ef rnhr!");
+  eq("key case and spaces ignored", C.vigenere("ATTACKATDAWN", "le mon", false).text, "LXFOPVEFRNHR");
+  eq("working steps line up", C.vigenere("AT", "LE", false).steps,
+    [{ from: "A", key: "L", to: "L" }, { from: "T", key: "E", to: "X" }]);
+  eq("no key leaves text alone", C.vigenere("Hello", "123", false), { text: "Hello", steps: [], noKey: true });
+  const msg = "Meet me at the library, 3pm.";
+  eq("round trip", C.vigenere(C.vigenere(msg, "SECRET", false).text, "SECRET", true).text, msg);
+});
+
+run("playfair", () => {
+  group("Playfair");
+  eq("square for PLAYFAIR EXAMPLE (Wikipedia)", C.playfairSquare("playfair example").join(""), "PLAYFIREXMBCDGHKNOQSTUVWZ");
+  eq("square has 25 different letters, no J", (() => { const s = C.playfairSquare("JUMBLE"); return s.length === 25 && new Set(s).size === 25 && !s.includes("J"); })(), true);
+  const r = C.playfair("Hide the gold in the tree stump", "playfair example", false, { filler: "X", format: "letters" });
+  eq("Hide the gold... (Wikipedia)", r.text, "BMODZBXDNABEKUDMUIXMMOUVIF");
+  eq("pairs layout", C.playfair("Hide the gold in the tree stump", "playfair example", false, { filler: "X", format: "pairs" }).text,
+    "BM OD ZB XD NA BE KU DM UI XM MO UV IF");
+  eq("rules used", r.steps.slice(0, 3).map((s) => s.rule), ["rectangle", "column", "rectangle"]);
+  eq("decode keeps fillers", C.playfair("BMODZBXDNABEKUDMUIXMMOUVIF", "playfair example", true, { filler: "X" }).text,
+    "HIDETHEGOLDINTHETREXESTUMP");
+  eq("decode with tidy drops them", C.playfair("BMODZBXDNABEKUDMUIXMMOUVIF", "playfair example", true, { filler: "X", tidy: true }).text,
+    "HIDETHEGOLDINTHETREESTUMP");
+  eq("doubled letter split with filler", C.playfairPrepare("BALLOON", "X").map((p) => p.a + p.b), ["BA", "LX", "LO", "ON"]);
+  eq("odd length padded", C.playfairPrepare("CAT", "X").map((p) => p.a + p.b + (p.added || "")), ["CA", "TXend"]);
+  eq("doubled filler split with Q", C.playfairPrepare("XX", "X").map((p) => p.a + p.b), ["XQ", "XQ"]);
+  eq("J written as I", C.playfairPrepare("JAM", "X").map((p) => p.a + p.b), ["IA", "MX"]);
+  const enc = C.playfair("XX", "KEY", false, { filler: "X", format: "letters" }).text;
+  eq("tidy decode of XX", C.playfair(enc, "KEY", true, { filler: "X", tidy: true }).text, "XX");
+  eq("odd ciphertext flagged", C.playfair("ABC", "KEY", true, { filler: "X" }).oddLength, true);
+  const plain = "WEAREDISCOVEREDSAVEYOURSELF";
+  const e2 = C.playfair(plain, "MONARCHY", false, { filler: "X", format: "letters" }).text;
+  // 27 letters, so one filler X lands on the end.
+  eq("MONARCHY round trip", C.playfair(e2, "MONARCHY", true, { filler: "X" }).text, plain + "X");
+  // Every pair decodes back to itself in a random-ish square.
+  const sq = C.playfairSquare("ZEBRAS");
+  let allBack = true;
+  for (const a of sq) for (const b of sq) {
+    if (a === b) continue;
+    const e = C.playfairPair(sq, a, b, 1);
+    const d = C.playfairPair(sq, e.x, e.y, -1);
+    if (d.x !== a || d.y !== b) allBack = false;
+  }
+  eq("every pair in the square decodes back", allBack, true);
+});
+
+run("polybius", () => {
+  group("Polybius square");
+  const P = (t, opts, dec) => C.polybius(t, opts.key || "", !!dec, opts).text;
+  eq("standard square", C.polybiusSquare("", "ij").cells.join(""), "ABCDEFGHIKLMNOPQRSTUVWXYZ");
+  eq("HELLO", P("HELLO", {}), "23 15 31 31 34");
+  eq("words split with /", P("Hello world", {}), "23 15 31 31 34 / 52 34 42 31 14");
+  eq("one run of digits", P("Hello world", { format: "run" }), "23153131345234423114");
+  eq("taps", P("Hi", { format: "taps" }), "·· ···  ·· ····");
+  eq("J shares with I", P("J", {}), "24");
+  eq("decode pairs", P("23 15 31 31 34 / 52 34 42 31 14", {}, true), "HELLO WORLD");
+  eq("decode one run", P("2315313134", {}, true), "HELLO");
+  eq("decode taps", P("·· ···  · ·····  ... .  ... .  ... ....", {}, true), "HELLO");
+  eq("tap code square: K shares with C", P("KICK", { variant: "ck" }), "13 24 13 13");
+  eq("tap code square layout", C.polybiusSquare("", "ck").cells.slice(5, 10).join(""), "FGHIJ");
+  eq("6 x 6 has digits", P("Z9", { variant: "6" }), "52 66");
+  eq("6 x 6 square", C.polybiusSquare("", "6").cells.join(""), "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789");
+  eq("keyword square", [C.polybiusSquare("ZEBRA", "ij").cells.join(""), C.polybiusSquare("ZEBRA", "ij").keyLen], ["ZEBRACDFGHIKLMNOPQSTUVWXY", 5]);
+  eq("keyword moves A", P("A", { key: "ZEBRA" }), "15");
+  const off = C.polybius("23 16", "", true, {});
+  eq("off the square marked #", [off.text, off.bad], ["H#", ["16"]]);
+  eq("odd digit flagged", C.polybius("231", "", true, {}).odd, true);
+  eq("digits reported in a 5 x 5 square", C.polybius("Room 101", "", false, {}).skipped, ["1", "0"]);
+  eq("punctuation dropped quietly", C.polybius("Hi!", "", false, {}).skipped, []);
+  const msg = "MEET AT THE OLD OAK TREE";
+  eq("round trip, every square and layout",
+    ["ij", "ck", "6"].every((v) => ["pairs", "run", "taps"].every((f) => {
+      const enc = C.polybius(msg, "SECRET", false, { variant: v, format: f }).text;
+      const want = f === "run" ? msg.replace(/ /g, "") : msg;
+      const got = C.polybius(enc, "SECRET", true, { variant: v }).text;
+      return v === "ck" ? got === want.replace(/K/g, "C") : got === want;
+    })), true);
+});
+
+run("scytale", () => {
+  group("Scytale");
+  eq("I am hurt very badly help, 4 round (Wikipedia)", C.scytale("I am hurt very badly help", 4, false).text, "IRYYATBHMVAEHEDLURLP");
+  eq("decode back", C.scytale("IRYYATBHMVAEHEDLURLP", 4, true).text, "IAMHURTVERYBADLYHELP");
+  // 10 letters on 3 faces: face 1 holds 4, faces 2 and 3 hold 3.
+  const r = C.scytale("HELLOWORLD", 3, false);
+  eq("unfilled last turn", r.text, "HOREWLLODL");
+  eq("turns", r.turns, ["HOR", "EWL", "LOD", "L"]);
+  eq("rod rows", r.grid.map((row) => row.map((c) => c || ".").join("")), ["HELL", "OWO.", "RLD."]);
+  eq("decode unfilled", C.scytale("HOREWLLODL", 3, true).text, "HELLOWORLD");
+  const p = C.scytale("HELLOWORLD", 3, false, { pad: true });
+  eq("padded with X", [p.text, p.padded], ["HOLEWDLOXLRX", 2]);
+  eq("decode is every k-th letter", C.scytale("ABCDEFGH", 2, true).text, "ACEGBDFH");
+  const msg = "THEQUICKBROWNFOXJUMPSOVERTHELAZYDOG2026";
+  eq("round trip for every rod from 2 to 12",
+    [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].every((k) => C.scytale(C.scytale(msg, k, false).text, k, true).text === msg), true);
+  eq("spaces and punctuation dropped", C.scytale("a b, c!", 2, false).plain, "ABC");
+});
+
+run("morse", () => {
+  group("Morse code");
+  eq("SOS", C.morseEncode("SOS").text, "... --- ...");
+  eq("HELLO WORLD", C.morseEncode("Hello World").text, ".... . .-.. .-.. --- / .-- --- .-. .-.. -..");
+  eq("decode HELLO WORLD", C.morseDecode(".... . .-.. .-.. --- / .-- --- .-. .-.. -..").text, "HELLO WORLD");
+  eq("decode with two-space word gaps", C.morseDecode("... ---  ...").text, "SO S");
+  eq("decode typographic dots and dashes", C.morseDecode("··· ––– ···").text, "SOS");
+  eq("unknown group marked #", C.morseDecode("... ....... ...").text, "S#S");
+  eq("skipped characters reported", C.morseEncode("café").skipped, ["É"]);
+  eq("digits", C.morseEncode("2026").text, "..--- ----- ..--- -....");
+  eq("all letters and digits round trip",
+    C.morseDecode(C.morseEncode("THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG 0123456789").text).text,
+    "THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG 0123456789");
+  eq("codes are all different", new Set(Object.values(C.MORSE)).size, Object.keys(C.MORSE).length);
+  eq("timing: ..", C.morseTimings(".."), [{ on: true, units: 1 }, { on: false, units: 1 }, { on: true, units: 1 }]);
+  eq("timing: E T", C.morseTimings(". -"), [{ on: true, units: 1 }, { on: false, units: 3 }, { on: true, units: 3 }]);
+  eq("timing: E / T", C.morseTimings(". / -"), [{ on: true, units: 1 }, { on: false, units: 7 }, { on: true, units: 3 }]);
+});
+
+run("pigpen", () => {
+  group("Pigpen");
+  eq("A is the corner (right and bottom)", C.pigpenGlyph("A"), { kind: "grid", sides: { t: false, b: true, l: false, r: true }, dot: false });
+  eq("E is a closed square", C.pigpenGlyph("E"), { kind: "grid", sides: { t: true, b: true, l: true, r: true }, dot: false });
+  eq("I is the corner (left and top)", C.pigpenGlyph("I"), { kind: "grid", sides: { t: true, b: false, l: true, r: false }, dot: false });
+  eq("N is E with a dot", C.pigpenGlyph("N"), { kind: "grid", sides: { t: true, b: true, l: true, r: true }, dot: true });
+  eq("S is a V", C.pigpenGlyph("S"), { kind: "x", point: "down", dot: false });
+  eq("T points right", C.pigpenGlyph("T"), { kind: "x", point: "right", dot: false });
+  eq("W is a V with a dot", C.pigpenGlyph("W"), { kind: "x", point: "down", dot: true });
+  eq("Z points up, with a dot", C.pigpenGlyph("Z"), { kind: "x", point: "up", dot: true });
+  eq("lower case works", C.pigpenGlyph("e"), C.pigpenGlyph("E"));
+  eq("non-letters have no glyph", C.pigpenGlyph("3"), null);
+  eq("all 26 glyphs different", new Set([...C.ALPHA].map((c) => JSON.stringify(C.pigpenGlyph(c)))).size, 26);
+  eq("every glyph reads back as its letter", [...C.ALPHA].map((c) => C.pigpenLetterFor(C.pigpenGlyph(c))).join(""), C.ALPHA);
+});
+
+const total = passed + fails.length;
+const sum = document.getElementById("summary");
+if (fails.length) {
+  sum.className = "anyfail";
+  sum.textContent = `${fails.length} of ${total} checks failed`;
+  const ta = document.getElementById("fail-text");
+  ta.hidden = false;
+  ta.value = `Classroom Ciphers self-test: ${fails.length} of ${total} failed\n\n` + fails.join("\n\n");
+} else {
+  sum.className = "allpass";
+  sum.textContent = `All ${total} checks passed`;
+}
+</script>
+</body>
+</html>

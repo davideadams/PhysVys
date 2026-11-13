@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Classroom Ciphers</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../miscellaneous.html">&#8592; Back</a>
+      <p class="eyebrow">Mathematics &mdash; Cryptography</p>
+      <h1>Classroom Ciphers</h1>
+      <details class="intro-toggle">
+        <summary>Info</summary>
+      <p class="intro">
+        One message, eight pen-and-paper ciphers. Type into the box, pick a cipher and a direction,
+        and the answer updates as you type. Switching cipher keeps your message, so the same sentence
+        can be shown several ways. Under the answer, <strong>Pen &amp; paper</strong> shows the working
+        a student would do by hand: the shifted alphabet, the key written under the message, the
+        Playfair square and its pairs, the Polybius grid, the scytale's rod and strip, the Morse chart and the pigpen grids.
+      </p>
+      </details>
+    </div>
+  </section>
+
+  <section class="layout">
+    <aside class="panel controls">
+
+      <div class="control-group">
+        <label>Cipher</label>
+        <div class="seg seg-cipher" id="cipher-seg">
+          <button type="button" data-cipher="caesar">Caesar shift</button>
+          <button type="button" data-cipher="keyword">Keyword</button>
+          <button type="button" data-cipher="vigenere">Vigen&egrave;re</button>
+          <button type="button" data-cipher="playfair">Playfair</button>
+          <button type="button" data-cipher="polybius">Polybius square</button>
+          <button type="button" data-cipher="scytale">Scytale</button>
+          <button type="button" data-cipher="morse">Morse code</button>
+          <button type="button" data-cipher="pigpen">Pigpen</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Direction</label>
+        <div class="seg seg-mode" id="mode-seg">
+          <button type="button" data-mode="encode">Encode</button>
+          <button type="button" data-mode="decode">Decode</button>
+        </div>
+      </div>
+
+      <!-- Caesar -->
+      <div class="opts" data-for="caesar">
+        <div class="control-group">
+          <label for="caesar-shift">Shift <span class="muted">places along the alphabet</span></label>
+          <div class="slider-row">
+            <input type="range" id="caesar-range" min="0" max="25" step="1" value="3">
+            <input type="number" class="num-input" id="caesar-shift" min="0" max="25" step="1" value="3">
+          </div>
+          <div class="chip-row">
+            <button type="button" class="chip" data-shift="3">Caesar (3)</button>
+            <button type="button" class="chip" data-shift="13">ROT13</button>
+            <button type="button" class="chip" id="caesar-random">Random</button>
+          </div>
+          <p class="ctl-note">A shift of 13 is its own inverse: encoding twice gives the message back.</p>
+        </div>
+      </div>
+
+      <!-- Keyword -->
+      <div class="opts" data-for="keyword">
+        <div class="control-group">
+          <label for="kw-key">Keyword</label>
+          <input type="text" class="text-input" id="kw-key" value="KRYPTOS" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="control-group">
+          <label for="kw-start">Rest of the alphabet</label>
+          <select id="kw-start" class="select-input">
+            <option value="a">Starts again from A</option>
+            <option value="end">Carries on after the keyword's last letter</option>
+          </select>
+          <p class="ctl-note">The keyword (repeats crossed out) goes under A, B, C&hellip;, then the unused letters follow in order.</p>
+        </div>
+      </div>
+
+      <!-- Vigenère -->
+      <div class="opts" data-for="vigenere">
+        <div class="control-group">
+          <label for="vig-key">Keyword</label>
+          <input type="text" class="text-input" id="vig-key" value="LEMON" autocomplete="off" spellcheck="false">
+          <p class="ctl-note">Each letter of the keyword is a Caesar shift (A&nbsp;=&nbsp;0, B&nbsp;=&nbsp;1, &hellip;). The keyword repeats along the message, skipping spaces and punctuation.</p>
+        </div>
+      </div>
+
+      <!-- Playfair -->
+      <div class="opts" data-for="playfair">
+        <div class="control-group">
+          <label for="pf-key">Keyword</label>
+          <input type="text" class="text-input" id="pf-key" value="PLAYFAIR EXAMPLE" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="control-group">
+          <label for="pf-filler">Filler letter <span class="muted">splits doubles, pads the end</span></label>
+          <input type="text" class="text-input short" id="pf-filler" value="X" maxlength="1" autocomplete="off" spellcheck="false">
+          <p class="ctl-note">I and J share a square, so J is written as I. A doubled filler (XX) is split with Q instead.</p>
+        </div>
+        <div class="control-group" data-mode-only="decode">
+          <label class="check"><input type="checkbox" id="pf-tidy"> Remove likely fillers</label>
+          <p class="ctl-note">Drops a filler sitting between two identical letters, and one at the very end. It is a guess: a real X in those spots goes too.</p>
+        </div>
+      </div>
+
+      <!-- Polybius -->
+      <div class="opts" data-for="polybius">
+        <div class="control-group">
+          <label for="pb-variant">Square</label>
+          <select id="pb-variant" class="select-input">
+            <option value="ij">5 &times; 5, I and J share</option>
+            <option value="ck">5 &times; 5, C and K share (tap code)</option>
+            <option value="6">6 &times; 6, with digits</option>
+          </select>
+          <p class="ctl-note">26 letters do not fit in 25 squares, so two share. A 6&nbsp;&times;&nbsp;6 square has room for every letter and digit (26&nbsp;+&nbsp;10&nbsp;=&nbsp;36).</p>
+        </div>
+        <div class="control-group">
+          <label for="pb-key">Keyword <span class="muted">optional</span></label>
+          <input type="text" class="text-input" id="pb-key" value="" autocomplete="off" spellcheck="false" placeholder="none">
+          <p class="ctl-note">Blank gives the alphabet in order. A keyword mixes the square, the same way as Playfair.</p>
+        </div>
+      </div>
+
+      <!-- Scytale -->
+      <div class="opts" data-for="scytale">
+        <div class="control-group">
+          <label for="scy-faces">Letters round the rod <span class="muted">the key</span></label>
+          <div class="slider-row">
+            <input type="range" id="scy-range" min="2" max="12" step="1" value="4">
+            <input type="number" class="num-input" id="scy-faces" min="2" max="12" step="1" value="4">
+          </div>
+          <p class="ctl-note">A thicker rod fits more letters in each turn of the strip. Only letters and digits are written on the strip.</p>
+        </div>
+        <div class="control-group" data-mode-only="encode">
+          <label class="check"><input type="checkbox" id="scy-pad"> Fill the last turn with X</label>
+          <p class="ctl-note">Without it, the strip just stops part-way round the rod.</p>
+        </div>
+      </div>
+
+      <!-- Morse -->
+      <div class="opts" data-for="morse">
+        <div class="control-group">
+          <label for="morse-wpm">Playback speed <span class="muted" id="morse-wpm-val">12 words / min</span></label>
+          <input type="range" id="morse-wpm" min="5" max="25" step="1" value="12">
+          <p class="ctl-note">A dash lasts three dots. Gaps: one dot inside a letter, three between letters, seven between words.</p>
+        </div>
+        <div class="control-group">
+          <label class="check"><input type="checkbox" id="morse-lamp" checked> Flash a lamp while playing</label>
+        </div>
+      </div>
+
+      <!-- Pigpen -->
+      <div class="opts" data-for="pigpen">
+        <div class="control-group">
+          <label for="pig-size">Symbol size</label>
+          <input type="range" id="pig-size" min="24" max="96" step="4" value="44">
+        </div>
+        <div class="control-group">
+          <label class="check"><input type="checkbox" id="pig-labels"> Show letters under symbols</label>
+          <p class="ctl-note">Pigpen has no digits or punctuation. Those are shown as typed.</p>
+        </div>
+      </div>
+
+      <!-- Output layout (Caesar, Vigenère, Playfair, Scytale encode) -->
+      <div class="control-group" id="format-group">
+        <label for="format-select">Ciphertext layout</label>
+        <select id="format-select" class="select-input"></select>
+        <p class="ctl-note" id="format-note"></p>
+      </div>
+
+    </aside>
+
+    <section class="work">
+
+      <div class="panel io-card">
+        <div class="io-head">
+          <span class="io-label" id="in-label">Plaintext</span>
+          <span class="io-actions">
+            <button type="button" class="mini-btn" id="btn-example">Example</button>
+            <button type="button" class="mini-btn" id="btn-clear">Clear</button>
+          </span>
+        </div>
+        <textarea id="input" class="io-text" rows="4" spellcheck="false" placeholder="Type or paste a message"></textarea>
+
+        <!-- Pigpen decode: build the message by tapping symbols -->
+        <div id="pig-in" class="pig-in" hidden>
+          <div class="glyph-strip input-strip" id="pig-in-strip"></div>
+          <div class="keypad" id="pig-keypad"></div>
+          <div class="keypad-row">
+            <button type="button" class="mini-btn" id="pig-space">Space</button>
+            <button type="button" class="mini-btn" id="pig-back">&#9003; Delete</button>
+          </div>
+          <p class="ctl-note">Tap the symbols in order. The grids under <strong>Pen &amp; paper</strong> show which letter each one is.</p>
+        </div>
+      </div>
+
+      <div class="swap-row">
+        <button type="button" class="play-btn swap-btn" id="btn-swap" title="Put the answer in the message box and flip the direction">&#8645; Use answer as message</button>
+      </div>
+
+      <div class="panel io-card out-card">
+        <div class="io-head">
+          <span class="io-label" id="out-label">Ciphertext</span>
+          <span class="io-actions">
+            <button type="button" class="mini-btn" id="btn-play" hidden>&#9654; Play</button>
+            <button type="button" class="mini-btn" id="btn-save-img" hidden>Save image</button>
+            <button type="button" class="mini-btn" id="btn-copy">Copy</button>
+          </span>
+        </div>
+        <div class="out-row">
+          <div id="lamp" class="lamp" hidden></div>
+          <div id="output" class="io-text output"></div>
+        </div>
+        <div class="glyph-strip" id="pig-out" hidden></div>
+        <p class="out-note" id="out-note" hidden></p>
+      </div>
+
+      <div class="panel working-card">
+        <div class="io-head">
+          <span class="io-label">Pen &amp; paper</span>
+          <span class="working-sub" id="working-sub"></span>
+        </div>
+        <div id="working"></div>
+      </div>
+
+    </section>
+  </section>
+</main>
+
+<script src="ciphers.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
