@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Enigma Machine</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+
+  <section class="hero">
+    <div>
+      <a class="hero-link" href="../../miscellaneous.html">&#8592; Back</a>
+      <a class="hero-link" href="../ciphers/index.html">Classroom Ciphers</a>
+      <p class="eyebrow">Mathematics &mdash; Cryptography</p>
+      <h1>Enigma Machine</h1>
+      <details class="intro-toggle">
+        <summary>Info</summary>
+      <p class="intro">
+        A working Enigma I, M3 or M4. Choose the rotors, ring settings, reflector and plugboard
+        cables from a real key sheet, turn the rotors to the start position, then <strong>type on your
+        keyboard</strong> (or click the keys). Each key press turns the rotors first, then lights a lamp.
+        Typing the ciphertext back in with the same start position gives the message, because the
+        machine is its own inverse. The wiring diagram at the bottom follows the current for the last
+        key through every part of the machine.
+      </p>
+      </details>
+    </div>
+  </section>
+
+  <section class="layout">
+    <aside class="panel controls">
+
+      <div class="control-group">
+        <label for="preset">Load a setting</label>
+        <select id="preset" class="select-input">
+          <option value="">Choose&hellip;</option>
+          <option value="basic">Simplest: I II III, everything at A</option>
+          <option value="barbarossa">Operation Barbarossa message, 1941</option>
+          <option value="m4">M4 U-boat machine, all at A</option>
+        </select>
+        <p class="ctl-note" id="preset-note"></p>
+      </div>
+
+      <div class="control-group">
+        <label>Machine</label>
+        <div class="seg seg-3" id="model-seg">
+          <button type="button" data-model="I">Enigma I</button>
+          <button type="button" data-model="M3">M3</button>
+          <button type="button" data-model="M4">M4</button>
+        </div>
+        <p class="ctl-note" id="model-note"></p>
+      </div>
+
+      <div class="control-group">
+        <label>Rotors <span class="muted">Walzenlage and ring settings</span></label>
+        <table class="rotor-table" id="rotor-table"></table>
+        <p class="ctl-note">The ring setting (Ringstellung) turns the letter ring against the wiring inside. Picking a rotor that is already in use swaps the two.</p>
+      </div>
+
+      <div class="control-group">
+        <label for="reflector">Reflector <span class="muted">Umkehrwalze</span></label>
+        <select id="reflector" class="select-input"></select>
+      </div>
+
+      <div class="control-group">
+        <label for="plugs">Plugboard <span class="muted">Steckerverbindungen</span></label>
+        <input type="text" class="text-input" id="plugs" placeholder="e.g. AV BS CG DL" autocomplete="off" spellcheck="false">
+        <p class="ctl-note" id="plug-status">Or click two sockets on the plugboard to join them with a cable.</p>
+        <button type="button" class="mini-btn" id="plugs-clear">Remove all cables</button>
+      </div>
+
+      <details class="control-group autotype">
+        <summary>Type a long message for me</summary>
+        <textarea id="auto-text" class="auto-text" rows="4" spellcheck="false" placeholder="Paste letters here, then press Type it"></textarea>
+        <div class="slider-row">
+          <span class="ctl-label">Speed</span>
+          <input type="range" id="auto-speed" min="1" max="20" step="1" value="6">
+          <span class="ctl-label" id="auto-speed-val">6 / s</span>
+        </div>
+        <div class="auto-row">
+          <button type="button" class="play-btn" id="auto-go">&#9654; Type it</button>
+          <button type="button" class="play-btn ghost" id="auto-stop" disabled>&#9632; Stop</button>
+        </div>
+        <p class="ctl-note">The machine presses each letter in turn, from wherever the rotors are now. Anything that is not a letter is skipped.</p>
+      </details>
+
+    </aside>
+
+    <section class="work">
+
+      <div class="machine" id="machine" tabindex="0" aria-label="Enigma machine. Type letters to press keys.">
+        <div class="rotor-bay">
+          <div class="refl-tag" id="refl-tag">UKW B</div>
+          <div class="rotors" id="rotors"></div>
+          <div class="bay-hint">Turn a rotor: click &#9650; &#9660; or scroll on it</div>
+        </div>
+
+        <div class="board lampboard" id="lampboard"></div>
+        <div class="board keyboard" id="keyboard"></div>
+        <div class="plug-wrap">
+          <div class="plug-label">Plugboard</div>
+          <div class="board plugboard" id="plugboard"></div>
+        </div>
+        <div class="focus-hint" id="focus-hint">Click here, then type on your keyboard</div>
+      </div>
+
+      <div class="panel tape-card">
+        <div class="tape-head">
+          <span class="io-label">Paper tape</span>
+          <span class="io-actions">
+            <button type="button" class="mini-btn" id="btn-undo" title="Backspace">&#9003; Undo</button>
+            <button type="button" class="mini-btn" id="btn-start" title="Turn the rotors back to where this message started">&#8634; Back to start</button>
+            <button type="button" class="mini-btn" id="btn-clear">Clear</button>
+          </span>
+        </div>
+        <div class="tape-row"><span class="tape-lbl">Keys</span><div class="tape" id="tape-in"></div><button type="button" class="mini-btn" data-copy="in">Copy</button></div>
+        <div class="tape-row"><span class="tape-lbl">Lamps</span><div class="tape lit" id="tape-out"></div><button type="button" class="mini-btn" data-copy="out">Copy</button></div>
+        <p class="ctl-note" id="tape-note"></p>
+      </div>
+
+      <div class="panel challenge-card">
+        <div class="tape-head">
+          <span class="io-label">Decode a message</span>
+          <select id="challenge" class="select-input challenge-select">
+            <option value="training">1. Training message (no plugboard)</option>
+            <option value="weather">2. Weather report (Enigma I, plugboard)</option>
+            <option value="uboat">3. U-boat signal (M4)</option>
+          </select>
+        </div>
+        <p class="ctl-note" id="ch-intro"></p>
+        <div class="ch-wrap">
+          <div class="keysheet" id="ch-sheet"></div>
+          <div class="ch-msg">
+            <div class="ch-hd">Intercepted ciphertext</div>
+            <div class="ch-cipher" id="ch-cipher"></div>
+            <div class="io-actions">
+              <button type="button" class="mini-btn" id="ch-load">Put it in the auto-typer</button>
+              <button type="button" class="mini-btn" id="ch-copy">Copy</button>
+            </div>
+          </div>
+        </div>
+        <p class="ch-status" id="ch-status"></p>
+        <details class="ch-reveal">
+          <summary>Teacher: show the message</summary>
+          <p class="ch-plain" id="ch-plain"></p>
+        </details>
+      </div>
+
+      <div class="panel path-card">
+        <div class="tape-head">
+          <span class="io-label">Inside the machine</span>
+          <span class="path-sub" id="path-sub">Press a key to see the current flow</span>
+        </div>
+        <div class="path-scroll"><svg id="path-svg" class="path-svg"></svg></div>
+        <div class="legend">
+          <span class="legend-item"><span class="swatch fwd"></span>key to reflector</span>
+          <span class="legend-item"><span class="swatch back"></span>reflector to lamp</span>
+          <span class="legend-item"><span class="swatch win"></span>contact under the rotor window</span>
+        </div>
+        <p class="ctl-note">Each column is one part of the machine, with its 26 contacts. The rotor columns show the letters on the rotor's ring, so they move up by one each time that rotor turns. The reflector sends the current back by a different route, which is why a letter can never light its own lamp.</p>
+      </div>
+
+      <div class="panel explain-card">
+        <p class="wk-title">Why it was hard to break</p>
+        <ul class="explain">
+          <li><strong>The alphabet changes every key press.</strong> The right rotor turns before each letter, so pressing A five times gives five different letters. With three rotors it takes 16&nbsp;900 presses (26&nbsp;&times;&nbsp;25&nbsp;&times;&nbsp;26, because of the double step) before the rotors come back round.</li>
+          <li><strong>Huge number of settings.</strong> For the Enigma I with ten plugboard cables: 60 rotor orders &times; 17&nbsp;576 start positions &times; 676 ring settings that matter &times; about 151 million million plugboard wirings. That is around 10<sup>23</sup> keys.</li>
+          <li><strong>The weakness.</strong> No letter can ever encrypt to itself. If codebreakers guessed a word in the message (a <em>crib</em>, such as WETTERBERICHT, &ldquo;weather report&rdquo;), they could rule out every place it would put a letter on top of itself. Turing and Welchman's bombes at Bletchley Park used cribs like this to find the day's key.</li>
+        </ul>
+      </div>
+
+    </section>
+  </section>
+</main>
+
+<script src="enigma.js"></script>
+<script src="challenges.js"></script>
+<script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Enigma Machine — self-test</title>
+  <style>
+    body { font-family: "Trebuchet MS", "Segoe UI", sans-serif; margin: 2rem; color: #15304d; background: #f4f9ff; }
+    h1 { font-size: 1.4rem; margin: 0 0 0.2rem; }
+    .sub { color: #55708d; margin: 0 0 1.2rem; font-size: 0.9rem; }
+    #summary { padding: 0.7rem 1rem; border-radius: 10px; font-weight: 700; margin-bottom: 1rem; }
+    .allpass { background: #d6f5e8; color: #0f5132; border: 1px solid #0d9488; }
+    .anyfail { background: #fde2e2; color: #7a1f1f; border: 1px solid #c62828; }
+    ul { list-style: none; padding: 0; margin: 0; }
+    li { padding: 0.35rem 0.6rem; border-bottom: 1px solid rgba(21,48,77,0.1); font-size: 0.88rem; }
+    .group { margin-top: 1.1rem; padding: 0.3rem 0.6rem; background: #e7eef7; font-weight: 700; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    li.group:first-child { margin-top: 0; }
+    .pass::before { content: "PASS"; color: #0d9488; font-weight: 700; margin-right: 0.6rem; }
+    .fail::before { content: "FAIL"; color: #c62828; font-weight: 700; margin-right: 0.6rem; }
+    .fail { background: #fff4f4; }
+    .detail { display: block; color: #7a1f1f; font-size: 0.8rem; margin-left: 3.2rem; white-space: pre-wrap; font-family: Consolas, monospace; }
+    #fail-text { width: 100%; min-height: 8rem; box-sizing: border-box; font-family: Consolas, monospace; font-size: 0.8rem; margin-bottom: 1rem; }
+  </style>
+</head>
+<body>
+  <h1>Enigma Machine — self-test</h1>
+  <p class="sub">
+    Checks the wiring tables, the stepping (including the double step),
+    known test strings, and the M4's compatibility with three-rotor machines.
+    Everything should say PASS; if anything fails, copy the box that appears
+    and paste it back.
+  </p>
+  <div id="summary">Running…</div>
+  <textarea id="fail-text" hidden readonly></textarea>
+  <ul id="results"></ul>
+
+<script src="enigma.js"></script>
+<script src="challenges.js"></script>
+<script>
+"use strict";
+const E = Enigma;
+const A = E.ALPHA;
+const list = document.getElementById("results");
+const fails = [];
+let passed = 0;
+
+function group(name) {
+  const li = document.createElement("li");
+  li.className = "group";
+  li.textContent = name;
+  list.appendChild(li);
+}
+function eq(name, got, want) {
+  const ok = JSON.stringify(got) === JSON.stringify(want);
+  const li = document.createElement("li");
+  li.className = ok ? "pass" : "fail";
+  li.textContent = name;
+  if (!ok) {
+    const d = document.createElement("span");
+    d.className = "detail";
+    d.textContent = `got:  ${JSON.stringify(got)}\nwant: ${JSON.stringify(want)}`;
+    li.appendChild(d);
+    fails.push(`${name}\n  got:  ${JSON.stringify(got)}\n  want: ${JSON.stringify(want)}`);
+  } else passed++;
+  list.appendChild(li);
+}
+function run(name, fn) {
+  try { fn(); } catch (e) { eq(`${name} threw`, String(e), "no error"); }
+}
+
+const L = (s) => [...s].map(E.idx);
+const cfg = (rotors, rings, reflector, plugs, fourth, fourthRing) => ({
+  rotors, rings: L(rings), reflector, plugs: E.parsePlugs(plugs || "").map,
+  fourth: fourth || null, fourthRing: fourthRing ? E.idx(fourthRing) : 0,
+});
+
+/* Small repeatable random numbers, so a failure can be reproduced. */
+/* 32-bit integer arithmetic: plain multiplication overflows the float's
+ * 53 bits, rounds away the low bits and can get stuck repeating one value. */
+let seed = 12345;
+const rnd = (n) => { seed = (Math.imul(seed, 1103515245) + 12345) >>> 0; return (seed >>> 16) % n; };
+
+run("tables", () => {
+  group("Wiring tables");
+  const isPerm = (w) => w.length === 26 && new Set(w).size === 26 && [...w].every((c) => A.includes(c));
+  eq("every rotor is a full shuffle of A–Z", Object.entries(E.ROTORS).filter(([, r]) => !isPerm(r.wiring)).map(([n]) => n), []);
+  const badRefl = Object.entries(E.REFLECTORS).filter(([, w]) =>
+    !isPerm(w) || [...w].some((c, i) => c === A[i] || w[E.idx(c)] !== A[i]));
+  eq("every reflector swaps letters in pairs, none to itself", badRefl.map(([n]) => n), []);
+  eq("rotor VI to VIII have two notches", ["VI", "VII", "VIII"].map((n) => E.ROTORS[n].notch), ["ZM", "ZM", "ZM"]);
+});
+
+run("stepping", () => {
+  group("Stepping");
+  const rot = ["I", "II", "III"];
+  eq("right rotor always moves", E.step(rot, L("AAA")), L("AAB"));
+  eq("III carries at V", E.step(rot, L("AAV")), L("ABW"));
+  const seq = [L("ADU")];
+  for (let i = 0; i < 3; i++) seq.push(E.step(rot, seq[seq.length - 1]));
+  eq("double step: ADU -> ADV -> AEW -> BFX", seq.map((p) => p.map((n) => A[n]).join("")), ["ADU", "ADV", "AEW", "BFX"]);
+  eq("VI as the right rotor carries at Z and at M",
+    [E.step(["I", "II", "VI"], L("AAZ")), E.step(["I", "II", "VI"], L("AAM"))].map((p) => p.map((n) => A[n]).join("")),
+    ["ABA", "ABN"]);
+  // Period of I II III: 26 x 25 x 26 = 16 900 presses.
+  let p = L("AAA"), n = 0;
+  do { p = E.step(rot, p); n++; } while (p.join() !== L("AAA").join() && n < 20000);
+  eq("rotors come back round after 16 900 presses", n, 16900);
+});
+
+run("known", () => {
+  group("Known test strings");
+  eq("I II III, B, rings AAA, start AAA: AAAAA -> BDZGO",
+    E.encipher(cfg(["I", "II", "III"], "AAA", "B"), L("AAA"), 0, "AAAAA").text, "BDZGO");
+  eq("same but rings BBB: AAAAA -> EWTYX",
+    E.encipher(cfg(["I", "II", "III"], "BBB", "B"), L("AAA"), 0, "AAAAA").text, "EWTYX");
+  const barb = cfg(["II", "IV", "V"], "BUL", "B", "AV BS CG DL FU HZ IN KM OW RX");
+  eq("Barbarossa 1941, first 25 letters",
+    E.encipher(barb, L("BLA"), 0, "EDPUDNRGYSZRCXNUYTPOMRMBO").text, "AUFKLXABTEILUNGXVONXKURTI");
+  eq("Barbarossa 1941, first 50 letters (the preset's ciphertext)",
+    E.encipher(barb, L("BLA"), 0, "EDPUD NRGYS ZRCXN UYTPO MRMBO FKTBZ REZKM LXLVE FGUEY SIOZV").text,
+    "AUFKLXABTEILUNGXVONXKURTINOWAXKURTINOWAXNORDWESTLX");
+});
+
+run("properties", () => {
+  group("Properties");
+  const rotorNames = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII"];
+  let selfHits = 0, notInverse = 0;
+  for (let t = 0; t < 40; t++) {
+    const pick = [];
+    while (pick.length < 3) { const r = rotorNames[rnd(8)]; if (!pick.includes(r)) pick.push(r); }
+    const rings = A[rnd(26)] + A[rnd(26)] + A[rnd(26)];
+    const start = L(A[rnd(26)] + A[rnd(26)] + A[rnd(26)]);
+    const c = cfg(pick, rings, t % 2 ? "B" : "C", "AV BS CG DL FU HZ IN KM OW RX");
+    const msg = Array.from({ length: 60 }, () => A[rnd(26)]).join("");
+    const enc = E.encipher(c, start, 0, msg).text;
+    if ([...enc].some((ch, i) => ch === msg[i])) selfHits++;
+    if (E.encipher(c, start, 0, enc).text !== msg) notInverse++;
+  }
+  eq("no letter ever lights its own lamp (2400 presses)", selfHits, 0);
+  eq("typing the ciphertext from the same start gives the message back", notInverse, 0);
+  eq("press steps first, then lights", E.press(cfg(["I", "II", "III"], "AAA", "B"), L("AAA"), 0, 0).pos, L("AAB"));
+});
+
+run("m4", () => {
+  group("M4");
+  let sameB = true, sameC = true;
+  for (let t = 0; t < 20; t++) {
+    const rings = A[rnd(26)] + A[rnd(26)] + A[rnd(26)];
+    const start = L(A[rnd(26)] + A[rnd(26)] + A[rnd(26)]);
+    const msg = Array.from({ length: 40 }, () => A[rnd(26)]).join("");
+    const three = (refl) => E.encipher(cfg(["IV", "II", "VI"], rings, refl, "AQ EP"), start, 0, msg).text;
+    const four = (thin, refl) => E.encipher(cfg(["IV", "II", "VI"], rings, refl, "AQ EP", thin, "A"), start, 0, msg).text;
+    if (four("Beta", "B thin") !== three("B")) sameB = false;
+    if (four("Gamma", "C thin") !== three("C")) sameC = false;
+  }
+  eq("Beta at A + thin B = three-rotor machine with B", sameB, true);
+  eq("Gamma at A + thin C = three-rotor machine with C", sameC, true);
+  const c4 = cfg(["I", "II", "III"], "AAA", "B thin", "", "Beta", "A");
+  const enc = E.encipher(c4, L("QEV"), 7, "WETTERVORHERSAGE").text;
+  eq("M4 with Beta at H is its own inverse", E.encipher(c4, L("QEV"), 7, enc).text, "WETTERVORHERSAGE");
+  eq("the thin rotor never steps", E.press(c4, L("AAA"), 5, 0).pos, L("AAB"));
+});
+
+run("challenges", () => {
+  group("Decode-a-message challenges");
+  for (const [key, ch] of Object.entries(CHALLENGES)) {
+    const model = E.MODELS[ch.model];
+    const plugCheck = E.parsePlugs(ch.plugs);
+    const valid =
+      ch.rotors.every((r) => model.rotors.includes(r)) && new Set(ch.rotors).size === 3 &&
+      model.reflectors.includes(ch.reflector) &&
+      (!!model.fourth === !!ch.fourth) && (!ch.fourth || model.fourth.includes(ch.fourth)) &&
+      ch.start.length === (ch.fourth ? 4 : 3) &&
+      ch.rings.concat(ch.fourthRing).every((n) => n >= 1 && n <= 26) &&
+      plugCheck.errors.length === 0 && /^[A-Z]+$/.test(ch.plain);
+    eq(`${ch.title}: key is one the machine can be set to`, valid, true);
+
+    const cipher = challengeCipher(ch);
+    const st = challengeStart(ch);
+    eq(`${ch.title}: typing the ciphertext lights the message`,
+      E.encipher(challengeConfig(ch), st.pos, st.fourthPos, cipher).text, ch.plain);
+
+    // Every single mistake on the key sheet should garble the message.
+    const wrong = [];
+    const tryWith = (label, change) => {
+      const bad = JSON.parse(JSON.stringify(ch));
+      change(bad);
+      const s2 = challengeStart(bad);
+      if (E.encipher(challengeConfig(bad), s2.pos, s2.fourthPos, cipher).text === ch.plain) wrong.push(label);
+    };
+    tryWith("rotors swapped", (b) => { b.rotors = [b.rotors[1], b.rotors[0], b.rotors[2]]; });
+    [0, 1, 2].forEach((i) => tryWith(`ring ${i} off by one`, (b) => { b.rings[i] = (b.rings[i] % 26) + 1; }));
+    [0, 1, 2].forEach((i) => tryWith(`start letter ${i} off by one`, (b) => {
+      const s = [...b.start]; const j = i + (b.fourth ? 1 : 0);
+      s[j] = A[(E.idx(s[j]) + 1) % 26]; b.start = s.join("");
+    }));
+    tryWith("other reflector", (b) => { b.reflector = model.reflectors.find((r) => r !== b.reflector); });
+    if (ch.plugs) tryWith("one cable missing", (b) => { b.plugs = b.plugs.split(" ").slice(1).join(" "); });
+    if (ch.fourth) {
+      tryWith("other thin rotor", (b) => { b.fourth = b.fourth === "Beta" ? "Gamma" : "Beta"; });
+      tryWith("thin start letter off by one", (b) => { b.start = A[(E.idx(b.start[0]) + 1) % 26] + b.start.slice(1); });
+    }
+    eq(`${ch.title}: any single wrong setting garbles it`, wrong, []);
+  }
+});
+
+run("plugs", () => {
+  group("Plugboard");
+  const p = E.parsePlugs("av bs, CG-dl");
+  eq("pairs read with any separators", p.pairs, ["AV", "BS", "CG", "DL"]);
+  eq("pairs swap both ways", [A[p.map[0]], A[p.map[21]], A[p.map[4]]], ["V", "A", "E"]);
+  const bad = E.parsePlugs("AB AC DD XYZ");
+  eq("reused letter, self-plug and bad pair reported", [bad.pairs, bad.errors.length], [["AB"], 3]);
+});
+
+const total = passed + fails.length;
+const sum = document.getElementById("summary");
+if (fails.length) {
+  sum.className = "anyfail";
+  sum.textContent = `${fails.length} of ${total} checks failed`;
+  const ta = document.getElementById("fail-text");
+  ta.hidden = false;
+  ta.value = `Enigma self-test: ${fails.length} of ${total} failed\n\n` + fails.join("\n\n");
+} else {
+  sum.className = "allpass";
+  sum.textContent = `All ${total} checks passed`;
+}
+</script>
+</body>
+</html>
